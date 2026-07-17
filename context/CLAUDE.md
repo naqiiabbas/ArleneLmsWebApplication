@@ -416,6 +416,15 @@ First vertical slice complete — **Admin → User Management** (pattern to foll
   `profiles` (`mentor_id`, `assigned_by`), so a plain `profiles(...)` embed is ambiguous and
   errors — must hint the FK, e.g. `profiles!mentor_student_assignments_mentor_id_fkey(...)`.
 
+**Admin → Organizations** (4th slice, verified live): **`lib/data/organizations.types.ts`** /
+**`lib/data/organizations.ts`** (`"use server"`) — plain single-table CRUD on `organizations`
+(no auth user); `listOrganizations` merges the `organization_stats` view for
+students/mentors/programs counts (currently 0 until orgs are linked to profiles/students/programs
+via `organization_id`). `deleteOrganization` is safe — FKs from profiles/students/programs are
+`ON DELETE SET NULL`. **`components/Organization.tsx`** — mock removed, load/mutate + refetch,
+notice + inline form error + loading/empty states. UI type↔DB enum
+(University/Company/Nonprofit/Government ↔ lowercase), status Active/Inactive ↔ active/inactive.
+
 **Pattern for the next modules:** `lib/data/<module>.ts` (`"use server"` + `assertAdmin()` from
 `lib/data/guards.ts` + service role for privileged ops, or the RLS server client for user-scoped
 reads) → wire the existing `components/*.tsx` (load on mount, mutate + refetch, notice/loading

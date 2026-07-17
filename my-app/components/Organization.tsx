@@ -1,7 +1,13 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { ChevronDown, Eye, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import {
+  listOrganizations,
+  createOrganization,
+  updateOrganization,
+  deleteOrganization,
+} from "@/lib/data/organizations";
 
 type OrgType = "University" | "Company" | "Nonprofit" | "Government";
 type Status = "Active" | "Inactive";
@@ -20,62 +26,9 @@ type Organization = {
   createdAt: string;
 };
 
-const INITIAL_ORGS: Organization[] = [
-  {
-    id: "o1",
-    name: "Tech University",
-    type: "University",
-    contactPerson: "Dr. Jane Smith",
-    email: "contact@techuni.edu",
-    phone: "+1 234-567-1000",
-    students: 120,
-    mentors: 15,
-    programs: 8,
-    status: "Active",
-    createdAt: "1/15/2024",
-  },
-  {
-    id: "o2",
-    name: "Innovation Corp",
-    type: "Company",
-    contactPerson: "John Davis",
-    email: "hr@innovationcorp.com",
-    phone: "+1 234-567-2200",
-    students: 45,
-    mentors: 8,
-    programs: 3,
-    status: "Active",
-    createdAt: "3/12/2024",
-  },
-  {
-    id: "o3",
-    name: "Future Leaders Foundation",
-    type: "Nonprofit",
-    contactPerson: "Maria Garcia",
-    email: "info@futureleaders.org",
-    phone: "+1 234-567-3300",
-    students: 65,
-    mentors: 7,
-    programs: 5,
-    status: "Active",
-    createdAt: "4/02/2024",
-  },
-  {
-    id: "o4",
-    name: "State Education Department",
-    type: "Government",
-    contactPerson: "Robert Johnson",
-    email: "contact@stateedu.gov",
-    phone: "+1 234-567-4400",
-    students: 18,
-    mentors: 2,
-    programs: 2,
-    status: "Active",
-    createdAt: "2/19/2024",
-  },
-];
-
 type View = "list" | "add" | "edit" | "details";
+
+type Notice = { type: "success" | "error"; msg: string };
 
 const inputClass =
   "h-[42px] w-full rounded-[8px] border border-[#d9d9d9] bg-white px-[15px] text-[16px] font-normal text-[#111111] outline-none placeholder:text-[#8a8a8a] focus:border-[#F9A618] focus:ring-2 focus:ring-[#F9A618]/15";
@@ -133,12 +86,16 @@ function OrganizationForm({
   selected,
   onBack,
   onSubmit,
+  submitting,
+  error,
 }: {
   title: string;
   mode: "add" | "edit";
   selected: Organization | null;
   onBack: () => void;
   onSubmit: (e: React.FormEvent<HTMLFormElement>) => void;
+  submitting?: boolean;
+  error?: string;
 }) {
   return (
     <div className="min-h-full bg-[#f4f4f4] px-6 py-6 font-[Poppins]">
@@ -214,12 +171,14 @@ function OrganizationForm({
         </div>
 
         <div className="mt-[24px] border-t border-[#dedede] pt-[24px]">
+          {error && <p className="mb-3 text-[14px] font-medium text-red-600">{error}</p>}
           <div className="flex flex-wrap items-center gap-[16px]">
             <button
               type="submit"
-              className="h-[43px] rounded-[8px] bg-[#F9A618] px-[18px] text-[16px] font-medium text-white transition-colors hover:bg-[#f0a014]"
+              disabled={submitting}
+              className="h-[43px] rounded-[8px] bg-[#F9A618] px-[18px] text-[16px] font-medium text-white transition-colors hover:bg-[#f0a014] disabled:cursor-not-allowed disabled:opacity-70"
             >
-              {mode === "add" ? "Add Organization" : "Save Changes"}
+              {submitting ? "Saving..." : mode === "add" ? "Add Organization" : "Save Changes"}
             </button>
             <button
               type="button"
@@ -311,12 +270,34 @@ const SummaryCard = ({ label, value, color }: { label: string; value: number; co
 );
 
 export default function OrganizationPage() {
-  const [orgs, setOrgs] = useState<Organization[]>(INITIAL_ORGS);
+  const [orgs, setOrgs] = useState<Organization[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [notice, setNotice] = useState<Notice | null>(null);
+  const [formError, setFormError] = useState("");
   const [view, setView] = useState<View>("list");
   const [selected, setSelected] = useState<Organization | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<Status | "All">("All");
   const [showDelete, setShowDelete] = useState(false);
+
+  const refresh = async (): Promise<Organization[]> => {
+    setLoading(true);
+    try {
+      const data = await listOrganizations();
+      setOrgs(data);
+      return data;
+    } catch (e) {
+      setNotice({ type: "error", msg: (e as Error).message });
+      return [];
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    refresh();
+  }, []);
 
   const summary = useMemo(() => {
     const totalStudents = orgs.reduce((sum, o) => sum + o.students, 0);
@@ -337,60 +318,76 @@ export default function OrganizationPage() {
   const resetList = () => {
     setView("list");
     setSelected(null);
+    setFormError("");
   };
 
-  const handleAdd = (e: React.FormEvent<HTMLFormElement>) => {
+  const formValues = (fd: FormData) => ({
+    name: (fd.get("name") as string).trim(),
+    type: fd.get("type") as OrgType,
+    contactPerson: (fd.get("contactPerson") as string).trim(),
+    email: (fd.get("email") as string).trim(),
+    phone: (fd.get("phone") as string).trim(),
+    status: fd.get("status") as Status,
+  });
+
+  const handleAdd = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const fd = new FormData(e.currentTarget);
-    const newOrg: Organization = {
-      id: crypto.randomUUID(),
-      name: (fd.get("name") as string).trim(),
-      type: fd.get("type") as OrgType,
-      contactPerson: (fd.get("contactPerson") as string).trim(),
-      email: (fd.get("email") as string).trim(),
-      phone: (fd.get("phone") as string).trim(),
-      students: 0,
-      mentors: 0,
-      programs: 0,
-      status: fd.get("status") as Status,
-      createdAt: new Date().toLocaleDateString(),
-    };
-    setOrgs((prev) => [...prev, newOrg]);
-    setSelected(newOrg);
-    setView("details");
+    const input = formValues(new FormData(e.currentTarget));
+    setFormError("");
+    setSubmitting(true);
+    const res = await createOrganization(input);
+    setSubmitting(false);
+    if (res.error) {
+      setFormError(res.error);
+      return;
+    }
+    setNotice({ type: "success", msg: "Organization created." });
+    const list = await refresh();
+    const created = res.id ? list.find((o) => o.id === res.id) ?? null : null;
+    setSelected(created);
+    setView(created ? "details" : "list");
   };
 
-  const handleEdit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleEdit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!selected) return;
-    const fd = new FormData(e.currentTarget);
-    const updated: Organization = {
-      ...selected,
-      name: (fd.get("name") as string).trim(),
-      type: fd.get("type") as OrgType,
-      contactPerson: (fd.get("contactPerson") as string).trim(),
-      email: (fd.get("email") as string).trim(),
-      phone: (fd.get("phone") as string).trim(),
-      status: fd.get("status") as Status,
-    };
-    setOrgs((prev) => prev.map((o) => (o.id === selected.id ? updated : o)));
+    const input = formValues(new FormData(e.currentTarget));
+    setFormError("");
+    setSubmitting(true);
+    const res = await updateOrganization(selected.id, input);
+    setSubmitting(false);
+    if (res.error) {
+      setFormError(res.error);
+      return;
+    }
+    setNotice({ type: "success", msg: "Organization updated." });
+    const list = await refresh();
+    const updated = list.find((o) => o.id === selected.id) ?? null;
     setSelected(updated);
-    setView("details");
+    setView(updated ? "details" : "list");
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!selected) return;
-    setOrgs((prev) => prev.filter((o) => o.id !== selected.id));
+    setSubmitting(true);
+    const res = await deleteOrganization(selected.id);
+    setSubmitting(false);
     setShowDelete(false);
+    if (res.error) {
+      setNotice({ type: "error", msg: res.error });
+      return;
+    }
+    setNotice({ type: "success", msg: "Organization deleted." });
+    await refresh();
     resetList();
   };
 
   if (view === "add") {
-    return <OrganizationForm title="Add New Organization" mode="add" selected={null} onBack={resetList} onSubmit={handleAdd} />;
+    return <OrganizationForm title="Add New Organization" mode="add" selected={null} onBack={resetList} onSubmit={handleAdd} submitting={submitting} error={formError} />;
   }
 
   if (view === "edit") {
-    return <OrganizationForm title="Edit Organization" mode="edit" selected={selected} onBack={resetList} onSubmit={handleEdit} />;
+    return <OrganizationForm title="Edit Organization" mode="edit" selected={selected} onBack={resetList} onSubmit={handleEdit} submitting={submitting} error={formError} />;
   }
 
   if (view === "details" && selected) {
@@ -399,6 +396,20 @@ export default function OrganizationPage() {
 
   return (
     <div className="min-h-full bg-[#f4f4f4] px-6 py-6 font-[Poppins]">
+      {notice && (
+        <div
+          className={`mb-4 flex items-start justify-between gap-4 rounded-[8px] border px-4 py-3 text-[14px] font-semibold ${
+            notice.type === "success"
+              ? "border-green-200 bg-green-50 text-green-700"
+              : "border-red-200 bg-red-50 text-red-700"
+          }`}
+        >
+          <span className="break-all">{notice.msg}</span>
+          <button type="button" onClick={() => setNotice(null)} className="shrink-0 text-[13px] underline">
+            Dismiss
+          </button>
+        </div>
+      )}
       <div className="mb-[24px] flex items-center justify-between gap-4">
         <div className="flex items-center gap-[12px]">
           <HeaderIcon />
@@ -467,7 +478,21 @@ export default function OrganizationPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((org) => (
+            {loading && (
+              <tr>
+                <td colSpan={8} className="px-[24px] py-[40px] text-center text-[#777777]">
+                  Loading organizations...
+                </td>
+              </tr>
+            )}
+            {!loading && filtered.length === 0 && (
+              <tr>
+                <td colSpan={8} className="px-[24px] py-[40px] text-center text-[#777777]">
+                  No organizations found.
+                </td>
+              </tr>
+            )}
+            {!loading && filtered.map((org) => (
               <tr key={org.id} className="border-b border-[#e5e5e5] text-[16px] font-normal leading-none text-[#666666] last:border-b-0">
                 <td className="px-[24px] py-[24px] text-[#111111]">
                   <span className="block max-w-[180px] leading-[20px]">{org.name}</span>
