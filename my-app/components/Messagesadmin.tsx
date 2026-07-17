@@ -1,105 +1,37 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import {
+  listConversations,
+  getMessages,
+  sendMessage,
+  markConversationRead,
+  createDirectConversation,
+} from "@/lib/data/messaging";
+import type { UIConversation, UIMessage } from "@/lib/data/messaging.types";
 
-type Message = {
-  id: string;
-  senderId: string;
-  text: string;
-  time: string;
-};
-
-type Conversation = {
-  id: string;
-  name: string;
-  role: string;
-  avatar: string;
-  status: "online" | "offline";
-  lastMessage: string;
-  time: string;
-  unreadCount: number;
-  messages: Message[];
-};
-
-const CURRENT_USER_ID = "u1";
-
-const INITIAL_CONVERSATIONS: Conversation[] = [
-  {
-    id: "c1",
-    name: "Dr. Sarah Johnson",
-    role: "Mentor",
-    avatar: "DSJ",
-    status: "online",
-    lastMessage: "Great progress on your last",
-    time: "10:30 AM",
-    unreadCount: 2,
-    messages: [
-      { id: "m1", senderId: "c1", text: "Hello! How are you doing with the assignments?", time: "10:15 AM" },
-      { id: "m2", senderId: CURRENT_USER_ID, text: "Hi! I'm doing well, just finished the Python module.", time: "10:20 AM" },
-      { id: "m3", senderId: "c1", text: "Great progress on your last assignment!", time: "10:30 AM" },
-      { id: "m4", senderId: CURRENT_USER_ID, text: "Thank you! Can we discuss the next module?", time: "10:32 AM" },
-    ],
-  },
-  {
-    id: "c2",
-    name: "Alex Martinez",
-    role: "Student",
-    avatar: "AM",
-    status: "offline",
-    lastMessage: "Can we schedule a meeting for tomorrow?",
-    time: "Yesterday",
-    unreadCount: 0,
-    messages: [],
-  },
-  {
-    id: "c3",
-    name: "Prof. Michael Chen",
-    role: "Mentor",
-    avatar: "PMC",
-    status: "online",
-    lastMessage: "I've uploaded the new study materials",
-    time: "Yesterday",
-    unreadCount: 1,
-    messages: [],
-  },
-  {
-    id: "c4",
-    name: "Emma Williams",
-    role: "Student",
-    avatar: "EW",
-    status: "offline",
-    lastMessage: "Thank you for the feedback!",
-    time: "2 days ago",
-    unreadCount: 0,
-    messages: [],
-  },
-  {
-    id: "c5",
-    name: "Tech University Group",
-    role: "Group Chat",
-    avatar: "TUG",
-    status: "offline",
-    lastMessage: "Meeting scheduled for Friday at 2 PM",
-    time: "3 days ago",
-    unreadCount: 5,
-    messages: [],
-  },
-];
+type Message = UIMessage;
+type Conversation = UIConversation;
 
 const ROLES = ["Student", "Mentor", "Admin"];
 
 export default function Messagesadmin() {
-  const [conversations, setConversations] = useState<Conversation[]>(INITIAL_CONVERSATIONS);
-  const [activeChatId, setActiveChatId] = useState(INITIAL_CONVERSATIONS[0].id);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [activeChatId, setActiveChatId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [myId, setMyId] = useState<string>("");
+  const [loadingConvos, setLoadingConvos] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newMessage, setNewMessage] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [newContactName, setNewContactName] = useState("");
   const [newContactRole, setNewContactRole] = useState("Student");
+  const [sending, setSending] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const activeChat = useMemo(
-    () => conversations.find((conversation) => conversation.id === activeChatId) ?? conversations[0],
+    () => conversations.find((conversation) => conversation.id === activeChatId) ?? null,
     [conversations, activeChatId]
   );
 
@@ -111,71 +43,87 @@ export default function Messagesadmin() {
     );
   }, [conversations, searchQuery]);
 
+  const loadConversations = async () => {
+    try {
+      const data = await listConversations();
+      setConversations(data);
+      setActiveChatId((prev) => prev ?? data[0]?.id ?? null);
+    } catch (e) {
+      setNotice((e as Error).message);
+    } finally {
+      setLoadingConvos(false);
+    }
+  };
+
+  const loadMessages = async (conversationId: string) => {
+    const res = await getMessages(conversationId);
+    if (res.error) {
+      setNotice(res.error);
+      return;
+    }
+    setMyId(res.myId);
+    setMessages(res.messages);
+  };
+
+  useEffect(() => {
+    loadConversations();
+  }, []);
+
+  useEffect(() => {
+    if (!activeChatId) {
+      setMessages([]);
+      return;
+    }
+    loadMessages(activeChatId);
+    markConversationRead(activeChatId).then(() =>
+      setConversations((prev) => prev.map((c) => (c.id === activeChatId ? { ...c, unreadCount: 0 } : c)))
+    );
+  }, [activeChatId]);
+
+  // Light polling for near-real-time updates.
+  useEffect(() => {
+    const timer = setInterval(() => {
+      loadConversations();
+      if (activeChatId) loadMessages(activeChatId);
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [activeChatId]);
+
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [activeChat.messages]);
+  }, [messages]);
 
-  const handleSendMessage = (event?: React.FormEvent) => {
+  const handleSendMessage = async (event?: React.FormEvent) => {
     event?.preventDefault();
-    if (!newMessage.trim()) return;
-
-    const outgoingText = newMessage.trim();
-    const message: Message = {
-      id: Date.now().toString(),
-      senderId: CURRENT_USER_ID,
-      text: outgoingText,
-      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-    };
-
-    setConversations((previous) =>
-      previous.map((conversation) =>
-        conversation.id === activeChatId
-          ? { ...conversation, messages: [...conversation.messages, message], lastMessage: outgoingText, time: "Just now" }
-          : conversation
-      )
-    );
+    const text = newMessage.trim();
+    if (!text || !activeChatId) return;
+    setSending(true);
+    const res = await sendMessage(activeChatId, text);
+    setSending(false);
+    if (res.error) {
+      setNotice(res.error);
+      return;
+    }
     setNewMessage("");
-
-    setTimeout(() => {
-      const reply: Message = {
-        id: (Date.now() + 1).toString(),
-        senderId: activeChat.id,
-        text: `The system has received your message: "${outgoingText}". Our team will get back to you shortly.`,
-        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      };
-
-      setConversations((previous) =>
-        previous.map((conversation) =>
-          conversation.id === activeChatId
-            ? { ...conversation, messages: [...conversation.messages, reply], lastMessage: reply.text }
-            : conversation
-        )
-      );
-    }, 1500);
+    await loadMessages(activeChatId);
+    await loadConversations();
   };
 
-  const handleCreateChat = () => {
-    if (!newContactName.trim()) return;
-    const newId = `c${Date.now()}`;
-    const newConversation: Conversation = {
-      id: newId,
-      name: newContactName.trim(),
-      role: newContactRole,
-      avatar: initialsFromName(newContactName),
-      status: "online",
-      lastMessage: "No messages yet",
-      time: "Just now",
-      unreadCount: 0,
-      messages: [],
-    };
-
-    setConversations((previous) => [newConversation, ...previous]);
-    setActiveChatId(newId);
+  const handleCreateChat = async () => {
+    const name = newContactName.trim();
+    if (!name) return;
+    const res = await createDirectConversation(name);
+    if (res.error) {
+      setNotice(res.error);
+      return;
+    }
     setIsModalOpen(false);
     setNewContactName("");
     setNewContactRole("Student");
+    await loadConversations();
+    if (res.id) setActiveChatId(res.id);
   };
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -207,6 +155,15 @@ export default function Messagesadmin() {
         </button>
       </div>
 
+      {notice && (
+        <div className="mb-4 flex items-start justify-between gap-4 rounded-[8px] border border-red-200 bg-red-50 px-4 py-3 text-[14px] font-semibold text-red-700">
+          <span className="break-all">{notice}</span>
+          <button type="button" onClick={() => setNotice(null)} className="shrink-0 text-[13px] underline">
+            Dismiss
+          </button>
+        </div>
+      )}
+
       <div className="grid h-[1100px] grid-cols-[363px_minmax(0,1fr)] gap-[16px]">
         <aside className="overflow-hidden rounded-[8px] border border-[#d6d6d6] bg-white">
           <div className="border-b border-[#d6d6d6] px-[16px] py-[17px]">
@@ -222,6 +179,14 @@ export default function Messagesadmin() {
           </div>
 
           <div className="h-[calc(100%-77px)] overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+            {loadingConvos && (
+              <p className="px-[16px] py-[20px] text-[14px] text-[#666666]">Loading conversations...</p>
+            )}
+            {!loadingConvos && filteredConversations.length === 0 && (
+              <p className="px-[16px] py-[20px] text-[14px] text-[#666666]">
+                No conversations yet. Start one with "Add New Chat".
+              </p>
+            )}
             {filteredConversations.map((conversation) => (
               <button
                 key={conversation.id}
@@ -252,59 +217,71 @@ export default function Messagesadmin() {
         </aside>
 
         <section className="flex min-w-0 flex-col overflow-hidden rounded-[8px] border border-[#d6d6d6] bg-white">
-          <div className="flex h-[73px] items-center border-b border-[#d6d6d6] px-[16px]">
-            <Avatar conversation={activeChat} size="small" />
-            <div className="ml-[12px]">
-              <h2 className="text-[16px] font-normal leading-none text-[#111111]">{activeChat.name}</h2>
-              <div className="mt-[7px] flex items-center gap-[8px] text-[13px] font-normal leading-none text-[#666666]">
-                <span>{capitalize(activeChat.status)}</span>
-                <span>{activeChat.role}</span>
-              </div>
+          {!activeChat ? (
+            <div className="flex flex-1 items-center justify-center text-[15px] text-[#666666]">
+              {loadingConvos ? "Loading..." : "Select or start a conversation."}
             </div>
-          </div>
-
-          <div
-            ref={scrollRef}
-            className="flex-1 overflow-y-auto px-[16px] py-[16px] [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
-          >
-            {activeChat.messages.map((message) => {
-              const isMe = message.senderId === CURRENT_USER_ID;
-              return (
-                <div key={message.id} className={`mb-[16px] flex ${isMe ? "justify-end" : "justify-start"}`}>
-                  <div
-                    className={`max-w-[337px] rounded-[8px] px-[12px] py-[13px] ${
-                      isMe ? "bg-[#ffa313] text-white" : "bg-[#f1f1f1] text-[#111111]"
-                    }`}
-                  >
-                    <p className="truncate text-[15px] font-normal leading-none">{message.text}</p>
-                    <p className={`mt-[10px] text-[12px] font-normal leading-none ${isMe ? "text-white" : "text-[#666666]"}`}>
-                      {message.time}
-                    </p>
+          ) : (
+            <>
+              <div className="flex h-[73px] items-center border-b border-[#d6d6d6] px-[16px]">
+                <Avatar conversation={activeChat} size="small" />
+                <div className="ml-[12px]">
+                  <h2 className="text-[16px] font-normal leading-none text-[#111111]">{activeChat.name}</h2>
+                  <div className="mt-[7px] flex items-center gap-[8px] text-[13px] font-normal leading-none text-[#666666]">
+                    <span>{capitalize(activeChat.status)}</span>
+                    <span>{activeChat.role}</span>
                   </div>
                 </div>
-              );
-            })}
-          </div>
+              </div>
 
-          <form onSubmit={handleSendMessage} className="flex h-[77px] items-center gap-[10px] border-t border-[#d6d6d6] px-[16px]">
-            <label className="relative flex h-[34px] w-[34px] cursor-pointer items-center justify-center text-[#666666]">
-              <PaperclipIcon />
-              <input type="file" className="hidden" onChange={handleFileUpload} />
-            </label>
-            <input
-              value={newMessage}
-              onChange={(event) => setNewMessage(event.target.value)}
-              placeholder="Type a message..."
-              className="h-[42px] min-w-0 flex-1 rounded-[8px] border border-[#d6d6d6] bg-white px-[14px] text-[16px] font-normal text-[#111111] outline-none placeholder:text-[#888888]"
-            />
-            <button
-              type="submit"
-              className="flex h-[42px] items-center gap-[8px] rounded-[8px] bg-[#ffa313] px-[17px] text-[16px] font-normal text-white transition-colors hover:bg-[#ef970d]"
-            >
-              <img src="/images/admin-message-send.svg" alt="" className="h-5 w-5" />
-              Send
-            </button>
-          </form>
+              <div
+                ref={scrollRef}
+                className="flex-1 overflow-y-auto px-[16px] py-[16px] [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+              >
+                {messages.length === 0 && (
+                  <p className="mt-[8px] text-center text-[14px] text-[#999999]">No messages yet. Say hello!</p>
+                )}
+                {messages.map((message) => {
+                  const isMe = message.senderId === myId;
+                  return (
+                    <div key={message.id} className={`mb-[16px] flex ${isMe ? "justify-end" : "justify-start"}`}>
+                      <div
+                        className={`max-w-[337px] rounded-[8px] px-[12px] py-[13px] ${
+                          isMe ? "bg-[#ffa313] text-white" : "bg-[#f1f1f1] text-[#111111]"
+                        }`}
+                      >
+                        <p className="break-words text-[15px] font-normal leading-[1.35]">{message.text}</p>
+                        <p className={`mt-[10px] text-[12px] font-normal leading-none ${isMe ? "text-white" : "text-[#666666]"}`}>
+                          {message.time}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <form onSubmit={handleSendMessage} className="flex h-[77px] items-center gap-[10px] border-t border-[#d6d6d6] px-[16px]">
+                <label className="relative flex h-[34px] w-[34px] cursor-pointer items-center justify-center text-[#666666]">
+                  <PaperclipIcon />
+                  <input type="file" className="hidden" onChange={handleFileUpload} />
+                </label>
+                <input
+                  value={newMessage}
+                  onChange={(event) => setNewMessage(event.target.value)}
+                  placeholder="Type a message..."
+                  className="h-[42px] min-w-0 flex-1 rounded-[8px] border border-[#d6d6d6] bg-white px-[14px] text-[16px] font-normal text-[#111111] outline-none placeholder:text-[#888888]"
+                />
+                <button
+                  type="submit"
+                  disabled={sending}
+                  className="flex h-[42px] items-center gap-[8px] rounded-[8px] bg-[#ffa313] px-[17px] text-[16px] font-normal text-white transition-colors hover:bg-[#ef970d] disabled:cursor-not-allowed disabled:opacity-70"
+                >
+                  <img src="/images/admin-message-send.svg" alt="" className="h-5 w-5" />
+                  {sending ? "Sending..." : "Send"}
+                </button>
+              </form>
+            </>
+          )}
         </section>
       </div>
 

@@ -512,6 +512,20 @@ icons derived from `type`, mark-read / mark-all / delete persist, loading/empty 
 service-role client with explicit recipient filter (consistent w/ other modules; also resolves
 sender names across panels). Seeded 3 sample notifications for `admin@arlene.com` (deletable).
 
+**Admin → Messaging** (9th slice, verified live) — **per-user** (real user-to-user chat):
+**`lib/data/messaging.types.ts`** / **`lib/data/messaging.ts`** (`"use server"`) scoped to the
+current user's `conversation_participants`. `listConversations` (per convo: other participant
+name/role via embed, last message, relative time, **unread count** = messages after my
+`last_read_at` from others), `getMessages(convId)` (returns `myId` + messages; verifies
+participation), `sendMessage(convId, text)` (inserts message + bumps `conversations.last_message_at`),
+`markConversationRead` (**marks read up to the latest message's DB timestamp — not the app clock —
+to avoid clock-skew leaving the last message "unread"**), `createDirectConversation(name)`
+(resolves the name to a real user, find-or-creates a `direct` conversation). **`components/Messagesadmin.tsx`**
+— mock removed + fake auto-reply gone; loads conversations/messages, send persists, "Add New Chat"
+resolves a real user by name, marks read on open, and **polls every 5s** for near-real-time updates.
+Attachments not wired (paperclip only sets a text placeholder). Presence (online/offline) not
+tracked → shown offline.
+
 **Pattern for the next modules:** `lib/data/<module>.ts` (`"use server"` + `assertAdmin()` from
 `lib/data/guards.ts` + service role for privileged ops, or the RLS server client for user-scoped
 reads) → wire the existing `components/*.tsx` (load on mount, mutate + refetch, notice/loading
