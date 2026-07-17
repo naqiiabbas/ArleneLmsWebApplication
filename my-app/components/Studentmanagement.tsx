@@ -1,8 +1,14 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { ChevronDown, Eye, Mail, MapPin, Pencil, Phone, Plus, Search, Trash2 } from "lucide-react";
+import {
+  listStudents,
+  createStudent,
+  updateStudent,
+  deleteStudent,
+} from "@/lib/data/students";
 
 type StudentStatus = "Active" | "Inactive";
 
@@ -21,80 +27,9 @@ interface Student {
   address: string;
 }
 
-const studentsSeed: Student[] = [
-  {
-    id: "s1",
-    name: "Alex Martinez",
-    email: "alex.m@email.com",
-    phone: "+1 234-567-8901",
-    mentor: "Dr. Sarah Johnson",
-    course: "Python Fundamentals",
-    status: "Active",
-    avatar: "/images/avatar1.png",
-    enrollmentDate: "1/15/2025",
-    performance: { attendance: 95, grade: "A" },
-    quickActions: ["Send Message", "View Sessions", "Download Report"],
-    address: "123 Main St, New York, NY",
-  },
-  {
-    id: "s2",
-    name: "Emma Williams",
-    email: "emma.w@email.com",
-    phone: "+1 234-567-8902",
-    mentor: "Prof. Michael Chen",
-    course: "Web Development",
-    status: "Active",
-    avatar: "/images/avatar2.png",
-    enrollmentDate: "2/10/2025",
-    performance: { attendance: 92, grade: "A" },
-    quickActions: ["Send Message", "View Sessions", "Download Report"],
-    address: "45 King St, Seattle, WA",
-  },
-  {
-    id: "s3",
-    name: "James Taylor",
-    email: "james.t@email.com",
-    phone: "+1 234-567-8903",
-    mentor: "Dr. Lisa Anderson",
-    course: "Data Science",
-    status: "Active",
-    avatar: "/images/avatar3.png",
-    enrollmentDate: "3/05/2025",
-    performance: { attendance: 90, grade: "A" },
-    quickActions: ["Send Message", "View Sessions", "Download Report"],
-    address: "10 Lakeview Rd, Austin, TX",
-  },
-  {
-    id: "s4",
-    name: "Sophia Brown",
-    email: "sophia.b@email.com",
-    phone: "+1 234-567-8904",
-    mentor: "Prof. Robert Kim",
-    course: "Machine Learning",
-    status: "Active",
-    avatar: "/images/avatar.png",
-    enrollmentDate: "4/20/2025",
-    performance: { attendance: 94, grade: "A" },
-    quickActions: ["Send Message", "View Sessions", "Download Report"],
-    address: "77 Forest Dr, Denver, CO",
-  },
-  {
-    id: "s5",
-    name: "Noah Johnson",
-    email: "noah.j@email.com",
-    phone: "+1 234-567-8905",
-    mentor: "Dr. Emily Davis",
-    course: "Mobile Development",
-    status: "Inactive",
-    avatar: "/images/avatar1.png",
-    enrollmentDate: "5/12/2025",
-    performance: { attendance: 70, grade: "B" },
-    quickActions: ["Send Message", "View Sessions", "Download Report"],
-    address: "90 Harbor St, Portland, OR",
-  },
-];
-
 type ViewMode = "list" | "detail" | "add" | "edit";
+
+type Notice = { type: "success" | "error"; msg: string };
 
 interface FormState {
   name: string;
@@ -172,6 +107,8 @@ function StudentForm({
   setForm,
   onBack,
   onSave,
+  submitting,
+  error,
 }: {
   title: string;
   mode: "add" | "edit";
@@ -179,6 +116,8 @@ function StudentForm({
   setForm: React.Dispatch<React.SetStateAction<FormState>>;
   onBack: () => void;
   onSave: () => void;
+  submitting?: boolean;
+  error?: string;
 }) {
   return (
     <div className="min-h-full bg-[#f4f4f4] px-6 py-6 font-[Poppins]">
@@ -263,12 +202,14 @@ function StudentForm({
         </div>
 
         <div className="mt-[19px] border-t border-[#dedede] pt-[24px]">
+          {error && <p className="mb-3 text-[14px] font-medium text-red-600">{error}</p>}
           <div className="flex flex-wrap items-center gap-[16px]">
             <button
               onClick={onSave}
-              className="h-[43px] rounded-[8px] bg-[#F9A618] px-[28px] text-[16px] font-medium text-white transition-colors hover:bg-[#f0a014]"
+              disabled={submitting}
+              className="h-[43px] rounded-[8px] bg-[#F9A618] px-[28px] text-[16px] font-medium text-white transition-colors hover:bg-[#f0a014] disabled:cursor-not-allowed disabled:opacity-70"
             >
-              {mode === "add" ? "Add Student" : "Save Changes"}
+              {submitting ? "Saving..." : mode === "add" ? "Add Student" : "Save Changes"}
             </button>
             <button
               onClick={onBack}
@@ -387,13 +328,35 @@ function InfoBlock({ icon, label, value }: { icon?: React.ReactNode; label: stri
 }
 
 export default function Studentmanagement() {
-  const [students, setStudents] = useState<Student[]>(studentsSeed);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [notice, setNotice] = useState<Notice | null>(null);
+  const [formError, setFormError] = useState("");
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState<"All Status" | StudentStatus>("All Status");
   const [view, setView] = useState<ViewMode>("list");
   const [selected, setSelected] = useState<Student | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [deleteTarget, setDeleteTarget] = useState<Student | null>(null);
+
+  const refresh = async (): Promise<Student[]> => {
+    setLoading(true);
+    try {
+      const data = (await listStudents()) as Student[];
+      setStudents(data);
+      return data;
+    } catch (e) {
+      setNotice({ type: "error", msg: (e as Error).message });
+      return [];
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    refresh();
+  }, []);
 
   const filtered = useMemo(
     () =>
@@ -486,6 +449,7 @@ export default function Studentmanagement() {
     setView("list");
     setSelected(null);
     setForm(emptyForm);
+    setFormError("");
   };
 
   const handleAdd = () => {
@@ -493,25 +457,32 @@ export default function Studentmanagement() {
     setView("add");
   };
 
-  const saveNew = () => {
+  const saveNew = async () => {
     if (!form.name.trim()) return;
-    const newStudent: Student = {
-      ...studentsSeed[0],
-      id: `s${Date.now()}`,
-      name: form.name,
-      email: form.email,
-      phone: form.phone,
-      status: form.status,
-      mentor: form.mentor,
-      course: form.course,
-      address: form.address,
-      enrollmentDate: new Date().toLocaleDateString("en-US"),
-      avatar: "/images/avatar1.png",
-      performance: { attendance: 0, grade: "A" },
-    };
-    setStudents((prev) => [...prev, newStudent]);
-    setSelected(newStudent);
-    setView("detail");
+    setFormError("");
+    setSubmitting(true);
+    const res = await createStudent(form);
+    setSubmitting(false);
+    if (res.error) {
+      setFormError(res.error);
+      return;
+    }
+    const parts = [
+      res.tempPassword
+        ? `Student created. Temporary password: ${res.tempPassword} — share it securely.`
+        : "Student created.",
+    ];
+    if (res.mentorUnmatched)
+      parts.push(`Mentor "${form.mentor}" was not found, so the student is unassigned.`);
+    setNotice({ type: "success", msg: parts.join(" ") });
+    const list = await refresh();
+    const created = res.id ? list.find((s) => s.id === res.id) ?? null : null;
+    if (created) {
+      setSelected(created);
+      setView("detail");
+    } else {
+      resetList();
+    }
   };
 
   const handleEdit = (s: Student) => {
@@ -528,27 +499,51 @@ export default function Studentmanagement() {
     setView("edit");
   };
 
-  const saveEdit = () => {
+  const saveEdit = async () => {
     if (!selected) return;
-    const updated = { ...selected, ...form };
-    setStudents((prev) => prev.map((s) => (s.id === selected.id ? updated : s)));
+    setFormError("");
+    setSubmitting(true);
+    const res = await updateStudent(selected.id, form);
+    setSubmitting(false);
+    if (res.error) {
+      setFormError(res.error);
+      return;
+    }
+    setNotice({
+      type: "success",
+      msg: res.mentorUnmatched
+        ? `Student updated. Mentor "${form.mentor}" was not found, so the student is unassigned.`
+        : "Student updated.",
+    });
+    const list = await refresh();
+    const updated = list.find((s) => s.id === selected.id) ?? null;
     setSelected(updated);
-    setView("detail");
+    setView(updated ? "detail" : "list");
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!deleteTarget) return;
-    setStudents((prev) => prev.filter((s) => s.id !== deleteTarget.id));
-    if (selected?.id === deleteTarget.id) resetList();
+    setSubmitting(true);
+    const res = await deleteStudent(deleteTarget.id);
+    setSubmitting(false);
+    if (res.error) {
+      setNotice({ type: "error", msg: res.error });
+      setDeleteTarget(null);
+      return;
+    }
+    setNotice({ type: "success", msg: "Student deleted." });
+    const wasSelected = selected?.id === deleteTarget.id;
     setDeleteTarget(null);
+    await refresh();
+    if (wasSelected) resetList();
   };
 
   if (view === "add") {
-    return <StudentForm title="Add New Student" mode="add" form={form} setForm={setForm} onBack={resetList} onSave={saveNew} />;
+    return <StudentForm title="Add New Student" mode="add" form={form} setForm={setForm} onBack={resetList} onSave={saveNew} submitting={submitting} error={formError} />;
   }
 
   if (view === "edit") {
-    return <StudentForm title="Edit Student" mode="edit" form={form} setForm={setForm} onBack={resetList} onSave={saveEdit} />;
+    return <StudentForm title="Edit Student" mode="edit" form={form} setForm={setForm} onBack={resetList} onSave={saveEdit} submitting={submitting} error={formError} />;
   }
 
   if (view === "detail" && selected) {
@@ -564,6 +559,20 @@ export default function Studentmanagement() {
 
   return (
     <div className="min-h-full bg-[#f4f4f4] px-6 py-6 font-[Poppins]">
+      {notice && (
+        <div
+          className={`mb-4 flex items-start justify-between gap-4 rounded-[8px] border px-4 py-3 text-[14px] font-semibold ${
+            notice.type === "success"
+              ? "border-green-200 bg-green-50 text-green-700"
+              : "border-red-200 bg-red-50 text-red-700"
+          }`}
+        >
+          <span className="break-all">{notice.msg}</span>
+          <button type="button" onClick={() => setNotice(null)} className="shrink-0 text-[13px] underline">
+            Dismiss
+          </button>
+        </div>
+      )}
       <div className="mb-[24px] flex items-center justify-between gap-4">
         <div className="flex items-center gap-[12px]">
           <HeaderIcon />
@@ -622,7 +631,21 @@ export default function Studentmanagement() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((s) => (
+            {loading && (
+              <tr>
+                <td colSpan={7} className="px-[24px] py-[40px] text-center text-[#777777]">
+                  Loading students...
+                </td>
+              </tr>
+            )}
+            {!loading && filtered.length === 0 && (
+              <tr>
+                <td colSpan={7} className="px-[24px] py-[40px] text-center text-[#777777]">
+                  No students found.
+                </td>
+              </tr>
+            )}
+            {!loading && filtered.map((s) => (
               <tr key={s.id} className="border-b border-[#e5e5e5] text-[16px] font-normal leading-none text-[#666666] last:border-b-0">
                 <td className="px-[24px] py-[24px] text-[#111111]">{s.name}</td>
                 <td className="px-[24px] py-[24px]">{s.email}</td>

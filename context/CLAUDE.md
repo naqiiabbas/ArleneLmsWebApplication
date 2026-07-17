@@ -394,10 +394,27 @@ First vertical slice complete — **Admin → User Management** (pattern to foll
   notice/loading/empty states, keeps its PDF report export. UI status Active/Inactive ↔
   profile+mentor `active/inactive` (Inactive also blocks login via `profiles.status`).
 
+**Admin → Student Management** (3rd slice, verified live):
+- **`lib/data/students.types.ts`** / **`lib/data/students.ts`** (`"use server"`) — `listStudents`
+  (joins `students` + embedded `profiles`; primary mentor name from
+  `mentor_student_assignments`; attendance % from the `student_attendance_summary` view; grade
+  derived from `gpa`), `createStudent` (auth user role=student → profile → `students` row +
+  **auto-assigns a unique 4-digit `attendance_code`**; resolves the typed mentor name to a real
+  mentor and sets a single primary assignment; auto temp password), `updateStudent`,
+  `deleteStudent` (cascade).
+- Mentor field is free-text resolved by case-insensitive `full_name` against role=mentor
+  profiles; unmatched names save the student unassigned and report it in the notice.
+- **`components/Studentmanagement.tsx`** — mock removed; load/mutate + refetch, notice + inline
+  form error + loading/empty states; keeps PDF export.
+- **Gotcha (important for all modules):** `mentor_student_assignments` has **two** FKs to
+  `profiles` (`mentor_id`, `assigned_by`), so a plain `profiles(...)` embed is ambiguous and
+  errors — must hint the FK, e.g. `profiles!mentor_student_assignments_mentor_id_fkey(...)`.
+
 **Pattern for the next modules:** `lib/data/<module>.ts` (`"use server"` + `assertAdmin()` from
 `lib/data/guards.ts` + service role for privileged ops, or the RLS server client for user-scoped
 reads) → wire the existing `components/*.tsx` (load on mount, mutate + refetch, notice/loading
-states).
+states). When embedding a table with multiple FKs to the same target, disambiguate with the FK
+constraint-name hint.
 
 ### 9b. Working Conventions (Git / Commits)
 
