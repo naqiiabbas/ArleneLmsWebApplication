@@ -447,6 +447,16 @@ events, uses the real "today" (via a mount effect to avoid hydration mismatch), 
 events, and now **renders event dots on day cells** (was empty before) + upcoming/loading/notice
 states. Uses `assertAdmin`.
 
+**Admin → Documents** (7th slice, verified live): **`lib/data/documents.types.ts`** /
+**`lib/data/documents.ts`** (`"use server"`) — `listDocuments` (embeds owner via the FK hint
+`profiles!documents_owner_id_fkey` — documents has two profiles FKs: owner_id + reviewed_by),
+`createDocument`, `setDocumentStatus` (approve/reject → sets `status` + `reviewed_by`/`reviewed_at`),
+`deleteDocument`. Size stored as `size_bytes` (parsed from/formatted to a human string). The
+**approve/reject review workflow is the core value and persists**. **`components/Documentadmin.tsx`**
+— mock removed; loads real docs, approve/reject via actions + refetch, upload creates a metadata
+row, notice/loading/empty states. **Storage caveat:** no real file upload yet — `createDocument`
+stores `file_url = ''`; wiring Supabase Storage (upload + signed download) is a follow-up.
+
 **Pattern for the next modules:** `lib/data/<module>.ts` (`"use server"` + `assertAdmin()` from
 `lib/data/guards.ts` + service role for privileged ops, or the RLS server client for user-scoped
 reads) → wire the existing `components/*.tsx` (load on mount, mutate + refetch, notice/loading

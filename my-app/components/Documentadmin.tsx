@@ -1,6 +1,11 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import {
+  listDocuments,
+  createDocument,
+  setDocumentStatus,
+} from "@/lib/data/documents";
 
 type DocStatus = "Pending" | "Approved" | "Rejected";
 
@@ -19,114 +24,7 @@ type DocumentItem = {
   source?: "mentor" | "admin";
 };
 
-const SEED: DocumentItem[] = [
-  {
-    id: "d1",
-    name: "Student Progress Report - Q4",
-    uploader: "Dr. Sarah Johnson",
-    uploaderEmail: "sarah.j@email.com",
-    category: "Reports",
-    type: "PDF",
-    size: "2.4 MB",
-    date: "2025-11-25",
-    status: "Pending",
-    description: "Quarterly performance summary.",
-    role: "Mentor",
-  },
-  {
-    id: "d2",
-    name: "Attendance Summary Nov 2025",
-    uploader: "Admin System",
-    uploaderEmail: "admin@system.com",
-    category: "Attendance",
-    type: "Excel",
-    size: "1.8 MB",
-    date: "2025-11-26",
-    status: "Approved",
-    description: "Monthly attendance summary.",
-    role: "Admin",
-  },
-  {
-    id: "d3",
-    name: "Mobile Dev Project Guidelines",
-    uploader: "Dr. Emily Davis",
-    uploaderEmail: "emily.d@email.com",
-    category: "Course Materials",
-    type: "PDF",
-    size: "1.5 MB",
-    date: "2026-01-26",
-    status: "Pending",
-    description: "Guidelines for the mobile development course project.",
-    role: "Mentor",
-    source: "mentor",
-  },
-  {
-    id: "d4",
-    name: "Student Enrollment Form",
-    uploader: "Emma Williams",
-    uploaderEmail: "emma.w@email.com",
-    category: "Enrollment",
-    type: "PDF",
-    size: "1.2 MB",
-    date: "2025-11-27",
-    status: "Approved",
-    description: "Enrollment details.",
-    role: "Student",
-  },
-  {
-    id: "d5",
-    name: "Session Notes - Python",
-    uploader: "Dr. Lisa Anderson",
-    uploaderEmail: "lisa.a@email.com",
-    category: "Session Notes",
-    type: "Word",
-    size: "654 KB",
-    date: "2025-11-27",
-    status: "Approved",
-    description: "Advanced Python topics.",
-    role: "Mentor",
-  },
-  {
-    id: "d6",
-    name: "Course Completion Certificate",
-    uploader: "Admin System",
-    uploaderEmail: "admin@system.com",
-    category: "Certificates",
-    type: "PDF",
-    size: "3.1 MB",
-    date: "2025-11-27",
-    status: "Approved",
-    description: "Certificates bundle.",
-    role: "Admin",
-  },
-  {
-    id: "d7",
-    name: "Data Science Assignment Solutions",
-    uploader: "Dr. Lisa Anderson",
-    uploaderEmail: "lisa.a@email.com",
-    category: "Assignments",
-    type: "PDF",
-    size: "3.1 MB",
-    date: "2026-01-26",
-    status: "Pending",
-    description: "Solution guide for Week 5 data science assignments with detailed explanations.",
-    role: "Mentor",
-    source: "mentor",
-  },
-  {
-    id: "d8",
-    name: "Monthly Performance Report",
-    uploader: "Prof. Robert Kim",
-    uploaderEmail: "robert.k@email.com",
-    category: "Reports",
-    type: "PDF",
-    size: "2.9 MB",
-    date: "2025-11-26",
-    status: "Rejected",
-    description: "Performance metrics.",
-    role: "Mentor",
-  },
-];
+type Notice = { type: "success" | "error"; msg: string };
 
 const statusClass: Record<DocStatus, string> = {
   Pending: "bg-[#ffe6c2] text-[#c94f00]",
@@ -135,7 +33,10 @@ const statusClass: Record<DocStatus, string> = {
 };
 
 export default function Documentadmin() {
-  const [docs, setDocs] = useState<DocumentItem[]>(SEED);
+  const [docs, setDocs] = useState<DocumentItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [notice, setNotice] = useState<Notice | null>(null);
   const [tab, setTab] = useState<"all" | "mentor">("all");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"All" | DocStatus>("All");
@@ -149,6 +50,21 @@ export default function Documentadmin() {
     type: "PDF",
     size: "1.0 MB",
   });
+
+  const refresh = async () => {
+    setLoading(true);
+    try {
+      setDocs((await listDocuments()) as DocumentItem[]);
+    } catch (e) {
+      setNotice({ type: "error", msg: (e as Error).message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    refresh();
+  }, []);
 
   useEffect(() => {
     const lock = showUpload || !!modal;
@@ -183,11 +99,17 @@ export default function Documentadmin() {
 
   const mentorPending = docs.filter((doc) => doc.source === "mentor" && doc.status === "Pending").length;
 
-  const updateStatus = (status: DocStatus) => {
+  const updateStatus = async (status: DocStatus) => {
     if (!selected) return;
-    setDocs((previous) => previous.map((doc) => (doc.id === selected.id ? { ...doc, status } : doc)));
-    setSelected((previous) => (previous ? { ...previous, status } : previous));
+    const target = selected;
     setModal(null);
+    const res = await setDocumentStatus(target.id, status);
+    if (res.error) {
+      setNotice({ type: "error", msg: res.error });
+      return;
+    }
+    setNotice({ type: "success", msg: `Document ${status.toLowerCase()}.` });
+    await refresh();
   };
 
   const download = (doc: DocumentItem | null) => {
@@ -201,28 +123,43 @@ export default function Documentadmin() {
     URL.revokeObjectURL(url);
   };
 
-  const addDocument = (event: React.FormEvent) => {
+  const addDocument = async (event: React.FormEvent) => {
     event.preventDefault();
-    const newDoc: DocumentItem = {
-      id: `doc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      name: uploadForm.name || "New Document",
-      uploader: "Admin System",
-      uploaderEmail: "admin@system.com",
+    setSubmitting(true);
+    const res = await createDocument({
+      name: uploadForm.name,
       category: uploadForm.category,
       type: uploadForm.type,
       size: uploadForm.size,
-      date: new Date().toISOString().split("T")[0],
-      status: "Pending",
-      description: "Uploaded via modal",
-      role: "Admin",
-    };
-    setDocs((previous) => [newDoc, ...previous]);
+      description: "Uploaded via admin panel",
+    });
+    setSubmitting(false);
+    if (res.error) {
+      setNotice({ type: "error", msg: res.error });
+      return;
+    }
+    setNotice({ type: "success", msg: "Document uploaded (pending review)." });
     setShowUpload(false);
     setUploadForm({ name: "", category: "Reports", type: "PDF", size: "1.0 MB" });
+    await refresh();
   };
 
   return (
     <div className="min-h-full bg-[#f4f4f4] px-6 py-6 font-[Poppins]">
+      {notice && (
+        <div
+          className={`mb-4 flex items-start justify-between gap-4 rounded-[8px] border px-4 py-3 text-[14px] font-semibold ${
+            notice.type === "success"
+              ? "border-green-200 bg-green-50 text-green-700"
+              : "border-red-200 bg-red-50 text-red-700"
+          }`}
+        >
+          <span className="break-all">{notice.msg}</span>
+          <button type="button" onClick={() => setNotice(null)} className="shrink-0 text-[13px] underline">
+            Dismiss
+          </button>
+        </div>
+      )}
       <div className="mb-[24px] flex items-center justify-between gap-4">
         <div className="flex items-center gap-[12px]">
           <div className="flex h-[48px] w-[48px] items-center justify-center rounded-[8px] bg-[#fff7e8]">
@@ -301,7 +238,21 @@ export default function Documentadmin() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((doc) => (
+              {loading && (
+                <tr>
+                  <td colSpan={tab === "all" ? 8 : 7} className="px-[24px] py-[40px] text-center text-[#777777]">
+                    Loading documents...
+                  </td>
+                </tr>
+              )}
+              {!loading && filtered.length === 0 && (
+                <tr>
+                  <td colSpan={tab === "all" ? 8 : 7} className="px-[24px] py-[40px] text-center text-[#777777]">
+                    No documents found.
+                  </td>
+                </tr>
+              )}
+              {!loading && filtered.map((doc) => (
                 <tr key={doc.id} className="border-t border-[#d6d6d6] text-[15px] font-normal text-[#666666]">
                   <td className="px-[24px] py-[17px] text-[#111111]">
                     <div className="flex items-center gap-[10px]">
@@ -364,6 +315,7 @@ export default function Documentadmin() {
           setForm={setUploadForm}
           onClose={() => setShowUpload(false)}
           onSubmit={addDocument}
+          submitting={submitting}
         />
       )}
 
@@ -408,11 +360,13 @@ function UploadModal({
   setForm,
   onClose,
   onSubmit,
+  submitting,
 }: {
   form: { name: string; category: string; type: string; size: string };
   setForm: React.Dispatch<React.SetStateAction<{ name: string; category: string; type: string; size: string }>>;
   onClose: () => void;
   onSubmit: (event: React.FormEvent) => void;
+  submitting?: boolean;
 }) {
   return (
     <ModalFrame width="max-w-[447px]" onClose={onClose}>
@@ -441,8 +395,8 @@ function UploadModal({
           />
         </Field>
         <div className="mt-[33px] grid grid-cols-[1fr_82px] gap-[13px]">
-          <button type="submit" className="h-[42px] rounded-[8px] bg-[#ffa313] text-[16px] font-normal text-white hover:bg-[#ef970d]">
-            Upload Document
+          <button type="submit" disabled={submitting} className="h-[42px] rounded-[8px] bg-[#ffa313] text-[16px] font-normal text-white hover:bg-[#ef970d] disabled:cursor-not-allowed disabled:opacity-70">
+            {submitting ? "Uploading..." : "Upload Document"}
           </button>
           <button type="button" onClick={onClose} className="h-[42px] rounded-[8px] border border-[#d6d6d6] bg-white text-[16px] font-normal text-[#666666] hover:bg-[#f7f7f7]">
             Cancel
