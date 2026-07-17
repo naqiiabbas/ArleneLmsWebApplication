@@ -2,7 +2,7 @@
 
 import { randomBytes } from "node:crypto"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { assertAdmin } from "@/lib/data/guards"
+import { assertPermission } from "@/lib/auth/permissions"
 import type { StudentInput, StudentStatus, UIStudent } from "@/lib/data/students.types"
 
 type Admin = ReturnType<typeof createAdminClient>
@@ -86,7 +86,7 @@ type StudentRow = {
 }
 
 export async function listStudents(): Promise<UIStudent[]> {
-  await assertAdmin()
+  await assertPermission("students.view")
   const admin = createAdminClient()
 
   const [{ data: rows, error }, { data: assigns }, { data: att }] = await Promise.all([
@@ -145,7 +145,7 @@ export async function createStudent(
 ): Promise<{ id?: string; tempPassword?: string; mentorUnmatched?: boolean; error?: string }> {
   let me
   try {
-    me = await assertAdmin()
+    me = await assertPermission("students.manage")
   } catch (e) {
     return { error: (e as Error).message }
   }
@@ -193,7 +193,7 @@ export async function updateStudent(
 ): Promise<{ mentorUnmatched?: boolean; error?: string }> {
   let me
   try {
-    me = await assertAdmin()
+    me = await assertPermission("students.manage")
   } catch (e) {
     return { error: (e as Error).message }
   }
@@ -243,7 +243,7 @@ export async function updateStudent(
 
 export async function deleteStudent(id: string): Promise<{ error?: string }> {
   try {
-    await assertAdmin()
+    await assertPermission("students.manage")
   } catch (e) {
     return { error: (e as Error).message }
   }

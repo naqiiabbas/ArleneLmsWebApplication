@@ -2,7 +2,7 @@
 
 import { randomBytes } from "node:crypto"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { assertAdmin } from "@/lib/data/guards"
+import { assertPermission } from "@/lib/auth/permissions"
 import type { MentorInput, MentorStatus, UIMentor } from "@/lib/data/mentors.types"
 
 const QUICK_ACTIONS = ["Send Message", "View Schedule", "Assign Students", "Download Report"]
@@ -50,7 +50,7 @@ type MentorRow = {
 }
 
 export async function listMentors(): Promise<UIMentor[]> {
-  await assertAdmin()
+  await assertPermission("mentors.view")
   const admin = createAdminClient()
 
   const [{ data: rows, error }, { data: assigns }, { data: sess }] = await Promise.all([
@@ -105,7 +105,7 @@ export async function createMentor(
   input: MentorInput,
 ): Promise<{ id?: string; tempPassword?: string; error?: string }> {
   try {
-    await assertAdmin()
+    await assertPermission("mentors.manage")
   } catch (e) {
     return { error: (e as Error).message }
   }
@@ -150,7 +150,7 @@ export async function updateMentor(
   input: MentorInput,
 ): Promise<{ error?: string }> {
   try {
-    await assertAdmin()
+    await assertPermission("mentors.manage")
   } catch (e) {
     return { error: (e as Error).message }
   }
@@ -199,7 +199,7 @@ export async function updateMentor(
 
 export async function deleteMentor(id: string): Promise<{ error?: string }> {
   try {
-    await assertAdmin()
+    await assertPermission("mentors.manage")
   } catch (e) {
     return { error: (e as Error).message }
   }

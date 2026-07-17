@@ -374,6 +374,30 @@ exists for logging into the admin panel — its password is temporary and should
 first login. Other accounts are created via `admin.auth.admin.createUser` with
 `user_metadata.role` (or the Supabase dashboard).
 
+### 9f. Permission Enforcement (RBAC now governs access)
+
+The role→permission grid is now **enforced**, not just displayed.
+- **`lib/auth/permissions.ts`** (`"use server"`) — `getMyPermissions()` (keys + role, for client UI),
+  `assertPermission(key)` (throws unless the current user holds `key`; returns `{userId}`).
+  Resolver: `super_admin`/`admin` implicitly get **all** permissions; others resolve via
+  `profiles.custom_role_id` or, failing that, the `custom_roles` row whose name maps to their role
+  enum (manager→Manager, mentor→Mentor, student→Student), then `role_permissions`→keys.
+- **Server (the real boundary — admin client bypasses RLS):** each admin data action now calls
+  `assertPermission(...)` instead of `assertAdmin`: users→`users.view`/`users.manage`,
+  mentors→`mentors.view`/`mentors.manage`, students→`students.view`/`students.manage`,
+  documents→`documents.view`/`documents.manage`, roles→`roles.manage`. **Organizations & Calendar
+  keep `assertAdmin`** (no matching permission exists in the catalog — see gap below).
+- **Client UX:** `components/PermissionsProvider.tsx` (`usePermissions()`, `<Can>`), mounted via
+  **`app/adminpanel/layout.tsx`**; the admin sidebar (`Sidebaradmin`) hides nav items the user
+  lacks (`permission` per item; `adminOnly` for permission-less modules → super_admin/admin only).
+- **Effect:** Managers can now actually use the admin panel (previously `assertAdmin` blocked them);
+  they get Users/Students/Mentors/Documents/Attendance/Reports but not Billing/Roles/Activity or the
+  admin-only modules. Verified live: Manager users/students/documents=ALLOW, billing/roles=DENY;
+  Mentor all admin actions=DENY.
+- **Catalog gap:** the 16-permission catalog has no entries for Organizations, Calendar, Messaging,
+  Notes, Resource, Blog, Settings — those stay admin-tier (super_admin/admin). Expanding the catalog
+  to cover them is a future step.
+
 ### 9e. Modules Wired to Real Data
 
 First vertical slice complete — **Admin → User Management** (pattern to follow for other modules):

@@ -3,36 +3,41 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { signOut } from '@/lib/auth/actions';
+import { usePermissions } from '@/components/PermissionsProvider';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 
+type NavItem = {
+  id: string;
+  label: string;
+  icon: string;
+  permission?: string; // shown if the user holds this permission
+  adminOnly?: boolean; // shown only to super_admin / admin (no catalog permission)
+};
+
 interface SidebarProps {
-  sidebarItems?: {
-    id: string;
-    label: string;
-    icon: string;
-  }[];
+  sidebarItems?: NavItem[];
   isMobileDrawer?: boolean;
 }
 
-const defaultItems = [
-    { id: '/adminpanel', label: 'Dashboard', icon: 'dashboard' },
-    { id: '/adminpanel/usermanagment', label: 'User Management', icon: 'userManagement' },
-    { id: '/adminpanel/mentormanagment', label: 'Mentor Management', icon: 'mentorManagement' },
-    { id: '/adminpanel/studentmanagment', label: 'Student Management', icon: 'studentManagement' },
-    { id: '/adminpanel/organization', label: 'Organizations/Pro..', icon: 'organizations' },
-    { id: '/adminpanel/attencont', label: 'Attendance Control', icon: 'attendance' },
-    { id: '/adminpanel/notesmod', label: 'Notes Moderation', icon: 'notes' },
-    { id: '/adminpanel/message', label: 'Messaging System', icon: 'messaging' },
-    { id: '/adminpanel/calendar', label: 'Calendar Systems', icon: 'calendar' },
-    { id: '/adminpanel/documents', label: 'Documents', icon: 'documents' },
-    { id: '/adminpanel/resource', label: 'Resource', icon: 'resource' },
-    { id: '/adminpanel/blogsad', label: 'Blogs', icon: 'blogs' },
-    { id: '/adminpanel/reports', label: 'Reports & Analytics', icon: 'reports' },
-    { id: '/adminpanel/billing', label: 'Billing and Plans', icon: 'billing' },
-    { id: '/adminpanel/settings', label: 'Settings', icon: 'settings' },
-    { id: '/adminpanel/roles', label: 'Roles and Permissions', icon: 'roles' },
-    { id: '/adminpanel/activity', label: 'Activity Logs', icon: 'activity' },
+const defaultItems: NavItem[] = [
+    { id: '/adminpanel', label: 'Dashboard', icon: 'dashboard', permission: 'dashboard.view' },
+    { id: '/adminpanel/usermanagment', label: 'User Management', icon: 'userManagement', permission: 'users.view' },
+    { id: '/adminpanel/mentormanagment', label: 'Mentor Management', icon: 'mentorManagement', permission: 'mentors.view' },
+    { id: '/adminpanel/studentmanagment', label: 'Student Management', icon: 'studentManagement', permission: 'students.view' },
+    { id: '/adminpanel/organization', label: 'Organizations/Pro..', icon: 'organizations', adminOnly: true },
+    { id: '/adminpanel/attencont', label: 'Attendance Control', icon: 'attendance', permission: 'attendance.view' },
+    { id: '/adminpanel/notesmod', label: 'Notes Moderation', icon: 'notes', adminOnly: true },
+    { id: '/adminpanel/message', label: 'Messaging System', icon: 'messaging', adminOnly: true },
+    { id: '/adminpanel/calendar', label: 'Calendar Systems', icon: 'calendar', adminOnly: true },
+    { id: '/adminpanel/documents', label: 'Documents', icon: 'documents', permission: 'documents.view' },
+    { id: '/adminpanel/resource', label: 'Resource', icon: 'resource', adminOnly: true },
+    { id: '/adminpanel/blogsad', label: 'Blogs', icon: 'blogs', adminOnly: true },
+    { id: '/adminpanel/reports', label: 'Reports & Analytics', icon: 'reports', permission: 'reports.view' },
+    { id: '/adminpanel/billing', label: 'Billing and Plans', icon: 'billing', permission: 'billing.manage' },
+    { id: '/adminpanel/settings', label: 'Settings', icon: 'settings', adminOnly: true },
+    { id: '/adminpanel/roles', label: 'Roles and Permissions', icon: 'roles', permission: 'roles.manage' },
+    { id: '/adminpanel/activity', label: 'Activity Logs', icon: 'activity', permission: 'activity.view' },
 ];
 
 const MaskIcon = ({ src }: { src: string }) => (
@@ -96,6 +101,15 @@ const Sidebar = ({ sidebarItems = defaultItems, isMobileDrawer = false }: Sideba
   const [isMounted, setIsMounted] = useState(false);
   const logoutButtonRef = useRef<HTMLButtonElement>(null);
   const router = useRouter();
+  const { can, isAdminTier, loading } = usePermissions();
+
+  const visibleItems = loading
+    ? sidebarItems
+    : sidebarItems.filter((item) => {
+        if (item.permission) return can(item.permission);
+        if (item.adminOnly) return isAdminTier;
+        return true;
+      });
 
   useEffect(() => {
     setIsMounted(true);
@@ -125,7 +139,7 @@ const Sidebar = ({ sidebarItems = defaultItems, isMobileDrawer = false }: Sideba
 
         <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
           <nav className="py-0">
-            {sidebarItems.map(item => (
+            {visibleItems.map(item => (
               <SidebarItem key={item.id} item={item} />
             ))}
           </nav>

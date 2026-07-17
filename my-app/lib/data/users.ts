@@ -1,8 +1,8 @@
 "use server"
 
 import { randomBytes } from "node:crypto"
-import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { assertPermission } from "@/lib/auth/permissions"
 import type { Database } from "@/lib/database.types"
 import type { AdminUser, UIRole, UIStatus, UserInput } from "@/lib/data/users.types"
 
@@ -41,28 +41,8 @@ function generatePassword() {
   return "Aa1" + randomBytes(9).toString("base64url")
 }
 
-/** Ensure the caller is an admin allowed to manage users. */
-async function assertCanManageUsers() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) throw new Error("Not authenticated.")
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .single()
-
-  if (!profile || !["super_admin", "admin"].includes(profile.role)) {
-    throw new Error("You are not authorized to manage users.")
-  }
-  return { supabase, userId: user.id }
-}
-
 export async function listUsers(): Promise<AdminUser[]> {
-  await assertCanManageUsers()
+  await assertPermission("users.view")
   const admin = createAdminClient()
 
   const { data, error } = await admin
@@ -91,7 +71,7 @@ export async function createUser(
   input: UserInput,
 ): Promise<{ tempPassword?: string; error?: string }> {
   try {
-    await assertCanManageUsers()
+    await assertPermission("users.manage")
   } catch (e) {
     return { error: (e as Error).message }
   }
@@ -131,7 +111,7 @@ export async function updateUser(
   input: Omit<UserInput, "password">,
 ): Promise<{ error?: string }> {
   try {
-    await assertCanManageUsers()
+    await assertPermission("users.manage")
   } catch (e) {
     return { error: (e as Error).message }
   }
@@ -176,7 +156,7 @@ export async function updateUser(
 export async function deleteUser(id: string): Promise<{ error?: string }> {
   let me
   try {
-    me = await assertCanManageUsers()
+    me = await assertPermission("users.manage")
   } catch (e) {
     return { error: (e as Error).message }
   }

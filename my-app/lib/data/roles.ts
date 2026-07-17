@@ -1,7 +1,7 @@
 "use server"
 
 import { createAdminClient } from "@/lib/supabase/admin"
-import { assertAdmin } from "@/lib/data/guards"
+import { assertPermission } from "@/lib/auth/permissions"
 import type { Database } from "@/lib/database.types"
 import type {
   RoleInput,
@@ -41,7 +41,7 @@ function groupRank(g: string) {
 }
 
 export async function listPermissionGroups(): Promise<UIPermissionGroup[]> {
-  await assertAdmin()
+  await assertPermission("roles.manage")
   const admin = createAdminClient()
 
   const { data, error } = await admin
@@ -64,7 +64,7 @@ export async function listPermissionGroups(): Promise<UIPermissionGroup[]> {
 }
 
 export async function listRoles(): Promise<UIRole[]> {
-  await assertAdmin()
+  await assertPermission("roles.manage")
   const admin = createAdminClient()
 
   const [{ data: roles, error }, { data: rp }, { data: perms }, { data: profiles }] =
@@ -149,7 +149,7 @@ export async function createRole(
   input: RoleInput,
 ): Promise<{ id?: string; error?: string }> {
   try {
-    await assertAdmin()
+    await assertPermission("roles.manage")
   } catch (e) {
     return { error: (e as Error).message }
   }
@@ -177,7 +177,7 @@ export async function updateRole(
   input: RoleInput,
 ): Promise<{ error?: string }> {
   try {
-    await assertAdmin()
+    await assertPermission("roles.manage")
   } catch (e) {
     return { error: (e as Error).message }
   }
@@ -198,7 +198,7 @@ export async function updateRole(
 
 export async function deleteRole(id: string): Promise<{ error?: string }> {
   try {
-    await assertAdmin()
+    await assertPermission("roles.manage")
   } catch (e) {
     return { error: (e as Error).message }
   }

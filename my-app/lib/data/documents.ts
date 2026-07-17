@@ -1,7 +1,7 @@
 "use server"
 
 import { createAdminClient } from "@/lib/supabase/admin"
-import { assertAdmin } from "@/lib/data/guards"
+import { assertPermission } from "@/lib/auth/permissions"
 import type { DocStatus, DocumentInput, UIDocument } from "@/lib/data/documents.types"
 
 const UI_TO_DB_STATUS: Record<DocStatus, "pending" | "approved" | "rejected"> = {
@@ -57,7 +57,7 @@ type DocRow = {
 }
 
 export async function listDocuments(): Promise<UIDocument[]> {
-  await assertAdmin()
+  await assertPermission("documents.view")
   const admin = createAdminClient()
 
   const { data, error } = await admin
@@ -90,7 +90,7 @@ export async function createDocument(
 ): Promise<{ id?: string; error?: string }> {
   let me
   try {
-    me = await assertAdmin()
+    me = await assertPermission("documents.manage")
   } catch (e) {
     return { error: (e as Error).message }
   }
@@ -129,7 +129,7 @@ export async function setDocumentStatus(
 ): Promise<{ error?: string }> {
   let me
   try {
-    me = await assertAdmin()
+    me = await assertPermission("documents.manage")
   } catch (e) {
     return { error: (e as Error).message }
   }
@@ -149,7 +149,7 @@ export async function setDocumentStatus(
 
 export async function deleteDocument(id: string): Promise<{ error?: string }> {
   try {
-    await assertAdmin()
+    await assertPermission("documents.manage")
   } catch (e) {
     return { error: (e as Error).message }
   }
