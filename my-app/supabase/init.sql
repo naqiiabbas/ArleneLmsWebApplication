@@ -1707,6 +1707,8 @@ insert into storage.buckets (id, name, public) values ('documents', 'documents',
 on conflict (id) do nothing;
 insert into storage.buckets (id, name, public) values ('avatars', 'avatars', true)
 on conflict (id) do nothing;
+insert into storage.buckets (id, name, public) values ('blog', 'blog', true)
+on conflict (id) do nothing;
 
 -- =============================================================================
 -- END OF SCHEMA

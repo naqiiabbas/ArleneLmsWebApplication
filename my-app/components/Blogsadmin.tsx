@@ -22,6 +22,8 @@ import {
   Tags,
   Trash2,
 } from "lucide-react";
+import { listBlogPosts, saveBlogPost, deleteBlogPost } from "@/lib/data/blog";
+import type { UIBlogPost } from "@/lib/data/blog.types";
 
 const poppins = Poppins({
   subsets: ["latin"],
@@ -46,46 +48,6 @@ type ViewMode = "write" | "all" | "preview";
 
 const CATEGORIES = ["Mentorship", "Skills Development", "Career", "Technology", "Education"];
 const DEFAULT_FEATURED_IMAGE = "/images/blogimg1.png";
-
-const INITIAL_DATA: BlogPost[] = [
-  {
-    id: "1",
-    title: "Tips for Effective Mentorship Session",
-    excerpt: "Discover key strategies for making your mentorship sessions more effective and impactful.",
-    content: "Discover key strategies for making your mentorship sessions more effective and impactful.",
-    category: "Mentorship",
-    tags: ["tips", "mentorship", "growth"],
-    image: null,
-    status: "published",
-    date: "3/1/2025",
-    author: "Sarah Johnson",
-  },
-  {
-    id: "2",
-    title: "Building Strong Communication Skills",
-    excerpt: "Learn practical exercises to enhance your communication abilities.",
-    content:
-      "Communication is the cornerstone of successful relationships, both personal and professional. Here are some practical exercises to improve your communication skills...\n\nThe four-session YBS Technology Summit will provide students the opportunity to learn about various aspects of technology, ranging from systems analysis to database design.\nSessions will be structured to provide insight into defined technical areas, while also providing a platform for students to ask questions and interact with their peers on hands-on projects.\n\nThe goal of the four-week summit is to give students a glimpse into the field of Technology while providing tools that will improve their everyday approach to how they learn.",
-    category: "Skills Development",
-    tags: ["communication", "skills", "development"],
-    image: DEFAULT_FEATURED_IMAGE,
-    status: "published",
-    date: "2/28/2025",
-    author: "Sarah Johnson",
-  },
-  {
-    id: "3",
-    title: "Career Planning for Students",
-    excerpt: "A comprehensive guide to planning your future career path.",
-    content: "A comprehensive guide to planning your future career path.",
-    category: "Career",
-    tags: ["career", "planning", "students"],
-    image: null,
-    status: "draft",
-    date: "3/3/2025",
-    author: "Sarah Johnson",
-  },
-];
 
 const emptyForm = {
   title: "",
@@ -124,15 +86,34 @@ function AssetIcon({
 
 export default function BlogManagementSection() {
   const [view, setView] = useState<ViewMode>("write");
-  const [posts, setPosts] = useState<BlogPost[]>(INITIAL_DATA);
+  const [posts, setPosts] = useState<BlogPost[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All Categories");
   const [selectedStatus, setSelectedStatus] = useState("All Status");
   const [formData, setFormData] = useState<Omit<BlogPost, "id" | "date" | "author" | "status">>(emptyForm);
+  const [imageFile, setImageFile] = useState<File | null>(null);
   const [tagInput, setTagInput] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const contentEditorRef = useRef<HTMLDivElement>(null);
+
+  const refresh = async () => {
+    setLoading(true);
+    try {
+      setPosts((await listBlogPosts()) as BlogPost[]);
+    } catch (e) {
+      setNotice((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    refresh();
+  }, []);
 
   const filteredPosts = useMemo(() => {
     return posts.filter((post) => {
@@ -164,6 +145,7 @@ export default function BlogManagementSection() {
     const file = e.target.files?.[0];
     if (file) {
       setFormData((prev) => ({ ...prev, image: URL.createObjectURL(file) }));
+      setImageFile(file);
     }
   };
 
@@ -182,45 +164,46 @@ export default function BlogManagementSection() {
   const resetForm = () => {
     setFormData(emptyForm);
     setEditingId(null);
+    setImageFile(null);
   };
 
-  const handleSave = (status: "published" | "draft") => {
-    if (!formData.title) return alert("Please enter a title");
-
-    if (editingId) {
-      setPosts((prev) =>
-        prev.map((post) =>
-          post.id === editingId
-            ? {
-                ...post,
-                ...formData,
-                status,
-                date: new Date().toLocaleDateString(),
-              }
-            : post
-        )
-      );
-      setEditingId(null);
-    } else {
-      setPosts((prev) => [
-        {
-          ...formData,
-          id: Math.random().toString(36).substr(2, 9),
-          status,
-          author: "Sarah Johnson",
-          date: new Date().toLocaleDateString(),
-        },
-        ...prev,
-      ]);
+  const handleSave = async (status: "published" | "draft") => {
+    if (!formData.title) {
+      setNotice("Please enter a title.");
+      return;
     }
+    const fd = new FormData();
+    if (editingId) fd.set("id", editingId);
+    fd.set("title", formData.title);
+    fd.set("content", formData.content);
+    fd.set("excerpt", formData.excerpt);
+    fd.set("category", formData.category);
+    fd.set("tags", JSON.stringify(formData.tags));
+    fd.set("status", status);
+    if (imageFile) fd.set("image", imageFile);
+    else if (formData.image === null) fd.set("removeImage", "true");
+
+    setSaving(true);
+    const res = await saveBlogPost(fd);
+    setSaving(false);
+    if (res.error) {
+      setNotice(res.error);
+      return;
+    }
+    setNotice(status === "published" ? "Post published." : "Draft saved.");
     resetForm();
+    await refresh();
     setView("all");
   };
 
-  const deletePost = (id: string) => {
-    if (confirm("Are you sure you want to delete this post?")) {
-      setPosts((prev) => prev.filter((post) => post.id !== id));
+  const deletePost = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this post?")) return;
+    const res = await deleteBlogPost(id);
+    if (res.error) {
+      setNotice(res.error);
+      return;
     }
+    await refresh();
   };
 
   const editPost = (post: BlogPost) => {
@@ -232,6 +215,7 @@ export default function BlogManagementSection() {
       tags: post.tags,
       image: post.image,
     });
+    setImageFile(null);
     setEditingId(post.id);
     setView("preview");
   };
@@ -360,15 +344,17 @@ export default function BlogManagementSection() {
           <button
             type="button"
             onClick={() => handleSave("published")}
-            className="flex h-[56px] w-full items-center justify-center gap-[9px] rounded-[9px] bg-[#ffa313] text-[16px] font-normal text-white"
+            disabled={saving}
+            className="flex h-[56px] w-full items-center justify-center gap-[9px] rounded-[9px] bg-[#ffa313] text-[16px] font-normal text-white disabled:cursor-not-allowed disabled:opacity-70"
           >
             <Send size={18} strokeWidth={2} />
-            Publish Now
+            {saving ? "Saving..." : "Publish Now"}
           </button>
           <button
             type="button"
             onClick={() => handleSave("draft")}
-            className="flex h-[56px] w-full items-center justify-center gap-[9px] rounded-[9px] border border-[#dddddd] bg-white text-[16px] font-normal text-[#666666]"
+            disabled={saving}
+            className="flex h-[56px] w-full items-center justify-center gap-[9px] rounded-[9px] border border-[#dddddd] bg-white text-[16px] font-normal text-[#666666] disabled:cursor-not-allowed disabled:opacity-70"
           >
             <Save size={17} strokeWidth={2} />
             Save as Draft
@@ -391,6 +377,7 @@ export default function BlogManagementSection() {
                 onClick={(e) => {
                   e.stopPropagation();
                   setFormData((prev) => ({ ...prev, image: null }));
+                  setImageFile(null);
                 }}
                 className="absolute right-[8px] top-[8px] flex h-[36px] w-[36px] items-center justify-center rounded-[9px] bg-[#ff6467] text-white"
                 aria-label="Remove featured image"
@@ -465,6 +452,15 @@ export default function BlogManagementSection() {
     <section className={`${poppins.variable} min-h-full w-full overflow-x-hidden bg-[#f4f4f4] px-4 pb-6 pt-6 font-sans md:px-6 md:pt-7`}>
       <Header />
 
+      {notice && (
+        <div className="mb-4 flex items-start justify-between gap-4 rounded-[10px] border border-[#ffe0b3] bg-[#fff8ec] px-4 py-3 text-[14px] font-semibold text-[#b45309]">
+          <span className="break-all">{notice}</span>
+          <button type="button" onClick={() => setNotice(null)} className="shrink-0 text-[13px] underline">
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {view === "all" ? (
         <div>
           <div className="mb-[24px] rounded-[12px] border border-[#dddddd] bg-white px-[23px] py-[24px]">
@@ -510,7 +506,17 @@ export default function BlogManagementSection() {
           </div>
 
           <div className="space-y-[16px]">
-            {filteredPosts.map((post) => (
+            {loading && (
+              <div className="rounded-[12px] border border-[#dddddd] bg-white px-[23px] py-[25px] text-[15px] text-[#666666]">
+                Loading posts...
+              </div>
+            )}
+            {!loading && filteredPosts.length === 0 && (
+              <div className="rounded-[12px] border border-[#dddddd] bg-white px-[23px] py-[25px] text-[15px] text-[#666666]">
+                No posts found.
+              </div>
+            )}
+            {!loading && filteredPosts.map((post) => (
               <article key={post.id} className="relative min-h-[183px] rounded-[12px] border border-[#dddddd] bg-white px-[23px] py-[25px]">
                 <div className="pr-[84px]">
                   <div className="flex flex-wrap items-center gap-[6px]">

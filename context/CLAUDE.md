@@ -526,6 +526,18 @@ resolves a real user by name, marks read on open, and **polls every 5s** for nea
 Attachments not wired (paperclip only sets a text placeholder). Presence (online/offline) not
 tracked → shown offline.
 
+**Admin → Blog** (10th slice, verified live): **`lib/data/blog.types.ts`** / **`lib/data/blog.ts`**
+(`"use server"`, `assertAdmin` — no catalog permission for Blog) over `blog_posts`. `listBlogPosts`
+(author via `author:profiles(...)` embed; resolves `image_url` — storage path→public URL, external/
+local passthrough), `saveBlogPost(FormData)` (create/update; uploads the featured image to the
+**public `blog` bucket** and stores the object path; generates a unique slug; sets `published_at`
+on publish; deletes the old image on replace/remove), `deleteBlogPost` (removes image + row).
+**`components/Blogsadmin.tsx`** — mock removed; loads real posts, rich-text write/preview,
+publish/draft, real featured-image upload (tracks the File separately from the preview object-URL),
+list filters, edit, delete, notice/loading/empty. Added the **`blog` public storage bucket**
+(migration + init.sql §24). Note: inner `Header`/`SidebarControls` components are defined inside
+the render (pre-existing) — can cause tag-input focus loss; not refactored.
+
 **Pattern for the next modules:** `lib/data/<module>.ts` (`"use server"` + `assertAdmin()` from
 `lib/data/guards.ts` + service role for privileged ops, or the RLS server client for user-scoped
 reads) → wire the existing `components/*.tsx` (load on mount, mutate + refetch, notice/loading
