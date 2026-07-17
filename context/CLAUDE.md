@@ -374,6 +374,26 @@ exists for logging into the admin panel — its password is temporary and should
 first login. Other accounts are created via `admin.auth.admin.createUser` with
 `user_metadata.role` (or the Supabase dashboard).
 
+### 9g. File Storage (Supabase Storage)
+
+Real file upload/download is wired (verified live). Buckets (in `storage.buckets`, also in
+`init.sql` §24): **`documents`** (private, signed-URL access) and **`avatars`** (public, for later).
+- Files flow through **server actions using the service-role client** (bypasses storage RLS), so
+  no `storage.objects` policies are needed for now.
+- **`lib/data/documents.ts`**: `uploadDocument(FormData)` — reads the `file`, uploads to
+  `documents/<userId>/<uuid>.<ext>`, stores that **path** in `documents.file_url`, inserts the row
+  (rolls back the object if the insert fails); `getDocumentDownloadUrl(id)` — returns a 120s signed
+  URL; `deleteDocument` also removes the stored object. `file_type`/`size_bytes` derived from the
+  real file.
+- **`components/Documentadmin.tsx`**: the upload modal now has a real `<input type="file">`;
+  submit posts `FormData` to `uploadDocument`; download opens the signed URL. (The old dummy-blob
+  download is gone.)
+- **`next.config.mjs`**: `experimental.serverActions.bodySizeLimit = "15mb"` so uploads aren't
+  capped at the 1MB default.
+- **Reuse pattern** for future file features (avatars, attendance photos, resources): upload via a
+  service-role server action to the right bucket, store the object path, serve via signed URL
+  (private) or public URL (public bucket).
+
 ### 9f. Permission Enforcement (RBAC now governs access)
 
 The role→permission grid is now **enforced**, not just displayed.
@@ -478,8 +498,7 @@ states. Uses `assertAdmin`.
 `deleteDocument`. Size stored as `size_bytes` (parsed from/formatted to a human string). The
 **approve/reject review workflow is the core value and persists**. **`components/Documentadmin.tsx`**
 — mock removed; loads real docs, approve/reject via actions + refetch, upload creates a metadata
-row, notice/loading/empty states. **Storage caveat:** no real file upload yet — `createDocument`
-stores `file_url = ''`; wiring Supabase Storage (upload + signed download) is a follow-up.
+row, notice/loading/empty states. **Storage: WIRED** — see [§9g](#9g-file-storage-supabase-storage).
 
 **Pattern for the next modules:** `lib/data/<module>.ts` (`"use server"` + `assertAdmin()` from
 `lib/data/guards.ts` + service role for privileged ops, or the RLS server client for user-scoped

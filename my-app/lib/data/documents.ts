@@ -1,8 +1,21 @@
 "use server"
 
+import { randomUUID } from "node:crypto"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { assertPermission } from "@/lib/auth/permissions"
 import type { DocStatus, DocumentInput, UIDocument } from "@/lib/data/documents.types"
+
+const DOCUMENTS_BUCKET = "documents"
+
+function fileTypeLabel(mime: string, ext: string): string {
+  const e = ext.toLowerCase()
+  if (e === "pdf" || mime === "application/pdf") return "PDF"
+  if (["xls", "xlsx", "csv"].includes(e)) return "Excel"
+  if (["doc", "docx"].includes(e)) return "Word"
+  if (["ppt", "pptx"].includes(e)) return "PowerPoint"
+  if (["png", "jpg", "jpeg", "gif", "webp", "svg"].includes(e)) return "Image"
+  return e ? e.toUpperCase() : "File"
+}
 
 const UI_TO_DB_STATUS: Record<DocStatus, "pending" | "approved" | "rejected"> = {
   Pending: "pending",
@@ -123,6 +136,93 @@ export async function createDocument(
   return { id: data.id }
 }
 
+/**
+ * Upload a real file to the `documents` bucket and create its document row.
+ * `formData` must contain: file (File), name (string), category (string).
+ */
+export async function uploadDocument(
+  formData: FormData,
+): Promise<{ id?: string; error?: string }> {
+  let me
+  try {
+    me = await assertPermission("documents.manage")
+  } catch (e) {
+    return { error: (e as Error).message }
+  }
+  const admin = createAdminClient()
+
+  const file = formData.get("file")
+  const name = (formData.get("name") as string | null)?.trim() || ""
+  const category = (formData.get("category") as string | null)?.trim() || ""
+  if (!(file instanceof File) || file.size === 0) {
+    return { error: "Please choose a file to upload." }
+  }
+
+  const ext = file.name.includes(".") ? file.name.split(".").pop()! : ""
+  const path = `${me.userId}/${randomUUID()}${ext ? "." + ext : ""}`
+  const bytes = new Uint8Array(await file.arrayBuffer())
+
+  const { error: upErr } = await admin.storage
+    .from(DOCUMENTS_BUCKET)
+    .upload(path, bytes, { contentType: file.type || "application/octet-stream", upsert: false })
+  if (upErr) return { error: upErr.message }
+
+  const { data: prof } = await admin
+    .from("profiles")
+    .select("role")
+    .eq("id", me.userId)
+    .single()
+
+  const { data, error } = await admin
+    .from("documents")
+    .insert({
+      name: name || file.name,
+      category: category || null,
+      file_type: fileTypeLabel(file.type, ext),
+      size_bytes: file.size,
+      description: (formData.get("description") as string | null)?.trim() || null,
+      status: "pending",
+      owner_id: me.userId,
+      source_role: prof?.role ?? null,
+      file_url: path, // storage object path (private bucket)
+    })
+    .select("id")
+    .single()
+  if (error) {
+    // Roll back the uploaded object if the row insert failed.
+    await admin.storage.from(DOCUMENTS_BUCKET).remove([path])
+    return { error: error.message }
+  }
+  return { id: data.id }
+}
+
+/** Short-lived signed URL to view/download a document's stored file. */
+export async function getDocumentDownloadUrl(
+  id: string,
+): Promise<{ url?: string; name?: string; error?: string }> {
+  try {
+    await assertPermission("documents.view")
+  } catch (e) {
+    return { error: (e as Error).message }
+  }
+  const admin = createAdminClient()
+
+  const { data: doc } = await admin
+    .from("documents")
+    .select("file_url, name")
+    .eq("id", id)
+    .single()
+  if (!doc?.file_url) {
+    return { error: "No file is attached to this document." }
+  }
+
+  const { data, error } = await admin.storage
+    .from(DOCUMENTS_BUCKET)
+    .createSignedUrl(doc.file_url, 120)
+  if (error) return { error: error.message }
+  return { url: data.signedUrl, name: doc.name }
+}
+
 export async function setDocumentStatus(
   id: string,
   status: DocStatus,
@@ -154,6 +254,17 @@ export async function deleteDocument(id: string): Promise<{ error?: string }> {
     return { error: (e as Error).message }
   }
   const admin = createAdminClient()
+
+  // Remove the stored file (if any) before deleting the row.
+  const { data: doc } = await admin
+    .from("documents")
+    .select("file_url")
+    .eq("id", id)
+    .single()
+  if (doc?.file_url) {
+    await admin.storage.from(DOCUMENTS_BUCKET).remove([doc.file_url])
+  }
+
   const { error } = await admin.from("documents").delete().eq("id", id)
   if (error) return { error: error.message }
   return {}

@@ -3,7 +3,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   listDocuments,
-  createDocument,
+  uploadDocument,
+  getDocumentDownloadUrl,
   setDocumentStatus,
 } from "@/lib/data/documents";
 
@@ -112,27 +113,22 @@ export default function Documentadmin() {
     await refresh();
   };
 
-  const download = (doc: DocumentItem | null) => {
+  const download = async (doc: DocumentItem | null) => {
     if (!doc) return;
-    const blob = new Blob([`Dummy content for ${doc.name}`], { type: "application/pdf" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `${doc.name}.pdf`;
-    anchor.click();
-    URL.revokeObjectURL(url);
+    const res = await getDocumentDownloadUrl(doc.id);
+    if (res.error || !res.url) {
+      setNotice({ type: "error", msg: res.error ?? "Could not open the file." });
+      return;
+    }
+    window.open(res.url, "_blank", "noopener,noreferrer");
   };
 
-  const addDocument = async (event: React.FormEvent) => {
+  const addDocument = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const fd = new FormData(event.currentTarget);
+    fd.set("description", "Uploaded via admin panel");
     setSubmitting(true);
-    const res = await createDocument({
-      name: uploadForm.name,
-      category: uploadForm.category,
-      type: uploadForm.type,
-      size: uploadForm.size,
-      description: "Uploaded via admin panel",
-    });
+    const res = await uploadDocument(fd);
     setSubmitting(false);
     if (res.error) {
       setNotice({ type: "error", msg: res.error });
@@ -365,7 +361,7 @@ function UploadModal({
   form: { name: string; category: string; type: string; size: string };
   setForm: React.Dispatch<React.SetStateAction<{ name: string; category: string; type: string; size: string }>>;
   onClose: () => void;
-  onSubmit: (event: React.FormEvent) => void;
+  onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
   submitting?: boolean;
 }) {
   return (
@@ -375,6 +371,7 @@ function UploadModal({
         <Field label="Document Name *">
           <input
             required
+            name="name"
             value={form.name}
             onChange={(event) => setForm((previous) => ({ ...previous, name: event.target.value }))}
             placeholder="Enter document name"
@@ -383,6 +380,7 @@ function UploadModal({
         <Field label="Category *">
           <input
             required
+            name="category"
             value={form.category}
             onChange={(event) => setForm((previous) => ({ ...previous, category: event.target.value }))}
             placeholder="Reports"
@@ -391,7 +389,14 @@ function UploadModal({
         <Field label="File *">
           <input
             required
-            onChange={(event) => setForm((previous) => ({ ...previous, name: previous.name || event.target.value.replace(/^.*[\\/]/, "") }))}
+            type="file"
+            name="file"
+            onChange={(event) =>
+              setForm((previous) => ({
+                ...previous,
+                name: previous.name || event.target.value.replace(/^.*[\\/]/, ""),
+              }))
+            }
           />
         </Field>
         <div className="mt-[33px] grid grid-cols-[1fr_82px] gap-[13px]">

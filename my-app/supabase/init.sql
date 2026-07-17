@@ -1697,6 +1697,17 @@ insert into public.system_settings (key, value, description) values
   ('notifications.default_channels','["in_app","email"]', 'Default notification channels')
 on conflict (key) do nothing;
 
+-- =========================================================
+-- 24. STORAGE BUCKETS
+-- Files are accessed via Next.js server actions using the service-role client
+-- (bypasses storage RLS), so no storage.objects policies are needed for now.
+--   documents: PRIVATE (served via signed URLs) · avatars: PUBLIC
+-- =========================================================
+insert into storage.buckets (id, name, public) values ('documents', 'documents', false)
+on conflict (id) do nothing;
+insert into storage.buckets (id, name, public) values ('avatars', 'avatars', true)
+on conflict (id) do nothing;
+
 -- =============================================================================
 -- END OF SCHEMA
 -- =============================================================================
