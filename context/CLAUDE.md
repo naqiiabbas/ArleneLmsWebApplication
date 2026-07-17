@@ -425,6 +425,17 @@ via `organization_id`). `deleteOrganization` is safe — FKs from profiles/stude
 notice + inline form error + loading/empty states. UI type↔DB enum
 (University/Company/Nonprofit/Government ↔ lowercase), status Active/Inactive ↔ active/inactive.
 
+**Admin → Roles & Permissions** (5th slice, verified live): **`lib/data/roles.types.ts`** /
+**`lib/data/roles.ts`** (`"use server"`) over `custom_roles` + `permissions` + `role_permissions`
+— `listPermissionGroups` (permission catalog grouped by `group_name`, canonical order),
+`listRoles` (roles + assigned permission keys + card group-chips + **user counts** by mapping
+role name→profile enum and counting profiles, plus `custom_role_id`), `createRole`/`updateRole`
+(replace `role_permissions` set), `deleteRole` (**blocks `is_system` roles**). **`components/Roles.tsx`**
+substantially reworked: the previously-static `RoleForm`/`PermissionEditor` are now **controlled**
+— name/description/color(→icon) inputs and per-permission checkboxes driven by the DB catalog and
+persisted. Delete icon hidden on system roles. Note: `profiles.custom_role_id` isn't assigned by
+any UI yet, so custom-role user counts are 0 until a role-assignment flow exists.
+
 **Pattern for the next modules:** `lib/data/<module>.ts` (`"use server"` + `assertAdmin()` from
 `lib/data/guards.ts` + service role for privileged ops, or the RLS server client for user-scoped
 reads) → wire the existing `components/*.tsx` (load on mount, mutate + refetch, notice/loading
