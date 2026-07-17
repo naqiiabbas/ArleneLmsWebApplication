@@ -500,6 +500,18 @@ states. Uses `assertAdmin`.
 — mock removed; loads real docs, approve/reject via actions + refetch, upload creates a metadata
 row, notice/loading/empty states. **Storage: WIRED** — see [§9g](#9g-file-storage-supabase-storage).
 
+**Admin → Notifications** (8th slice, verified live) — **per-user** (not admin-management):
+**`lib/data/notifications.types.ts`** / **`lib/data/notifications.ts`** (`"use server"`) — scoped to
+the current user (no permission gate; every user sees their own). `listMyNotifications` (embeds
+sender via FK hint `profiles!notifications_sender_id_fkey` — notifications has two profiles FKs:
+recipient_id + sender_id), `markNotificationRead`, `markAllNotificationsRead`, `deleteNotification`
+(all filtered by `recipient_id = current user`), and `createNotification` — a **reusable utility
+for other modules to generate notifications** (e.g. notify admins on document upload; not yet
+wired to events). **`components/Notificationadmin.tsx`** — mock removed; loads real notifications,
+icons derived from `type`, mark-read / mark-all / delete persist, loading/empty states. Uses
+service-role client with explicit recipient filter (consistent w/ other modules; also resolves
+sender names across panels). Seeded 3 sample notifications for `admin@arlene.com` (deletable).
+
 **Pattern for the next modules:** `lib/data/<module>.ts` (`"use server"` + `assertAdmin()` from
 `lib/data/guards.ts` + service role for privileged ops, or the RLS server client for user-scoped
 reads) → wire the existing `components/*.tsx` (load on mount, mutate + refetch, notice/loading
