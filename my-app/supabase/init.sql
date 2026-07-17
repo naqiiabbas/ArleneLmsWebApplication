@@ -690,6 +690,8 @@ create table if not exists public.events (
   end_at       timestamptz,
   location     text,
   meal_plan    text,
+  time_label   text,                                    -- free-text display time
+  participant_labels text[] not null default '{}',      -- free-text participant tags
   created_by   uuid references public.profiles(id) on delete set null,
   created_at   timestamptz not null default now(),
   updated_at   timestamptz not null default now()

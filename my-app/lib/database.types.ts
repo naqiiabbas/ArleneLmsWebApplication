@@ -914,7 +914,9 @@ export type Database = {
           id: string
           location: string | null
           meal_plan: string | null
+          participant_labels: string[]
           start_at: string
+          time_label: string | null
           title: string
           type: Database["public"]["Enums"]["event_type"]
           updated_at: string
@@ -928,7 +930,9 @@ export type Database = {
           id?: string
           location?: string | null
           meal_plan?: string | null
+          participant_labels?: string[]
           start_at: string
+          time_label?: string | null
           title: string
           type?: Database["public"]["Enums"]["event_type"]
           updated_at?: string
@@ -942,7 +946,9 @@ export type Database = {
           id?: string
           location?: string | null
           meal_plan?: string | null
+          participant_labels?: string[]
           start_at?: string
+          time_label?: string | null
           title?: string
           type?: Database["public"]["Enums"]["event_type"]
           updated_at?: string

@@ -14,6 +14,7 @@ import {
   startOfMonth,
   startOfWeek,
 } from "date-fns";
+import { listEvents, createEvent } from "@/lib/data/events";
 
 type EventType = "Session" | "Meeting" | "Deadline" | "Holiday";
 
@@ -74,8 +75,12 @@ const typeColor: Record<EventType, string> = {
 };
 
 export default function Calendaradmin() {
-  const [currentMonth, setCurrentMonth] = useState(() => startOfMonth(new Date("2025-12-02")));
-  const [events, setEvents] = useState<EventItem[]>(SEED_EVENTS);
+  const [currentMonth, setCurrentMonth] = useState(() => startOfMonth(new Date()));
+  const [today, setToday] = useState<Date | null>(null);
+  const [events, setEvents] = useState<EventItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [notice, setNotice] = useState<{ type: "success" | "error"; msg: string } | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({
     title: "",
@@ -86,36 +91,55 @@ export default function Calendaradmin() {
     description: "",
   });
 
+  const refresh = async () => {
+    setLoading(true);
+    try {
+      setEvents((await listEvents()) as EventItem[]);
+    } catch (e) {
+      setNotice({ type: "error", msg: (e as Error).message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    setToday(new Date());
+    refresh();
+  }, []);
+
   const days = useMemo(() => buildCalendar(currentMonth), [currentMonth]);
 
   const upcoming = useMemo(() => {
-    const today = new Date("2025-12-02");
+    const ref = today ?? new Date();
     return [...events]
-      .filter((event) => differenceInCalendarDays(parseISO(event.date), today) >= 0)
+      .filter((event) => differenceInCalendarDays(parseISO(event.date), ref) >= 0)
       .sort((a, b) => parseISO(a.date).getTime() - parseISO(b.date).getTime())
       .slice(0, 4);
-  }, [events]);
+  }, [events, today]);
 
-  const addEvent = (event: React.FormEvent) => {
+  const addEvent = async (event: React.FormEvent) => {
     event.preventDefault();
-    const newEvent: EventItem = {
-      id: crypto.randomUUID(),
+    const participants = form.participants
+      ? form.participants.split(",").map((p) => p.trim()).filter(Boolean)
+      : [];
+    setSubmitting(true);
+    const res = await createEvent({
       title: form.title,
       date: form.date,
       time: form.time,
       type: form.type,
-      participants: form.participants
-        ? form.participants
-            .split(",")
-            .map((participant) => participant.trim())
-            .filter(Boolean)
-        : [],
+      participants,
       description: form.description,
-    };
-
-    setEvents((previous) => [...previous, newEvent]);
+    });
+    setSubmitting(false);
+    if (res.error) {
+      setNotice({ type: "error", msg: res.error });
+      return;
+    }
+    setNotice({ type: "success", msg: "Event added." });
     setShowModal(false);
     setForm({ title: "", date: "", time: "", type: "Session", participants: "", description: "" });
+    await refresh();
   };
 
   useEffect(() => {
@@ -129,6 +153,20 @@ export default function Calendaradmin() {
 
   return (
     <div className="min-h-full bg-[#f4f4f4] px-6 py-6 font-[Poppins]">
+      {notice && (
+        <div
+          className={`mb-4 flex items-start justify-between gap-4 rounded-[8px] border px-4 py-3 text-[14px] font-semibold ${
+            notice.type === "success"
+              ? "border-green-200 bg-green-50 text-green-700"
+              : "border-red-200 bg-red-50 text-red-700"
+          }`}
+        >
+          <span className="break-all">{notice.msg}</span>
+          <button type="button" onClick={() => setNotice(null)} className="shrink-0 text-[13px] underline">
+            Dismiss
+          </button>
+        </div>
+      )}
       <div className="mb-[25px] flex items-center justify-between gap-4">
         <div className="flex items-center gap-[12px]">
           <div className="flex h-[48px] w-[48px] items-center justify-center rounded-[8px] bg-[#fff7e8]">
@@ -185,7 +223,9 @@ export default function Calendaradmin() {
           <div className="grid grid-cols-7 gap-[8px] px-[16px] pb-[16px] pt-[19px]">
             {days.map((day) => {
               const outside = !isSameMonth(day, currentMonth);
-              const isSelected = isSameDay(day, new Date("2025-12-02"));
+              const isSelected = today ? isSameDay(day, today) : false;
+              const dayKey = format(day, "yyyy-MM-dd");
+              const dayEvents = outside ? [] : events.filter((ev) => ev.date === dayKey);
               return (
                 <div
                   key={day.toISOString()}
@@ -197,7 +237,18 @@ export default function Calendaradmin() {
                         : "border-[#d6d6d6] bg-white text-[#111111]"
                   }`}
                 >
-                  {!outside && <span className="text-[16px] font-normal leading-none">{format(day, "d")}</span>}
+                  {!outside && (
+                    <>
+                      <span className="text-[16px] font-normal leading-none">{format(day, "d")}</span>
+                      {dayEvents.length > 0 && (
+                        <div className="mt-[8px] flex flex-wrap gap-[3px]">
+                          {dayEvents.slice(0, 4).map((ev) => (
+                            <span key={ev.id} title={ev.title} className={`h-[6px] w-[6px] rounded-full ${typeColor[ev.type]}`} />
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
               );
             })}
@@ -209,6 +260,12 @@ export default function Calendaradmin() {
             Upcoming Events
           </h2>
           <div>
+            {loading && (
+              <p className="px-[16px] py-[17px] text-[14px] text-[#666666]">Loading events...</p>
+            )}
+            {!loading && upcoming.length === 0 && (
+              <p className="px-[16px] py-[17px] text-[14px] text-[#666666]">No upcoming events.</p>
+            )}
             {upcoming.map((event) => (
               <div key={event.id} className="flex gap-[12px] border-b border-[#d6d6d6] px-[16px] py-[17px] last:border-b-0">
                 <div className="flex h-[48px] w-[48px] shrink-0 items-center justify-center rounded-[8px] bg-[#fff7e8]">
@@ -307,9 +364,10 @@ export default function Calendaradmin() {
               <div className="mt-[38px] grid grid-cols-[1fr_82px] gap-[13px]">
                 <button
                   type="submit"
-                  className="h-[42px] rounded-[8px] bg-[#ffa313] text-[16px] font-semibold text-white transition-colors hover:bg-[#ef970d]"
+                  disabled={submitting}
+                  className="h-[42px] rounded-[8px] bg-[#ffa313] text-[16px] font-semibold text-white transition-colors hover:bg-[#ef970d] disabled:cursor-not-allowed disabled:opacity-70"
                 >
-                  Add Event
+                  {submitting ? "Adding..." : "Add Event"}
                 </button>
                 <button
                   type="button"

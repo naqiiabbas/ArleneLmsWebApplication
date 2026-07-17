@@ -436,6 +436,17 @@ substantially reworked: the previously-static `RoleForm`/`PermissionEditor` are 
 persisted. Delete icon hidden on system roles. Note: `profiles.custom_role_id` isn't assigned by
 any UI yet, so custom-role user counts are 0 until a role-assignment flow exists.
 
+**Admin → Calendar** (6th slice, verified live): **`lib/data/events.types.ts`** /
+**`lib/data/events.ts`** (`"use server"`) — `listEvents`, `createEvent`, `deleteEvent` on the
+`events` table. Since the UI uses a free-text time range and free-text participant labels
+("All Students", "+1") that don't map to timestamps / structured `event_participants`, added two
+columns **`events.time_label text`** and **`events.participant_labels text[]`** (migration +
+init.sql + regenerated `database.types.ts`); the event date is stored in `start_at` at midnight
+UTC and read back as its UTC date. **`components/Calendaradmin.tsx`** — mock removed; loads real
+events, uses the real "today" (via a mount effect to avoid hydration mismatch), persists new
+events, and now **renders event dots on day cells** (was empty before) + upcoming/loading/notice
+states. Uses `assertAdmin`.
+
 **Pattern for the next modules:** `lib/data/<module>.ts` (`"use server"` + `assertAdmin()` from
 `lib/data/guards.ts` + service role for privileged ops, or the RLS server client for user-scoped
 reads) → wire the existing `components/*.tsx` (load on mount, mutate + refetch, notice/loading
