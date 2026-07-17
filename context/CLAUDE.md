@@ -316,6 +316,27 @@ payments gateway (Stripe/ACH vs. record-keeping), iPad attendance client type.
   to reflect the new full schema**. `init.sql` should always be able to rebuild the database
   from scratch. Never let `init.sql`, the migrations, and Supabase drift apart.
 
+### 9c. Data Layer (Next.js ↔ Supabase)
+
+Scaffolded in `my-app/`. Packages: `@supabase/supabase-js`, `@supabase/ssr`, `server-only`.
+
+- **`lib/database.types.ts`** — TypeScript types auto-generated from the live DB. Regenerate
+  after every schema change (via Supabase MCP `generate_typescript_types`, or `npm run
+  types:gen` if the Supabase CLI is authed). Do not hand-edit.
+- **`lib/supabase/client.ts`** — `createClient()` browser client (publishable key, RLS-scoped).
+- **`lib/supabase/server.ts`** — `createClient()` server client (cookie-based session, RLS as
+  the signed-in user). Use in Server Components / Route Handlers / Server Actions.
+- **`lib/supabase/admin.ts`** — `createAdminClient()` **service-role, SERVER ONLY, bypasses
+  RLS** (guarded by `import "server-only"`). Use for trusted/privileged backend ops.
+- **`lib/supabase/auth.ts`** — `getUser()`, `getCurrentProfile()`, `isStaffRole()` helpers.
+  Always authorize on the server with `getUser()` (revalidates JWT), never `getSession()`.
+- **`lib/supabase/middleware.ts`** + **`middleware.ts`** — refresh the auth session cookies on
+  every request.
+- **Env** (`.env.local`, gitignored; template in `.env.example`):
+  `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` (publishable key set),
+  `SUPABASE_SERVICE_ROLE_KEY` (**placeholder — user must paste from Dashboard → Settings → API**;
+  required before admin-client / privileged routes work).
+
 ### 9b. Working Conventions (Git / Commits)
 
 - **After every code change, provide a commit title** in the format
