@@ -368,6 +368,25 @@ exists for logging into the admin panel — its password is temporary and should
 first login. Other accounts are created via `admin.auth.admin.createUser` with
 `user_metadata.role` (or the Supabase dashboard).
 
+### 9e. Modules Wired to Real Data
+
+First vertical slice complete — **Admin → User Management** (pattern to follow for other modules):
+- **`lib/data/users.types.ts`** — UI-facing types (`AdminUser`, `UIRole`, `UIStatus`, `UserInput`).
+- **`lib/data/users.ts`** (`"use server"`) — `listUsers`, `createUser` (admin API + trigger fills
+  profile; auto-generates a temp password if none given), `updateUser` (never downgrades a
+  `super_admin`; syncs auth email on change), `deleteUser` (cascade via FK; blocks self-delete).
+  All guarded by `assertCanManageUsers()` (role ∈ super_admin/admin) as defense-in-depth on top
+  of middleware. Uses the **service-role admin client**.
+- **`components/Usermanage.tsx`** — mock arrays removed; loads via `listUsers` on mount, mutates
+  via the actions + refetches, shows a success/error notice (incl. the generated temp password)
+  and loading/empty states. Verified CRUD end-to-end against the live DB.
+- UI↔DB role map: Admin↔admin (super_admin also shows as "Admin"), Manager↔manager,
+  Mentor↔mentor, Student↔student. Sponsors/parents excluded (own panels).
+
+**Pattern for the next modules:** `lib/data/<module>.ts` (`"use server"` + auth guard + service
+role for privileged ops or the RLS server client for user-scoped reads) → wire the existing
+`components/*.tsx` to it (load on mount, mutate + refetch, notice/loading states).
+
 ### 9b. Working Conventions (Git / Commits)
 
 - **After every code change, provide a commit title** in the format

@@ -1,11 +1,17 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Plus,
   Search,
   Trash2,
 } from "lucide-react";
+import {
+  listUsers,
+  createUser,
+  updateUser,
+  deleteUser,
+} from "@/lib/data/users";
 
 type Role = "Admin" | "Mentor" | "Student" | "Manager";
 type Status = "Active" | "Suspended";
@@ -21,60 +27,9 @@ type User = {
   createdAt: string;
 };
 
-const INITIAL_USERS: User[] = [
-  {
-    id: "u1",
-    name: "John Admin",
-    email: "john.admin@email.com",
-    phone: "+1 234-567-8901",
-    role: "Admin",
-    status: "Active",
-    lastLogin: "2025-11-28 10:30 AM",
-    createdAt: "1/15/2024",
-  },
-  {
-    id: "u2",
-    name: "Dr. Sarah Johnson",
-    email: "sarah.j@email.com",
-    phone: "+1 234-567-9001",
-    role: "Mentor",
-    status: "Active",
-    lastLogin: "2025-11-28 09:15 AM",
-    createdAt: "3/12/2024",
-  },
-  {
-    id: "u3",
-    name: "Alex Martinez",
-    email: "alex.m@email.com",
-    phone: "+1 234-567-8901",
-    role: "Student",
-    status: "Active",
-    lastLogin: "2025-11-27 04:45 PM",
-    createdAt: "5/02/2024",
-  },
-  {
-    id: "u4",
-    name: "Maria Garcia",
-    email: "maria.g@email.com",
-    phone: "+1 234-567-8910",
-    role: "Manager",
-    status: "Active",
-    lastLogin: "2025-11-28 08:00 AM",
-    createdAt: "4/20/2024",
-  },
-  {
-    id: "u5",
-    name: "Robert Smith",
-    email: "robert.s@email.com",
-    phone: "+1 234-567-8911",
-    role: "Student",
-    status: "Suspended",
-    lastLogin: "2025-11-20 02:30 PM",
-    createdAt: "2/09/2024",
-  },
-];
-
 type View = "list" | "add" | "edit" | "details";
+
+type Notice = { type: "success" | "error"; msg: string };
 
 const badgeColor = (role: Role) => {
   switch (role) {
@@ -117,13 +72,31 @@ const BackButton = ({ onClick }: { onClick: () => void }) => (
 );
 
 export default function UserManagement() {
-  const [users, setUsers] = useState<User[]>(INITIAL_USERS);
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [notice, setNotice] = useState<Notice | null>(null);
   const [view, setView] = useState<View>("list");
   const [selected, setSelected] = useState<User | null>(null);
   const [roleFilter, setRoleFilter] = useState<Role | "All">("All");
   const [statusFilter, setStatusFilter] = useState<Status | "All">("All");
   const [search, setSearch] = useState("");
   const [showDelete, setShowDelete] = useState(false);
+
+  const refresh = async () => {
+    setLoading(true);
+    try {
+      setUsers((await listUsers()) as User[]);
+    } catch (e) {
+      setNotice({ type: "error", msg: (e as Error).message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    refresh();
+  }, []);
 
   const summary = useMemo(() => {
     const total = users.length;
@@ -152,46 +125,67 @@ export default function UserManagement() {
     setView("list");
   };
 
-  const handleAdd = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleAdd = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-    const newUser: User = {
-      id: crypto.randomUUID(),
+    setSubmitting(true);
+    const res = await createUser({
       name: (fd.get("name") as string).trim(),
       email: (fd.get("email") as string).trim(),
       phone: (fd.get("phone") as string).trim(),
       role: fd.get("role") as Role,
       status: fd.get("status") as Status,
-      lastLogin: new Date().toISOString().replace("T", " ").slice(0, 16),
-      createdAt: new Date().toLocaleDateString(),
-    };
-    setUsers((prev) => [...prev, newUser]);
+      password: ((fd.get("password") as string) || "").trim(),
+    });
+    setSubmitting(false);
+    if (res.error) {
+      setNotice({ type: "error", msg: res.error });
+      return;
+    }
+    setNotice({
+      type: "success",
+      msg: res.tempPassword
+        ? `User created. Temporary password: ${res.tempPassword} — share it securely; they should change it on first login.`
+        : "User created successfully.",
+    });
+    await refresh();
     resetFormState();
   };
 
-  const handleEdit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleEdit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!selected) return;
     const fd = new FormData(e.currentTarget);
-    const updated = users.map((u) =>
-      u.id === selected.id
-        ? {
-            ...u,
-            name: (fd.get("name") as string).trim(),
-            email: (fd.get("email") as string).trim(),
-            phone: (fd.get("phone") as string).trim(),
-            role: fd.get("role") as Role,
-            status: fd.get("status") as Status,
-          }
-        : u
-    );
-    setUsers(updated);
+    setSubmitting(true);
+    const res = await updateUser(selected.id, {
+      name: (fd.get("name") as string).trim(),
+      email: (fd.get("email") as string).trim(),
+      phone: (fd.get("phone") as string).trim(),
+      role: fd.get("role") as Role,
+      status: fd.get("status") as Status,
+    });
+    setSubmitting(false);
+    if (res.error) {
+      setNotice({ type: "error", msg: res.error });
+      return;
+    }
+    setNotice({ type: "success", msg: "User updated successfully." });
+    await refresh();
     resetFormState();
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!selected) return;
-    setUsers((prev) => prev.filter((u) => u.id !== selected.id));
+    setSubmitting(true);
+    const res = await deleteUser(selected.id);
+    setSubmitting(false);
+    if (res.error) {
+      setNotice({ type: "error", msg: res.error });
+      setShowDelete(false);
+      return;
+    }
+    setNotice({ type: "success", msg: "User deleted." });
+    await refresh();
     setShowDelete(false);
     setSelected(null);
     setView("list");
@@ -264,14 +258,26 @@ export default function UserManagement() {
               <option value="Suspended">Suspended</option>
             </select>
           </div>
+          {mode === "add" && (
+            <div className="space-y-2 md:col-span-2">
+              <label className="text-[14px] font-semibold leading-none text-[#666666]">Temporary Password</label>
+              <input
+                name="password"
+                type="text"
+                className="h-[42px] w-full rounded-[8px] border border-[#d6d6d6] px-[15px] text-[16px] font-semibold text-[#777777] outline-none placeholder:text-[#777777] focus:border-[#ffa313]"
+                placeholder="Leave blank to auto-generate a secure password"
+              />
+            </div>
+          )}
           <div className="md:col-span-2 mt-[10px] flex gap-[16px] border-t border-[#dddddd] pt-[24px]">
             <button
               type="submit"
-              className={`h-[43px] rounded-[8px] px-[17px] text-[16px] font-semibold text-white ${
+              disabled={submitting}
+              className={`h-[43px] rounded-[8px] px-[17px] text-[16px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-70 ${
                 mode === "add" ? "bg-[#ffa313] hover:bg-[#f29a0b]" : "bg-[#1976d2] hover:bg-[#1768ba]"
               }`}
             >
-              {mode === "add" ? "Add User" : "Save Changes"}
+              {submitting ? "Saving..." : mode === "add" ? "Add User" : "Save Changes"}
             </button>
             <button
               type="button"
@@ -351,6 +357,24 @@ export default function UserManagement() {
   return (
     <div className="min-h-full bg-[#f4f4f4] px-6 py-6 font-[Poppins]">
       <div className="mx-auto w-full max-w-[1600px]">
+        {notice && (
+          <div
+            className={`mb-4 flex items-start justify-between gap-4 rounded-[8px] border px-4 py-3 text-[14px] font-semibold ${
+              notice.type === "success"
+                ? "border-green-200 bg-green-50 text-green-700"
+                : "border-red-200 bg-red-50 text-red-700"
+            }`}
+          >
+            <span className="break-all">{notice.msg}</span>
+            <button
+              type="button"
+              onClick={() => setNotice(null)}
+              className="shrink-0 text-[13px] underline"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
         {/* LIST VIEW */}
         {view === "list" && (
           <div>
@@ -426,7 +450,21 @@ export default function UserManagement() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#dddddd]">
-                  {filtered.map((user) => (
+                  {loading && (
+                    <tr>
+                      <td colSpan={7} className="px-[24px] py-[40px] text-center font-semibold text-[#777777]">
+                        Loading users...
+                      </td>
+                    </tr>
+                  )}
+                  {!loading && filtered.length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="px-[24px] py-[40px] text-center font-semibold text-[#777777]">
+                        No users found.
+                      </td>
+                    </tr>
+                  )}
+                  {!loading && filtered.map((user) => (
                     <tr key={user.id} className="h-[65px] hover:bg-[#fafafa]">
                       <td className="px-[24px] py-[18px] font-semibold text-[#111111]">{user.name}</td>
                       <td className="px-[24px] py-[18px] font-semibold text-[#777777]">{user.email}</td>
