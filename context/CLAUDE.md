@@ -337,6 +337,36 @@ Scaffolded in `my-app/`. Packages: `@supabase/supabase-js`, `@supabase/ssr`, `se
   `SUPABASE_SERVICE_ROLE_KEY` (**placeholder — user must paste from Dashboard → Settings → API**;
   required before admin-client / privileged routes work).
 
+### 9d. Authentication (Supabase Auth)
+
+Real email+password auth replaces the mock logins. Verified end-to-end (create user →
+`handle_new_user` trigger → profile role → sign-in → RLS self-read).
+
+- **`lib/auth/config.ts`** — portal→roles map, portal/role home routes (`PORTAL_ROLES`,
+  `PORTAL_HOME`, `LOGIN_ROUTE`, `ROLE_HOME`, `homeForRole`).
+- **`lib/auth/actions.ts`** — server actions: `signIn(portal,email,password)` (verifies the DB
+  role is allowed for that portal, stamps `last_login_at`, redirects to the portal home),
+  `signOut(portal?)`, `sendPasswordReset(email)`, `updatePassword(newPassword)`.
+- **Login wiring:** `Loginadmin` (admin), `Loginmentor` (mentor), `Sponsorlogin` (sponsor),
+  `Studentlogin` (student, Email tab) call `signIn`; their Forgot views call
+  `sendPasswordReset`. `Studentforget` too.
+- **Logout:** all four sidebars (`Sidebaradmin/mentor/spon` + student `Sidebar`) call
+  `signOut(portal)`.
+- **Password reset:** email link → **`app/auth/callback/route.ts`** exchanges the code for a
+  session → **`app/auth/reset-password/page.tsx`** form calls `updatePassword`.
+- **Route protection:** `middleware.ts` gates every `/adminpanel`, `/mentorshippanel`,
+  `/sponsorshippanel`, `/studentpanel` route — unauthenticated → portal login; wrong role →
+  the user's own home; signed-in users on a login page → their home. Panel login/verify routes
+  are exempt. Role is looked up per request in `lib/supabase/middleware.ts`.
+- **Env:** `NEXT_PUBLIC_SITE_URL` (reset-email redirect base).
+
+**Not yet wired (deferred):** the Student **"Student ID"** login tab and the
+`studentverify → createpass → passsuccessful` OTP/invite flow (still routes-only); admin-driven
+**user provisioning** (creating student/mentor/sponsor accounts) — needs the admin API via the
+service-role client. **No users exist in the DB yet** — an initial admin account must be created
+(e.g. via `admin.auth.admin.createUser` with `user_metadata.role`, or the Supabase dashboard)
+before anyone can log in.
+
 ### 9b. Working Conventions (Git / Commits)
 
 - **After every code change, provide a commit title** in the format

@@ -5,6 +5,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Eye, Lock, LogIn, Mail, UserCircle } from 'lucide-react'
+import { signIn } from '@/lib/auth/actions'
 
 interface AuthTab {
   id: 'email' | 'student'
@@ -31,11 +32,31 @@ export default function LoginForm({
   supportEmail = 'support@university.edu',
 }: LoginFormProps) {
   const [activeTab, setActiveTab] = useState<AuthTab['id']>('email')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    router.push('/studentpanel/studentverify')
+
+    // Student ID tab uses the invite/verification flow (not yet backed by auth).
+    if (activeTab === 'student') {
+      router.push('/studentpanel/studentverify')
+      return
+    }
+
+    setError('')
+    if (!email || !password) {
+      setError('Please enter your email and password.')
+      return
+    }
+    setIsLoading(true)
+    const res = await signIn('student', email, password)
+    setIsLoading(false)
+    // On success the server action redirects; only errors return here.
+    if (res?.error) setError(res.error)
   }
 
   return (
@@ -78,7 +99,7 @@ export default function LoginForm({
                 <label className="mb-2 block text-[14px] font-medium text-[#555555]">Email Address</label>
                 <div className="relative">
                   <Mail className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#6f6f6f]" />
-                  <input className={inputClass} type="email" placeholder="Enter your email" autoComplete="email" />
+                  <input className={inputClass} type="email" placeholder="Enter your email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
                 </div>
               </div>
 
@@ -86,7 +107,7 @@ export default function LoginForm({
                 <label className="mb-2 block text-[14px] font-medium text-[#555555]">Password</label>
                 <div className="relative">
                   <Lock className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#6f6f6f]" />
-                  <input className={`${inputClass} pr-12`} type="password" placeholder="Enter your password" autoComplete="current-password" />
+                  <input className={`${inputClass} pr-12`} type="password" placeholder="Enter your password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
                   <Eye className="absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#6f6f6f]" />
                 </div>
               </div>
@@ -112,12 +133,17 @@ export default function LoginForm({
             </div>
           )}
 
+          {error && (
+            <p className="mt-3 text-center text-[13px] font-medium text-[#ef4444]">{error}</p>
+          )}
+
           <button
             type="submit"
-            className="mt-4 flex h-[46px] w-full items-center justify-center gap-2 rounded-[9px] bg-[#f9a514] text-[16px] font-medium text-white transition hover:bg-[#e69412] focus:outline-none focus:ring-4 focus:ring-[#f4a11d]/25"
+            disabled={isLoading}
+            className="mt-4 flex h-[46px] w-full items-center justify-center gap-2 rounded-[9px] bg-[#f9a514] text-[16px] font-medium text-white transition hover:bg-[#e69412] focus:outline-none focus:ring-4 focus:ring-[#f4a11d]/25 disabled:cursor-not-allowed disabled:opacity-70"
           >
             <LogIn className="h-5 w-5" />
-            Sign In
+            {isLoading ? 'Signing in...' : 'Sign In'}
           </button>
 
           <div className="mt-4 border-t border-[#e3e3e3] pt-4 text-center text-[13px] text-[#666666]">

@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { ArrowLeft, ArrowRight } from "lucide-react";
+import { signIn, sendPasswordReset } from "@/lib/auth/actions";
 
 type AuthView = "login" | "forgot" | "success";
 
@@ -164,26 +165,29 @@ export default function Loginadmin() {
     setView("forgot");
   };
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate(LOGIN_FIELDS)) return;
 
     setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
-      alert("Login Successful! Navigating to Panel...");
-    }, 1500);
+    const res = await signIn("admin", formData.email, formData.password);
+    setIsLoading(false);
+    // On success the server action redirects; only errors return here.
+    if (res?.error) setErrors({ password: res.error });
   };
 
-  const handleForgotRequest = (e: React.FormEvent) => {
+  const handleForgotRequest = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate(FORGOT_FIELDS)) return;
 
     setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
-      setView("success");
-    }, 1500);
+    const res = await sendPasswordReset(formData.email);
+    setIsLoading(false);
+    if (res?.error) {
+      setErrors({ email: res.error });
+      return;
+    }
+    setView("success");
   };
 
   return (

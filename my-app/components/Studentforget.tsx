@@ -1,10 +1,11 @@
 'use client'
 
-import React from 'react'
+import React, { useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Mail } from 'lucide-react'
+import { sendPasswordReset } from '@/lib/auth/actions'
 
 interface ForgotPasswordProps {
   logoSrc?: string
@@ -21,12 +22,27 @@ export default function ForgotPasswordSection({
   onSendCode,
 }: ForgotPasswordProps) {
   const router = useRouter()
+  const [error, setError] = useState('')
+  const [sent, setSent] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    const formData = new FormData(event.currentTarget)
-    onSendCode?.(String(formData.get('email') || ''))
-    router.push('/studentpanel/studentverify')
+    const email = String(new FormData(event.currentTarget).get('email') || '')
+    if (!email) {
+      setError('Please enter your email address.')
+      return
+    }
+    setError('')
+    setIsLoading(true)
+    const res = await sendPasswordReset(email)
+    setIsLoading(false)
+    if (res?.error) {
+      setError(res.error)
+      return
+    }
+    onSendCode?.(email)
+    setSent(true)
   }
 
   const handleBack = () => {
@@ -66,11 +82,21 @@ export default function ForgotPasswordSection({
             <input className={inputClass} type="email" name="email" placeholder="Enter your email" autoComplete="email" />
           </div>
 
+          {error && (
+            <p className="mt-3 text-[13px] font-medium text-[#ef4444]">{error}</p>
+          )}
+          {sent && (
+            <p className="mt-3 text-[13px] font-medium text-[#16a34a]">
+              If an account exists for that email, a password reset link is on its way. Check your inbox.
+            </p>
+          )}
+
           <button
             type="submit"
-            className="mt-5 h-[46px] w-full rounded-[9px] bg-[#f9a514] text-[16px] font-medium text-white transition hover:bg-[#e69412] focus:outline-none focus:ring-4 focus:ring-[#f4a11d]/25"
+            disabled={isLoading || sent}
+            className="mt-5 h-[46px] w-full rounded-[9px] bg-[#f9a514] text-[16px] font-medium text-white transition hover:bg-[#e69412] focus:outline-none focus:ring-4 focus:ring-[#f4a11d]/25 disabled:cursor-not-allowed disabled:opacity-70"
           >
-            Send Verification Code
+            {isLoading ? 'Sending...' : sent ? 'Link Sent' : 'Send Reset Link'}
           </button>
 
           <div className="mt-4 border-t border-[#e3e3e3] pt-4 text-center text-[13px] text-[#666666]">

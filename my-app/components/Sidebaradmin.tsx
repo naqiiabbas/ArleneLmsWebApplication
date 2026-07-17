@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { signOut } from '@/lib/auth/actions';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 
@@ -110,8 +111,8 @@ const Sidebar = ({ sidebarItems = defaultItems, isMobileDrawer = false }: Sideba
     };
   }, [showLogoutModal]);
 
-  const handleLogout = () => {
-    router.push("/adminpanel/loginform");
+  const handleLogout = async () => {
+    await signOut("admin");
   };
 
   return (

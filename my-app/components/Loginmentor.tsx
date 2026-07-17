@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { ArrowLeft, ArrowRight, Mail, X } from "lucide-react";
+import { signIn, sendPasswordReset } from "@/lib/auth/actions";
 
 const LOGIN_FIELDS = [
   {
@@ -172,26 +173,26 @@ export default function AuthFlow() {
     setView("login");
   };
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (validate(LOGIN_FIELDS)) {
-      setIsLoading(true);
-      setTimeout(() => {
-        setIsLoading(false);
-        alert("Login Successful! Navigating to Panel...");
-      }, 1500);
-    }
+    if (!validate(LOGIN_FIELDS)) return;
+    setIsLoading(true);
+    const res = await signIn("mentor", formData.email, formData.password);
+    setIsLoading(false);
+    if (res?.error) setErrors({ password: res.error });
   };
 
-  const handleForgotRequest = (e: React.FormEvent) => {
+  const handleForgotRequest = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (validate(FORGOT_FIELDS)) {
-      setIsLoading(true);
-      setTimeout(() => {
-        setIsLoading(false);
-        setView("success");
-      }, 1500);
+    if (!validate(FORGOT_FIELDS)) return;
+    setIsLoading(true);
+    const res = await sendPasswordReset(formData.email);
+    setIsLoading(false);
+    if (res?.error) {
+      setErrors({ email: res.error });
+      return;
     }
+    setView("success");
   };
 
   return (
