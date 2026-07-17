@@ -1,9 +1,15 @@
 "use client";
 
 import React from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { Search, Trash2, ChevronDown, Plus } from "lucide-react";
+import {
+  listMentors,
+  createMentor,
+  updateMentor,
+  deleteMentor,
+} from "@/lib/data/mentors";
 
 type MentorStatus = "Active" | "Inactive";
 
@@ -29,95 +35,9 @@ interface Mentor {
   quickActions: string[];
 }
 
-const initialMentors: Mentor[] = [
-  {
-    id: "m1",
-    name: "Dr. Sarah Johnson",
-    email: "sarah.j@email.com",
-    expertise: "Python, Data Science",
-    sessions: 156,
-    students: 12,
-    rating: 4.8,
-    status: "Active",
-    phone: "+1 234-567-8901",
-    experience: "8 years",
-    address: "100 University Ave, Boston, MA",
-    joinDate: "1/15/2024",
-    avatar: "/images/avatar1.png",
-    stats: { totalSessions: 156, studentsAssigned: 12, avgPerMonth: 13 },
-    quickActions: ["Send Message", "View Schedule", "Assign Students", "Download Report"],
-  },
-  {
-    id: "m2",
-    name: "Prof. Michael Chen",
-    email: "michael.c@email.com",
-    expertise: "Web Development, JavaScript",
-    sessions: 132,
-    students: 10,
-    rating: 4.9,
-    status: "Active",
-    phone: "+1 987-555-0101",
-    experience: "10 years",
-    address: "21 Howard St, Seattle, WA",
-    joinDate: "2/02/2024",
-    avatar: "/images/avatar2.png",
-    stats: { totalSessions: 132, studentsAssigned: 10, avgPerMonth: 11 },
-    quickActions: ["Send Message", "View Schedule", "Assign Students", "Download Report"],
-  },
-  {
-    id: "m3",
-    name: "Dr. Lisa Anderson",
-    email: "lisa.a@email.com",
-    expertise: "Machine Learning, AI",
-    sessions: 189,
-    students: 15,
-    rating: 4.7,
-    status: "Active",
-    phone: "+1 555-889-4433",
-    experience: "9 years",
-    address: "15 Spring Ave, Austin, TX",
-    joinDate: "3/10/2024",
-    avatar: "/images/avatar3.png",
-    stats: { totalSessions: 189, studentsAssigned: 15, avgPerMonth: 14 },
-    quickActions: ["Send Message", "View Schedule", "Assign Students", "Download Report"],
-  },
-  {
-    id: "m4",
-    name: "Prof. Robert Kim",
-    email: "robert.k@email.com",
-    expertise: "Mobile Development, React Native",
-    sessions: 98,
-    students: 8,
-    rating: 4.9,
-    status: "Active",
-    phone: "+1 222-999-8877",
-    experience: "7 years",
-    address: "88 Lakeshore Dr, Denver, CO",
-    joinDate: "11/21/2023",
-    avatar: "/images/avatar.png",
-    stats: { totalSessions: 98, studentsAssigned: 8, avgPerMonth: 9 },
-    quickActions: ["Send Message", "View Schedule", "Assign Students", "Download Report"],
-  },
-  {
-    id: "m5",
-    name: "Dr. Emily Davis",
-    email: "emily.d@email.com",
-    expertise: "DevOps, Cloud Computing",
-    sessions: 75,
-    students: 6,
-    rating: 4.5,
-    status: "Inactive",
-    phone: "+1 444-222-1100",
-    experience: "6 years",
-    address: "44 Market St, Portland, OR",
-    joinDate: "9/02/2023",
-    avatar: "/images/avatar1.png",
-    stats: { totalSessions: 75, studentsAssigned: 6, avgPerMonth: 6 },
-    quickActions: ["Send Message", "View Schedule", "Assign Students", "Download Report"],
-  },
-];
-
 type ViewMode = "list" | "detail" | "add" | "edit";
+
+type Notice = { type: "success" | "error"; msg: string };
 
 const statusStyles: Record<MentorStatus, string> = {
   Active: "bg-[#E9F7ED] text-[#1BA160] border border-[#CFEEDD]",
@@ -283,13 +203,34 @@ const emptyForm: FormState = {
 };
 
 export default function Mentormanagement() {
-  const [mentors, setMentors] = useState<Mentor[]>(initialMentors);
+  const [mentors, setMentors] = useState<Mentor[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [notice, setNotice] = useState<Notice | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<"All Status" | MentorStatus>("All Status");
   const [view, setView] = useState<ViewMode>("list");
   const [selectedMentor, setSelectedMentor] = useState<Mentor | null>(null);
   const [formState, setFormState] = useState<FormState>(emptyForm);
   const [deleteTarget, setDeleteTarget] = useState<Mentor | null>(null);
+
+  const refresh = async (): Promise<Mentor[]> => {
+    setLoading(true);
+    try {
+      const data = (await listMentors()) as Mentor[];
+      setMentors(data);
+      return data;
+    } catch (e) {
+      setNotice({ type: "error", msg: (e as Error).message });
+      return [];
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    refresh();
+  }, []);
 
   const filteredMentors = useMemo(() => {
     return mentors.filter((mentor) => {
@@ -391,29 +332,29 @@ export default function Mentormanagement() {
     setSelectedMentor(null);
   };
 
-  const handleSaveNew = () => {
+  const handleSaveNew = async () => {
     if (!formState.name.trim()) return;
-    const newMentor: Mentor = {
-      ...initialMentors[0],
-      id: `m${Date.now()}`,
-      name: formState.name,
-      email: formState.email,
-      phone: formState.phone,
-      status: formState.status,
-      expertise: formState.expertise,
-      experience: formState.experience,
-      address: formState.address,
-      sessions: 0,
-      students: 0,
-      rating: 0,
-      joinDate: new Date().toLocaleDateString("en-US"),
-      avatar: "/images/avatar1.png",
-      stats: { totalSessions: 0, studentsAssigned: 0, avgPerMonth: 0 },
-      quickActions: ["Send Message", "View Schedule", "Assign Students", "Download Report"],
-    };
-    setMentors((prev) => [...prev, newMentor]);
-    setSelectedMentor(newMentor);
-    setView("detail");
+    setSubmitting(true);
+    const res = await createMentor(formState);
+    setSubmitting(false);
+    if (res.error) {
+      setNotice({ type: "error", msg: res.error });
+      return;
+    }
+    setNotice({
+      type: "success",
+      msg: res.tempPassword
+        ? `Mentor created. Temporary password: ${res.tempPassword} — share it securely; they should change it on first login.`
+        : "Mentor created.",
+    });
+    const list = await refresh();
+    const created = res.id ? list.find((m) => m.id === res.id) ?? null : null;
+    if (created) {
+      setSelectedMentor(created);
+      setView("detail");
+    } else {
+      resetToList();
+    }
   };
 
   const handleEdit = (mentor: Mentor) => {
@@ -430,48 +371,37 @@ export default function Mentormanagement() {
     setView("edit");
   };
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     if (!selectedMentor) return;
-    setMentors((prev) =>
-      prev.map((m) =>
-        m.id === selectedMentor.id
-          ? {
-              ...m,
-              name: formState.name,
-              email: formState.email,
-              phone: formState.phone,
-              status: formState.status,
-              expertise: formState.expertise,
-              experience: formState.experience,
-              address: formState.address,
-            }
-          : m
-      )
-    );
-    setSelectedMentor((prev) =>
-      prev
-        ? {
-            ...prev,
-            name: formState.name,
-            email: formState.email,
-            phone: formState.phone,
-            status: formState.status,
-            expertise: formState.expertise,
-            experience: formState.experience,
-            address: formState.address,
-          }
-        : prev
-    );
-    setView("detail");
+    setSubmitting(true);
+    const res = await updateMentor(selectedMentor.id, formState);
+    setSubmitting(false);
+    if (res.error) {
+      setNotice({ type: "error", msg: res.error });
+      return;
+    }
+    setNotice({ type: "success", msg: "Mentor updated." });
+    const list = await refresh();
+    const updated = list.find((m) => m.id === selectedMentor.id) ?? null;
+    setSelectedMentor(updated);
+    setView(updated ? "detail" : "list");
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!deleteTarget) return;
-    setMentors((prev) => prev.filter((m) => m.id !== deleteTarget.id));
-    if (selectedMentor?.id === deleteTarget.id) {
-      resetToList();
+    setSubmitting(true);
+    const res = await deleteMentor(deleteTarget.id);
+    setSubmitting(false);
+    if (res.error) {
+      setNotice({ type: "error", msg: res.error });
+      setDeleteTarget(null);
+      return;
     }
+    setNotice({ type: "success", msg: "Mentor deleted." });
+    const wasSelected = selectedMentor?.id === deleteTarget.id;
     setDeleteTarget(null);
+    await refresh();
+    if (wasSelected) resetToList();
   };
 
   const totalMentors = mentors.length;
@@ -560,9 +490,10 @@ export default function Mentormanagement() {
         <div className="mt-[24px] flex items-center gap-[16px] border-t border-[#dddddd] pt-[24px]">
           <button
             onClick={mode === "add" ? handleSaveNew : handleSaveEdit}
-            className="h-[42px] rounded-[8px] bg-[#ffa313] px-[19px] text-[16px] font-normal text-white hover:bg-[#f29a0b]"
+            disabled={submitting}
+            className="h-[42px] rounded-[8px] bg-[#ffa313] px-[19px] text-[16px] font-normal text-white hover:bg-[#f29a0b] disabled:cursor-not-allowed disabled:opacity-70"
           >
-            {mode === "add" ? "Add Mentor" : "Save Changes"}
+            {submitting ? "Saving..." : mode === "add" ? "Add Mentor" : "Save Changes"}
           </button>
           <button
             onClick={resetToList}
@@ -577,6 +508,20 @@ export default function Mentormanagement() {
 
   return (
     <div className="min-h-full bg-[#f4f4f4] px-6 py-6 font-[Poppins]">
+      {notice && (
+        <div
+          className={`mb-4 flex items-start justify-between gap-4 rounded-[8px] border px-4 py-3 text-[14px] font-semibold ${
+            notice.type === "success"
+              ? "border-green-200 bg-green-50 text-green-700"
+              : "border-red-200 bg-red-50 text-red-700"
+          }`}
+        >
+          <span className="break-all">{notice.msg}</span>
+          <button type="button" onClick={() => setNotice(null)} className="shrink-0 text-[13px] underline">
+            Dismiss
+          </button>
+        </div>
+      )}
       {view === "list" && (
         <>
         <div className="mb-[24px] flex items-center justify-between">
@@ -643,7 +588,21 @@ export default function Mentormanagement() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#dddddd]">
-                  {filteredMentors.map((mentor) => (
+                  {loading && (
+                    <tr>
+                      <td colSpan={8} className="px-[24px] py-[40px] text-center text-[#777777]">
+                        Loading mentors...
+                      </td>
+                    </tr>
+                  )}
+                  {!loading && filteredMentors.length === 0 && (
+                    <tr>
+                      <td colSpan={8} className="px-[24px] py-[40px] text-center text-[#777777]">
+                        No mentors found.
+                      </td>
+                    </tr>
+                  )}
+                  {!loading && filteredMentors.map((mentor) => (
                     <tr key={mentor.id} className="h-[73px] align-middle text-[#111111]">
                       <td className="px-[24px] py-[15px] font-normal">
                         {mentor.name}

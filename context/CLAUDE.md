@@ -383,9 +383,21 @@ First vertical slice complete — **Admin → User Management** (pattern to foll
 - UI↔DB role map: Admin↔admin (super_admin also shows as "Admin"), Manager↔manager,
   Mentor↔mentor, Student↔student. Sponsors/parents excluded (own panels).
 
-**Pattern for the next modules:** `lib/data/<module>.ts` (`"use server"` + auth guard + service
-role for privileged ops or the RLS server client for user-scoped reads) → wire the existing
-`components/*.tsx` to it (load on mount, mutate + refetch, notice/loading states).
+**Admin → Mentor Management** (2nd slice, verified live):
+- **`lib/data/guards.ts`** — shared `assertAdmin()` (role ∈ super_admin/admin) reused by modules.
+- **`lib/data/mentors.types.ts`** / **`lib/data/mentors.ts`** (`"use server"`) — `listMentors`
+  (joins `mentors` + embedded `profiles`, derives `sessions` from `class_sessions` and
+  `students` from active `mentor_student_assignments`, computes avg/month), `createMentor`
+  (auth user role=mentor → trigger profile → fills profile + upserts `mentors` row; auto temp
+  password), `updateMentor`, `deleteMentor` (cascade auth→profiles→mentors).
+- **`components/Mentormanagement.tsx`** — mock removed; loads/mutates via actions + refetch,
+  notice/loading/empty states, keeps its PDF report export. UI status Active/Inactive ↔
+  profile+mentor `active/inactive` (Inactive also blocks login via `profiles.status`).
+
+**Pattern for the next modules:** `lib/data/<module>.ts` (`"use server"` + `assertAdmin()` from
+`lib/data/guards.ts` + service role for privileged ops, or the RLS server client for user-scoped
+reads) → wire the existing `components/*.tsx` (load on mount, mutate + refetch, notice/loading
+states).
 
 ### 9b. Working Conventions (Git / Commits)
 
