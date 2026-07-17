@@ -500,6 +500,38 @@ create table if not exists public.mentors (
 create trigger trg_mentors_updated before update on public.mentors
   for each row execute function public.set_updated_at();
 
+-- Auto-create the role-specific child row (mentors/students) whenever a
+-- profile's role is (or becomes) mentor/student — keeps every creation path
+-- (User Management, the signup trigger, the dedicated modules) consistent so a
+-- mentor/student profile always appears in its management screen.
+create or replace function public.ensure_role_row()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  code char(4);
+  tries int := 0;
+begin
+  if new.role = 'mentor' then
+    insert into public.mentors (id) values (new.id) on conflict (id) do nothing;
+  elsif new.role = 'student' then
+    if not exists (select 1 from public.students where id = new.id) then
+      loop
+        code := lpad((floor(random() * 9000) + 1000)::int::text, 4, '0');
+        exit when not exists (select 1 from public.students where attendance_code = code);
+        tries := tries + 1;
+        if tries > 50 then code := null; exit; end if;
+      end loop;
+      insert into public.students (id, attendance_code) values (new.id, code)
+      on conflict (id) do nothing;
+    end if;
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists trg_profiles_role_row on public.profiles;
+create trigger trg_profiles_role_row
+after insert or update of role on public.profiles
+for each row execute function public.ensure_role_row();
+
 
 -- =========================================================
 -- 9. ATTENDANCE

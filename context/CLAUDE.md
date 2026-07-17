@@ -251,6 +251,12 @@ all with `updated_at` triggers, FK indexes, and RLS enabled:
 - **Students:** `students` (holds permanent 4-digit `attendance_code`), `guardians`,
   `mentor_student_assignments` (M:N), `student_goals`, `student_activities`.
 - **Mentors:** `mentors` (tags[]/education[] as arrays).
+- **Role-row sync trigger:** `ensure_role_row` (on `profiles` insert / role-update) auto-creates
+  the `mentors`/`students` child row for mentor/student profiles (students get a unique 4-digit
+  `attendance_code`). So a mentor/student created from **User Management** (or the signup
+  trigger) shows up in Mentor/Student Management without needing the dedicated "Add" flow. Edge
+  case: changing a role away from mentor/student leaves the old child row (they may appear in
+  both lists) — not auto-cleaned.
 - **Attendance:** `attendance_records` (both `ipad_code` & `selfie` methods; photo_url, geo,
   `excuse` status), `absence_reports`.
 - **Messaging:** `conversations`, `conversation_participants`, `messages`,
