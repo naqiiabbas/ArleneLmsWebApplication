@@ -363,9 +363,10 @@ Real email+password auth replaces the mock logins. Verified end-to-end (create u
 **Not yet wired (deferred):** the Student **"Student ID"** login tab and the
 `studentverify → createpass → passsuccessful` OTP/invite flow (still routes-only); admin-driven
 **user provisioning** (creating student/mentor/sponsor accounts) — needs the admin API via the
-service-role client. **No users exist in the DB yet** — an initial admin account must be created
-(e.g. via `admin.auth.admin.createUser` with `user_metadata.role`, or the Supabase dashboard)
-before anyone can log in.
+service-role client. **Initial admin seeded:** a Super Admin account `admin@arlene.com` (role `super_admin`, active)
+exists for logging into the admin panel — its password is temporary and should be changed after
+first login. Other accounts are created via `admin.auth.admin.createUser` with
+`user_metadata.role` (or the Supabase dashboard).
 
 ### 9b. Working Conventions (Git / Commits)
 
