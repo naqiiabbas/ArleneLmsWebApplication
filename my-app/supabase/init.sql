@@ -1629,17 +1629,54 @@ insert into public.custom_roles (name, description, is_system) values
   ('Student',     'Program participant', true)
 on conflict (name) do nothing;
 
+-- Granular permission catalog (view/manage split) matching the frontend
+-- permission editor and the client documents' role capabilities.
 insert into public.permissions (key, group_name, title, description) values
-  ('dashboard.view',    'Dashboard', 'View dashboard', 'Access role dashboard'),
-  ('users.manage',      'Users',     'Manage users', 'Create/update/deactivate users'),
-  ('students.manage',   'Students',  'Manage students', 'Manage student records'),
-  ('mentors.manage',    'Mentors',   'Manage mentors', 'Manage mentor records'),
-  ('attendance.manage', 'Attendance','Manage attendance', 'Mark/edit/excuse attendance'),
-  ('documents.review',  'Documents', 'Review documents', 'Approve/reject documents'),
-  ('reports.view',      'Reports',   'View reports', 'View & export reports'),
-  ('billing.manage',    'Billing',   'Manage billing', 'Invoices, plans, payments'),
-  ('system.manage',     'System',    'Manage system', 'Settings, backups, audit logs')
-on conflict (key) do nothing;
+  ('dashboard.view',    'Dashboard',  'View Dashboard',     'Access to main dashboard'),
+  ('users.view',        'Users',      'View Users',         'View user list and details'),
+  ('users.manage',      'Users',      'Manage Users',       'Create, edit, delete users'),
+  ('students.view',     'Students',   'View Students',      'View student information'),
+  ('students.manage',   'Students',   'Manage Students',    'Full student management'),
+  ('mentors.view',      'Mentors',    'View Mentors',       'View mentor information'),
+  ('mentors.manage',    'Mentors',    'Manage Mentors',     'Full mentor management'),
+  ('attendance.view',   'Attendance', 'View Attendance',    'View attendance records'),
+  ('attendance.manage', 'Attendance', 'Manage Attendance',  'Mark and edit attendance'),
+  ('documents.view',    'Documents',  'View Documents',     'View and download documents'),
+  ('documents.manage',  'Documents',  'Manage Documents',   'Upload, approve, delete documents'),
+  ('reports.view',      'Reports',    'View Reports',       'View analytics and reports'),
+  ('reports.generate',  'Reports',    'Generate Reports',   'Create and export reports'),
+  ('billing.manage',    'Billing',    'Manage Billing',     'Handle billing and invoices'),
+  ('roles.manage',      'System',     'Manage Roles',       'Create and edit roles'),
+  ('activity.view',     'System',     'View Activity Logs', 'Access system logs')
+on conflict (key) do update
+  set group_name = excluded.group_name,
+      title = excluded.title,
+      description = excluded.description;
+
+-- Default role → permission assignments (per client documents).
+-- Super Admin: all permissions.
+insert into public.role_permissions (role_id, permission_id)
+select r.id, p.id from public.custom_roles r cross join public.permissions p
+where r.name = 'Super Admin'
+on conflict do nothing;
+-- Manager / Mentor / Student: scoped sets.
+insert into public.role_permissions (role_id, permission_id)
+select r.id, p.id
+from (values
+  ('Manager','dashboard.view'), ('Manager','users.view'), ('Manager','users.manage'),
+  ('Manager','students.view'), ('Manager','students.manage'),
+  ('Manager','mentors.view'), ('Manager','mentors.manage'),
+  ('Manager','attendance.view'), ('Manager','attendance.manage'),
+  ('Manager','documents.view'), ('Manager','documents.manage'),
+  ('Manager','reports.view'), ('Manager','reports.generate'),
+  ('Mentor','dashboard.view'), ('Mentor','students.view'),
+  ('Mentor','attendance.view'), ('Mentor','attendance.manage'),
+  ('Mentor','documents.view'), ('Mentor','reports.view'),
+  ('Student','dashboard.view'), ('Student','attendance.view'), ('Student','documents.view')
+) as m(role_name, perm_key)
+join public.custom_roles r on r.name = m.role_name
+join public.permissions p on p.key = m.perm_key
+on conflict do nothing;
 
 insert into public.document_categories (name) values
   ('Reports'),('Attendance'),('Feedback'),('Enrollment'),('Session Notes'),
