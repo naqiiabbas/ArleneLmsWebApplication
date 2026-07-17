@@ -191,7 +191,7 @@ exception when duplicate_object then null; end $$;
 -- 2. UTILITY: updated_at trigger
 -- =========================================================
 create or replace function public.set_updated_at()
-returns trigger language plpgsql as $$
+returns trigger language plpgsql set search_path = public as $$
 begin
   new.updated_at = now();
   return new;
@@ -299,6 +299,9 @@ end $$;
 drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created after insert on auth.users
   for each row execute function public.handle_new_user();
+
+-- handle_new_user is trigger-only: keep it off the public PostgREST RPC surface.
+revoke execute on function public.handle_new_user() from public, anon, authenticated;
 
 
 -- =========================================================
@@ -1048,6 +1051,10 @@ select s.id as student_id,
 from public.students s
 left join public.attendance_records a on a.student_id = s.id
 group by s.id;
+
+-- Views run with the querying user's permissions/RLS (not the creator's).
+alter view public.organization_stats        set (security_invoker = on);
+alter view public.student_attendance_summary set (security_invoker = on);
 
 
 -- =========================================================

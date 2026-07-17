@@ -10,8 +10,9 @@
 > **Workflow rules:** suggest commit titles (`what we did - where we did`), never commit —
 > user commits. Keep `init.sql` synced with every migration + Supabase ([§9a](#9a-database--migration-workflow)).
 >
-> **Schema:** full DB design written at `my-app/supabase/init.sql` (~55 tables, RLS on) —
-> see [§8a](#8a-implemented-schema--my-appsupabaseinitsql). Not yet applied to live Supabase.
+> **Schema:** full DB design at `my-app/supabase/init.sql` (52 tables, RLS on) — see
+> [§8a](#8a-implemented-schema--my-appsupabaseinitsql). ✅ **APPLIED to live Supabase**
+> (project `tzvhbymxssiuebafhypk`) via MCP in 4 migrations; advisor clean of errors.
 
 ---
 
@@ -270,8 +271,20 @@ all with `updated_at` triggers, FK indexes, and RLS enabled:
 
 **RLS model:** the Next.js backend uses the Supabase **service-role key (bypasses RLS)**;
 policies protect any direct anon/authenticated access — admins full, owners manage own rows,
-public read for approved sponsors / published blog / public gallery / public calendar. Not yet
-applied to a live DB — will apply via Supabase MCP next.
+public read for approved sponsors / published blog / public gallery / public calendar.
+
+**Applied to live Supabase** (project `tzvhbymxssiuebafhypk`) in 4 migrations:
+`arlene_init_schema`, `arlene_rls_policies`, `arlene_seed_data`, `arlene_advisor_fixes` (+
+`arlene_function_grants_hardening`). Verified: 52 tables, 2 views, 35 enums, 108 policies, 24
+triggers, seed rows present. Security advisor: **0 errors**; remaining WARNs are intentional/
+accepted — `citext` in public schema (cosmetic), `sponsorship_requests` public-insert policy
+(the "Become a Sponsor" form is meant to accept anon submissions), and the RLS helper functions
+being executable by anon/authenticated (**required** — RLS policies reference them; revoking
+would break RLS).
+
+> **Project note:** the DB has a pre-existing **event trigger `rls_auto_enable`** (not created
+> by us) that auto-enables RLS on every new `public` table. So any new table we add gets RLS on
+> automatically — still add explicit policies for it.
 
 ---
 
