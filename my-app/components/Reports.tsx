@@ -1,6 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import { getReportData } from "@/lib/data/reports";
+import type { ReportData } from "@/lib/data/reports.types";
 import {
   Area,
   AreaChart,
@@ -25,56 +27,16 @@ const GOLD = "#B4941F";
 const CREAM = "#fff7e8";
 const GRID = "#eadfca";
 
-const DASHBOARD_DATA = {
-  stats: [
-    { id: 1, label: "Avg. Attendance", value: "91.5%", trend: "+2.3% from last month", icon: "/images/admin-reports-trend.svg" },
-    { id: 2, label: "Total Sessions", value: "1,235", trend: "+156 from last month", icon: "/images/admin-reports-calendar.svg" },
-    { id: 3, label: "Active Students", value: "248", trend: "+12 from last month", icon: "/images/admin-reports-users.svg" },
-    { id: 4, label: "Satisfaction", value: "4.7/5.0", trend: "+0.2 from last month", icon: "/images/admin-reports-trend.svg" },
-  ],
-  attendanceTrends: [
-    { month: "Jun", value: 94 },
-    { month: "Jul", value: 90 },
-    { month: "Aug", value: 96 },
-    { month: "Sep", value: 91 },
-    { month: "Oct", value: 97 },
-    { month: "Nov", value: 93 },
-  ],
-  growthData: [
-    { month: "Jun", mentors: 26, students: 240 },
-    { month: "Jul", mentors: 28, students: 244 },
-    { month: "Aug", mentors: 29, students: 250 },
-    { month: "Sep", mentors: 31, students: 254 },
-    { month: "Oct", mentors: 33, students: 256 },
-    { month: "Nov", mentors: 34, students: 258 },
-  ],
-  sessionActivity: [
-    { month: "Jun", sessions: 180 },
-    { month: "Jul", sessions: 195 },
-    { month: "Aug", sessions: 210 },
-    { month: "Sep", sessions: 205 },
-    { month: "Oct", sessions: 225 },
-    { month: "Nov", sessions: 220 },
-  ],
-  courseDistribution: [
-    { name: "Python", value: 34, color: ORANGE },
-    { name: "Web Dev", value: 26, color: "#b99b16" },
-    { name: "Data Science", value: 19, color: "#e3c77e" },
-    { name: "ML/AI", value: 13, color: "#f2dfb6" },
-    { name: "Other", value: 8, color: "#f8edd2" },
-  ],
-  performanceDistribution: [
-    { grade: "A+", count: 45 },
-    { grade: "A", count: 68 },
-    { grade: "B+", count: 52 },
-    { grade: "B", count: 37 },
-    { grade: "C+", count: 25 },
-    { grade: "C", count: 15 },
-    { grade: "Below C", count: 5 },
-  ],
+const EMPTY: ReportData = {
+  stats: [],
+  attendanceTrends: [],
+  growthData: [],
+  sessionActivity: [],
+  courseDistribution: [],
+  performanceDistribution: [],
 };
 
-type StatItem = (typeof DASHBOARD_DATA.stats)[number];
+type StatItem = ReportData["stats"][number];
 
 const axisProps = {
   tick: { fill: "#707070", fontSize: 12 },
@@ -84,10 +46,22 @@ const axisProps = {
 
 export default function ReportsAnalytics() {
   const [isExporting, setIsExporting] = useState(false);
+  const [loaded, setLoaded] = useState<ReportData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    getReportData()
+      .then(setLoaded)
+      .catch((e) => setNotice((e as Error).message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const data = loaded ?? EMPTY;
 
   const handleExport = () => {
     setIsExporting(true);
-    const reportContent = JSON.stringify(DASHBOARD_DATA, null, 2);
+    const reportContent = JSON.stringify(data, null, 2);
     const blob = new Blob([reportContent], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -123,8 +97,15 @@ export default function ReportsAnalytics() {
         </button>
       </div>
 
+      {notice && (
+        <div className="mb-4 rounded-[8px] border border-red-200 bg-red-50 px-4 py-3 text-[14px] font-semibold text-red-700">
+          {notice}
+        </div>
+      )}
+      {loading && <p className="mb-4 text-[15px] text-[#666666]">Loading analytics...</p>}
+
       <div className="mb-[24px] grid grid-cols-1 gap-[18px] md:grid-cols-2 xl:grid-cols-4">
-        {DASHBOARD_DATA.stats.map((stat) => (
+        {data.stats.map((stat) => (
           <StatCard key={stat.id} item={stat} />
         ))}
       </div>
@@ -132,7 +113,7 @@ export default function ReportsAnalytics() {
       <div className="grid grid-cols-1 gap-[16px] xl:grid-cols-2">
         <ChartCard title="Monthly Attendance Trends">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={DASHBOARD_DATA.attendanceTrends} margin={{ top: 28, right: 28, bottom: 18, left: 26 }}>
+            <AreaChart data={data.attendanceTrends} margin={{ top: 28, right: 28, bottom: 18, left: 26 }}>
               <defs>
                 <linearGradient id="attendanceFill" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor={ORANGE} stopOpacity={0.25} />
@@ -150,7 +131,7 @@ export default function ReportsAnalytics() {
 
         <ChartCard title="Student vs Mentor Growth">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={DASHBOARD_DATA.growthData} margin={{ top: 28, right: 28, bottom: 18, left: 26 }}>
+            <LineChart data={data.growthData} margin={{ top: 28, right: 28, bottom: 18, left: 26 }}>
               <CartesianGrid strokeDasharray="3 3" stroke={GRID} />
               <XAxis dataKey="month" {...axisProps} />
               <YAxis domain={[0, 260]} ticks={[0, 65, 130, 195, 260]} {...axisProps} />
@@ -169,7 +150,7 @@ export default function ReportsAnalytics() {
 
         <ChartCard title="Monthly Session Activity">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={DASHBOARD_DATA.sessionActivity} margin={{ top: 28, right: 28, bottom: 18, left: 26 }}>
+            <BarChart data={data.sessionActivity} margin={{ top: 28, right: 28, bottom: 18, left: 26 }}>
               <CartesianGrid strokeDasharray="3 3" stroke={GRID} />
               <XAxis dataKey="month" {...axisProps} />
               <YAxis domain={[0, 240]} ticks={[0, 60, 120, 180, 240]} {...axisProps} />
@@ -183,7 +164,7 @@ export default function ReportsAnalytics() {
           <ResponsiveContainer width="100%" height="100%">
             <PieChart margin={{ top: 20, right: 34, bottom: 20, left: 34 }}>
               <Pie
-                data={DASHBOARD_DATA.courseDistribution}
+                data={data.courseDistribution}
                 cx="50%"
                 cy="54%"
                 outerRadius={86}
@@ -197,7 +178,7 @@ export default function ReportsAnalytics() {
                   )
                 }
               >
-                {DASHBOARD_DATA.courseDistribution.map((entry) => (
+                {data.courseDistribution.map((entry) => (
                   <Cell key={entry.name} fill={entry.color} stroke="#fff7e8" strokeWidth={1} />
                 ))}
               </Pie>
@@ -210,7 +191,7 @@ export default function ReportsAnalytics() {
       <div className="mt-[16px]">
         <ChartCard title="Student Performance Distribution" tall>
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={DASHBOARD_DATA.performanceDistribution} margin={{ top: 28, right: 34, bottom: 18, left: 30 }}>
+            <BarChart data={data.performanceDistribution} margin={{ top: 28, right: 34, bottom: 18, left: 30 }}>
               <CartesianGrid strokeDasharray="3 3" stroke={GRID} />
               <XAxis dataKey="grade" {...axisProps} />
               <YAxis domain={[0, 80]} ticks={[0, 20, 40, 60, 80]} {...axisProps} />

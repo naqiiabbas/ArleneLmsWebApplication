@@ -538,6 +538,17 @@ list filters, edit, delete, notice/loading/empty. Added the **`blog` public stor
 (migration + init.sql §24). Note: inner `Header`/`SidebarControls` components are defined inside
 the render (pre-existing) — can cause tag-input focus loss; not refactored.
 
+**Admin → Reports & Analytics** (11th slice, verified live) — read-only aggregates:
+**`lib/data/reports.types.ts`** / **`lib/data/reports.ts`** (`"use server"`, gated by
+**`assertPermission("reports.view")`**). `getReportData()` computes everything from real rows
+(fetches attendance_records, class_sessions, students, profiles, mentors and aggregates in JS):
+stats (avg attendance %, total sessions, active students, avg mentor rating), monthly attendance
+trend, cumulative student/mentor growth (last 6 months), monthly session activity, course
+distribution (top-4 + Other %), and GPA→grade performance distribution. **`components/Reports.tsx`**
+— mock `DASHBOARD_DATA` removed; loads real data, recharts render live aggregates, JSON export uses
+real data, loading/notice states. Data is currently sparse (little attendance/session data) → charts
+populate as the platform is used, which is correct.
+
 **Pattern for the next modules:** `lib/data/<module>.ts` (`"use server"` + `assertAdmin()` from
 `lib/data/guards.ts` + service role for privileged ops, or the RLS server client for user-scoped
 reads) → wire the existing `components/*.tsx` (load on mount, mutate + refetch, notice/loading
