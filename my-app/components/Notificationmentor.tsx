@@ -1,17 +1,25 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Poppins } from 'next/font/google';
-import { 
-  Check, 
-  Trash2, 
-  MessageSquare, 
-  Calendar, 
-  AlertCircle, 
-  FileText, 
+import {
+  Check,
+  Trash2,
+  MessageSquare,
+  Calendar,
+  AlertCircle,
+  FileText,
   UserPlus,
+  Bell,
   SlidersHorizontal
 } from 'lucide-react';
+import {
+  listMyNotifications,
+  markNotificationRead,
+  markAllNotificationsRead,
+  deleteNotification,
+} from '@/lib/data/notifications';
+import type { UINotification } from '@/lib/data/notifications.types';
 
 const poppins = Poppins({
   subsets: ['latin'],
@@ -31,79 +39,16 @@ const NOTIFICATIONS_FILTERS = [
   { id: 'student', label: 'Students' },
 ];
 
-const NOTIFICATIONS_DATA = [
-  {
-    id: 1,
-    type: 'message',
-    title: 'New message from Marcus Johnson',
-    description: 'Hi Mr. Mentor, I have a question about the math homework...',
-    time: '5 minutes ago',
-    sender: 'Marcus Johnson',
-    unread: true,
-    icon: <MessageSquare size={18} className="text-blue-500" />,
-    iconBg: 'bg-blue-50',
-    borderColor: 'border-[#F9A618]',
-  },
-  {
-    id: 2,
-    type: 'session',
-    title: 'Upcoming session reminder',
-    description: 'Math Tutoring session with David Williams starts in 1 hour',
-    time: '1 hour ago',
-    sender: 'David Williams',
-    unread: true,
-    icon: <Calendar size={18} className="text-green-500" />,
-    iconBg: 'bg-green-50',
-    borderColor: 'border-[#F9A618]',
-  },
-  {
-    id: 3,
-    type: 'alert',
-    title: 'Attendance alert',
-    description: 'James Brown has missed 3 consecutive sessions',
-    time: '2 hours ago',
-    sender: 'James Brown',
-    unread: true,
-    icon: <AlertCircle size={18} className="text-red-500" />,
-    iconBg: 'bg-red-50',
-    borderColor: 'border-[#F9A618]',
-  },
-  {
-    id: 4,
-    type: 'document',
-    title: 'Document uploaded',
-    description: 'Progress Report - Q1.pdf has been uploaded',
-    time: '3 hours ago',
-    unread: false,
-    icon: <FileText size={18} className="text-purple-500" />,
-    iconBg: 'bg-purple-50',
-    borderColor: 'border-[#d8dde3]',
-  },
-  {
-    id: 5,
-    type: 'student',
-    title: 'New student assigned',
-    description: 'Christopher Garcia has been assigned to your mentorship group',
-    time: '5 hours ago',
-    sender: 'Christopher Garcia',
-    unread: false,
-    icon: <UserPlus size={18} className="text-orange-500" />,
-    iconBg: 'bg-orange-50',
-    borderColor: 'border-[#d8dde3]',
-  },
-  {
-    id: 6,
-    type: 'message',
-    title: 'New message from Michael Davis',
-    description: 'Thank you for the career advice session yesterday!',
-    time: '1 day ago',
-    sender: 'Michael Davis',
-    unread: false,
-    icon: <MessageSquare size={18} className="text-blue-500" />,
-    iconBg: 'bg-blue-50',
-    borderColor: 'border-[#d8dde3]',
-  },
-];
+// Icon + colour per notification type (matches the DB notification_type enum).
+const TYPE_ICONS: Record<string, { icon: React.ReactNode; iconBg: string }> = {
+  message: { icon: <MessageSquare size={18} className="text-blue-500" />, iconBg: 'bg-blue-50' },
+  session: { icon: <Calendar size={18} className="text-green-500" />, iconBg: 'bg-green-50' },
+  alert: { icon: <AlertCircle size={18} className="text-red-500" />, iconBg: 'bg-red-50' },
+  document: { icon: <FileText size={18} className="text-purple-500" />, iconBg: 'bg-purple-50' },
+  student: { icon: <UserPlus size={18} className="text-orange-500" />, iconBg: 'bg-orange-50' },
+};
+
+const iconFor = (type: string) => TYPE_ICONS[type] ?? { icon: <Bell size={18} className="text-[#F9A618]" />, iconBg: 'bg-[#fff4df]' };
 
 /**
  * COMPONENTS
@@ -126,11 +71,14 @@ const FilterButton = ({ filter, count, active, onClick }: { filter: any; count: 
   </button>
 );
 
-const NotificationItem = ({ item, onDelete, onRead }: any) => (
-  <div className={`relative mb-[12px] flex min-h-[105px] items-start gap-[16px] rounded-[8px] border bg-white px-[17px] py-[17px] transition-all hover:shadow-sm ${item.borderColor}`}>
-    
-    <div className={`flex h-[48px] min-w-[48px] items-center justify-center rounded-[8px] ${item.iconBg}`}>
-      {item.icon}
+const NotificationItem = ({ item, onDelete, onRead }: { item: UINotification; onDelete: (id: string) => void; onRead: (id: string) => void }) => {
+  const { icon, iconBg } = iconFor(item.type);
+  const borderColor = item.unread ? 'border-[#F9A618]' : 'border-[#d8dde3]';
+  return (
+  <div className={`relative mb-[12px] flex min-h-[105px] items-start gap-[16px] rounded-[8px] border bg-white px-[17px] py-[17px] transition-all hover:shadow-sm ${borderColor}`}>
+
+    <div className={`flex h-[48px] min-w-[48px] items-center justify-center rounded-[8px] ${iconBg}`}>
+      {icon}
     </div>
 
     <div className="min-w-0 flex-1 pt-[1px]">
@@ -167,14 +115,24 @@ const NotificationItem = ({ item, onDelete, onRead }: any) => (
       </div>
     </div>
   </div>
-);
+  );
+};
 
 /**
  * MAIN
  */
 const NotificationPanel = () => {
   const [activeFilter, setActiveFilter] = useState('all');
-  const [notifications, setNotifications] = useState(NOTIFICATIONS_DATA);
+  const [notifications, setNotifications] = useState<UINotification[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    listMyNotifications()
+      .then(setNotifications)
+      .catch((e) => setNotice((e as Error).message))
+      .finally(() => setLoading(false));
+  }, []);
 
   const filteredNotifications = activeFilter === 'all'
     ? notifications
@@ -185,18 +143,22 @@ const NotificationPanel = () => {
     return notifications.filter((notification) => notification.type === id).length;
   };
 
-  const handleDelete = (id: number) => {
+  const handleDelete = async (id: string) => {
     setNotifications(prev => prev.filter(n => n.id !== id));
+    const res = await deleteNotification(id);
+    if (res.error) setNotice(res.error);
   };
 
-  const handleRead = (id: number) => {
-    setNotifications(prev =>
-      prev.map(n => n.id === id ? { ...n, unread: false } : n)
-    );
+  const handleRead = async (id: string) => {
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, unread: false } : n));
+    const res = await markNotificationRead(id);
+    if (res.error) setNotice(res.error);
   };
 
-  const markAllRead = () => {
+  const markAllRead = async () => {
     setNotifications(prev => prev.map(n => ({ ...n, unread: false })));
+    const res = await markAllNotificationsRead();
+    if (res.error) setNotice(res.error);
   };
 
   const unreadCount = notifications.filter(n => n.unread).length;
@@ -235,10 +197,24 @@ const NotificationPanel = () => {
         ))}
       </div>
 
+      {notice && (
+        <div className="mb-[16px] rounded-[8px] border border-red-200 bg-red-50 px-4 py-3 text-[14px] font-semibold text-red-700">
+          {notice}
+        </div>
+      )}
+
       <div className="max-w-full">
+        {loading && (
+          <p className="py-[24px] text-center text-[14px] text-[#667085]">Loading notifications…</p>
+        )}
+        {!loading && filteredNotifications.length === 0 && (
+          <p className="rounded-[8px] border border-dashed border-[#d8dde3] bg-white py-[48px] text-center text-[14px] text-[#667085]">
+            No notifications{activeFilter === 'all' ? '' : ' in this category'}.
+          </p>
+        )}
         {filteredNotifications.map((notification) => (
-          <NotificationItem 
-            key={notification.id} 
+          <NotificationItem
+            key={notification.id}
             item={notification}
             onDelete={handleDelete}
             onRead={handleRead}
