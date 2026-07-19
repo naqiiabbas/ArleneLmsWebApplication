@@ -82,3 +82,63 @@ export interface MentorNoteInput {
   title: string
   content: string
 }
+
+export interface MentorClassOption {
+  id: string
+  name: string
+}
+
+export interface MentorSession {
+  id: string
+  title: string
+  className: string
+  date: string // yyyy-mm-dd
+  time: string // e.g. "10:00 AM"
+  location: string
+  status: string
+}
+
+export interface MentorSessionInput {
+  classId: string
+  title: string
+  date: string // yyyy-mm-dd (or any parseable date)
+  time: string // "HH:MM" (24h, from <input type=time>)
+  location: string
+}
+
+export interface MentorDocument {
+  id: string
+  name: string
+  category: string
+  student: string
+  uploadDate: string
+  size: string
+  numericSize: number // MB (for the storage bar)
+  type: string
+  status: string // "approved" | "pending" | "rejected"
+}
+
+export type MentorResourceStatus = "Approved" | "Pending" | "Rejected"
+
+export interface MentorResource {
+  id: string
+  title: string
+  description: string
+  category: string
+  type: string
+  status: MentorResourceStatus
+  isFeatured: boolean
+  rating: number
+  submittedDate: string
+  link?: string
+  fileName?: string
+}
+
+export interface MentorResourceInput {
+  title: string
+  description: string
+  category: string
+  type: string
+  link: string
+  featured: boolean
+}
