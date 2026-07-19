@@ -15,7 +15,8 @@ const PANELS: { prefix: string; portal: Portal }[] = [
   { prefix: "/studentpanel", portal: "student" },
 ]
 
-// Auth routes inside the panels that must stay reachable while signed out.
+// Auth pages inside the panels: reachable while signed out, and signed-in
+// users are bounced away from them to their home.
 const AUTH_EXEMPT = [
   "/adminpanel/loginform",
   "/mentorshippanel/loginform",
@@ -26,6 +27,10 @@ const AUTH_EXEMPT = [
   "/studentpanel/forgetpassword",
   "/studentpanel/passsuccessful",
 ]
+
+// Fully public panel routes: no auth required, and NOT bounced for signed-in
+// users. The iPad attendance kiosk has no login — the 4-digit code is the credential.
+const PUBLIC_EXEMPT = ["/studentpanel/attendancewrk"]
 
 function matches(path: string, base: string) {
   return path === base || path.startsWith(base + "/")
@@ -42,6 +47,7 @@ export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname
 
   const isAuthRoute = AUTH_EXEMPT.some((p) => matches(path, p))
+  const isPublicRoute = PUBLIC_EXEMPT.some((p) => matches(path, p))
 
   // Signed-in users shouldn't sit on a login page — send them to their home.
   if (isAuthRoute && user) {
@@ -52,7 +58,7 @@ export async function middleware(request: NextRequest) {
   }
 
   const panel = PANELS.find((p) => matches(path, p.prefix))
-  if (!panel || isAuthRoute) return supabaseResponse
+  if (!panel || isAuthRoute || isPublicRoute) return supabaseResponse
 
   // Protected panel route.
   if (!user) {

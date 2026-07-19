@@ -27,6 +27,7 @@ export default function AttendanceFlow() {
   const captureTimeoutRef = useRef<number | null>(null);
   const videoReadyRef = useRef(false);
   const lastVideoTimeRef = useRef(-1);
+  const lastDetectTsRef = useRef(0);
   const passcodeRef = useRef(passcode);
 
   useEffect(() => {
@@ -179,8 +180,14 @@ export default function AttendanceFlow() {
         video.currentTime !== lastVideoTimeRef.current
       ) {
         lastVideoTimeRef.current = video.currentTime;
-        const startTimeMs = Math.round(video.currentTime * 1000);
-        const results = faceLandmarker.detectForVideo(video, startTimeMs);
+        // MediaPipe requires strictly-increasing timestamps. video.currentTime
+        // resets whenever the stream restarts, and the landmarker is cached
+        // across restarts (incl. Fast Refresh), so seed from epoch ms — a large,
+        // always-increasing value that stays above any stale baseline.
+        let ts = Date.now();
+        if (ts <= lastDetectTsRef.current) ts = lastDetectTsRef.current + 1;
+        lastDetectTsRef.current = ts;
+        const results = faceLandmarker.detectForVideo(video, ts);
 
         if (results.faceLandmarks && results.faceLandmarks.length > 0) {
           const nose = results.faceLandmarks[0][4];
@@ -207,7 +214,11 @@ export default function AttendanceFlow() {
   const startCamera = useCallback(async () => {
     try {
       if (!navigator.mediaDevices?.getUserMedia) {
-        setError("Camera is not supported in this browser.");
+        setError(
+          window.isSecureContext
+            ? "Camera is not supported in this browser."
+            : "Camera needs a secure connection. Open this page via http://localhost:3000 (not a network IP) or use HTTPS."
+        );
         return;
       }
 
@@ -248,7 +259,16 @@ export default function AttendanceFlow() {
         }
       }
     } catch (err) {
-      setError("Please allow camera access.");
+      const e = err as { name?: string; message?: string };
+      const msg =
+        e.name === "NotAllowedError" || e.name === "SecurityError"
+          ? "Camera access was blocked. Allow the camera for this site and try again."
+          : e.name === "NotFoundError" || e.name === "DevicesNotFoundError"
+          ? "No camera was found on this device."
+          : e.name === "NotReadableError" || e.name === "TrackStartError"
+          ? "The camera is in use by another app. Close it and try again."
+          : `Camera error: ${e.name || e.message || "unknown"}`;
+      setError(msg);
     }
   }, [runDetection]);
 
