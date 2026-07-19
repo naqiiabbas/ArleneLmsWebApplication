@@ -549,6 +549,16 @@ distribution (top-4 + Other %), and GPA→grade performance distribution. **`com
 real data, loading/notice states. Data is currently sparse (little attendance/session data) → charts
 populate as the platform is used, which is correct.
 
+**Admin → Notes Moderation** (12th slice, verified live): **`lib/data/notes.types.ts`** /
+**`lib/data/notes.ts`** (`"use server"`, `assertAdmin` — admin-tier, no catalog permission).
+`listNotes` (embeds author via `author:profiles(...)` — notes→profiles only via author_id — and
+`session:class_sessions(title)`; snippet derived from content; status pending/approved/rejected/
+flagged), `setNoteStatus(id, status)` (approve/reject/flag transitions). **`components/Notesmode.tsx`**
+— mock removed; loads real notes, moderation actions persist + refetch, wired the previously-dead
+"Flag for Review" button, null-guarded the detail panel/modals, loading/empty/notice states. Seeded
+2 sample notes. Notes are created by mentors/students elsewhere (not yet wired) — this is the admin
+moderation view.
+
 **Pattern for the next modules:** `lib/data/<module>.ts` (`"use server"` + `assertAdmin()` from
 `lib/data/guards.ts` + service role for privileged ops, or the RLS server client for user-scoped
 reads) → wire the existing `components/*.tsx` (load on mount, mutate + refetch, notice/loading

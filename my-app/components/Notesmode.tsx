@@ -1,85 +1,10 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { listNotes, setNoteStatus } from "@/lib/data/notes";
+import type { UINote, NoteStatus } from "@/lib/data/notes.types";
 
-type NoteStatus = "pending" | "approved" | "rejected" | "flagged";
-
-type Note = {
-  id: string;
-  title: string;
-  snippet: string;
-  author: string;
-  role: "student" | "mentor" | "admin" | string;
-  session: string;
-  createdAt: string;
-  status: NoteStatus;
-  category: string;
-  content: string;
-};
-
-const NOTES: Note[] = [
-  {
-    id: "n1",
-    title: "Python Session - Week 5 Notes",
-    snippet: "Today we covered advanced topics in Python including decorators, generators, and context managers...",
-    author: "Alex Martinez",
-    role: "student",
-    session: "Python Fundamentals",
-    createdAt: "2025-11-27 02:30 PM",
-    status: "pending",
-    category: "Session",
-    content:
-      "Today we covered advanced topics in Python including decorators, generators, and context managers. We also reviewed best practices for contextlib and custom context managers.",
-  },
-  {
-    id: "n2",
-    title: "Assignment 3 Feedback",
-    snippet: "The student showed excellent understanding of data structures. Areas for improvement include...",
-    author: "Dr. Sarah Johnson",
-    role: "mentor",
-    session: "Data Structures",
-    createdAt: "2025-11-27 11:00 AM",
-    status: "approved",
-    category: "Feedback",
-    content: "Great grasp on linked lists and trees. Suggested more practice on graph traversals and complexity analysis.",
-  },
-  {
-    id: "n3",
-    title: "Web Development Progress Update",
-    snippet: "Completed the React components module. Need clarification on state management patterns...",
-    author: "Emma Williams",
-    role: "student",
-    session: "Web Development",
-    createdAt: "2025-11-27 09:15 AM",
-    status: "pending",
-    category: "Progress",
-    content: "Finished JSX basics, props, and component composition. Confused about lifting state and context usage.",
-  },
-  {
-    id: "n4",
-    title: "Inappropriate Content Report",
-    snippet: "This note contains content that violates community guidelines...",
-    author: "Anonymous",
-    role: "student",
-    session: "General",
-    createdAt: "2025-11-26 04:00 PM",
-    status: "flagged",
-    category: "Report",
-    content: "Reported content includes offensive language. Needs moderator review before publishing.",
-  },
-  {
-    id: "n5",
-    title: "Machine Learning Session Summary",
-    snippet: "Covered neural networks, backpropagation, and gradient descent. Students engaged well...",
-    author: "Prof. Robert Kim",
-    role: "mentor",
-    session: "Machine Learning",
-    createdAt: "2025-11-26 02:00 PM",
-    status: "approved",
-    category: "Session",
-    content: "Overview of neural nets, activation functions, loss functions, and gradient descent. Next session: regularization.",
-  },
-];
+type Note = UINote;
 
 const statusBadgeClass: Record<NoteStatus, string> = {
   approved: "bg-[#d9f8e6] text-[#009a3d]",
@@ -108,12 +33,31 @@ const CategoryBadge = ({ category }: { category: string }) => (
 );
 
 export default function Notesmode() {
-  const [notes, setNotes] = useState<Note[]>(NOTES);
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [notice, setNotice] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<NoteStatus | "all">("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
-  const [selected, setSelected] = useState<Note>(NOTES[0]);
+  const [selected, setSelected] = useState<Note | null>(null);
   const [modal, setModal] = useState<"approve" | "reject" | "detail" | null>(null);
+
+  const refresh = async () => {
+    setLoading(true);
+    try {
+      const data = await listNotes();
+      setNotes(data);
+      setSelected((prev) => (prev && data.find((n) => n.id === prev.id)) || data[0] || null);
+    } catch (e) {
+      setNotice((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    refresh();
+  }, []);
 
   const filtered = useMemo(() => {
     return notes.filter((n) => {
@@ -135,9 +79,15 @@ export default function Notesmode() {
     };
   }, [notes]);
 
-  const updateStatus = (status: NoteStatus) => {
-    setNotes((prev) => prev.map((n) => (n.id === selected.id ? { ...n, status } : n)));
-    setSelected((prev) => ({ ...prev, status }));
+  const updateStatus = async (status: NoteStatus) => {
+    if (!selected) return;
+    const res = await setNoteStatus(selected.id, status);
+    if (res.error) {
+      setNotice(res.error);
+      return;
+    }
+    setNotice(`Note ${status}.`);
+    await refresh();
   };
 
   return (
@@ -151,6 +101,15 @@ export default function Notesmode() {
           <p className="mt-[7px] text-[16px] font-normal leading-none text-[#666666]">Review and moderate user-generated notes</p>
         </div>
       </div>
+
+      {notice && (
+        <div className="mb-4 flex items-start justify-between gap-4 rounded-[8px] border border-green-200 bg-green-50 px-4 py-3 text-[14px] font-semibold text-green-700">
+          <span className="break-all">{notice}</span>
+          <button type="button" onClick={() => setNotice(null)} className="shrink-0 text-[13px] underline">
+            Dismiss
+          </button>
+        </div>
+      )}
 
       <div className="mb-[24px] grid grid-cols-1 gap-[18px] sm:grid-cols-2 lg:grid-cols-5">
         <StatCard label="Total Notes" value={stats.total} color="text-[#0073d8]" />
@@ -200,12 +159,18 @@ export default function Notesmode() {
           </div>
 
           <div>
+            {loading && (
+              <p className="px-[16px] py-[20px] text-[14px] text-[#666666]">Loading notes...</p>
+            )}
+            {!loading && filtered.length === 0 && (
+              <p className="px-[16px] py-[20px] text-[14px] text-[#666666]">No notes found.</p>
+            )}
             {filtered.map((note) => (
               <button
                 key={note.id}
                 onClick={() => setSelected(note)}
                 className={`grid w-full grid-cols-[1fr_auto] gap-[16px] border-b border-[#d6d6d6] px-[16px] py-[15px] text-left transition-colors last:border-b-0 ${
-                  selected.id === note.id ? "bg-[#e3f3ff]" : "bg-white hover:bg-[#f8fbff]"
+                  selected?.id === note.id ? "bg-[#e3f3ff]" : "bg-white hover:bg-[#f8fbff]"
                 }`}
               >
                 <div className="min-w-0">
@@ -227,60 +192,71 @@ export default function Notesmode() {
         </section>
 
         <aside className="min-h-[990px] rounded-[8px] border border-[#d6d6d6] bg-white px-[24px] py-[26px]">
-          <h2 className="text-[18px] font-normal leading-none text-[#111111]">{selected.title}</h2>
-          <div className="mt-[16px] flex gap-[8px]">
-            <StatusBadge status={selected.status} />
-            <CategoryBadge category={selected.category} />
-          </div>
+          {!selected ? (
+            <p className="text-[15px] font-normal text-[#666666]">
+              {loading ? "Loading..." : "No notes to review."}
+            </p>
+          ) : (
+            <>
+              <h2 className="text-[18px] font-normal leading-none text-[#111111]">{selected.title}</h2>
+              <div className="mt-[16px] flex gap-[8px]">
+                <StatusBadge status={selected.status} />
+                <CategoryBadge category={selected.category} />
+              </div>
 
-          <PanelBlock label="Author">
-            <p className="text-[15px] font-normal leading-none text-[#111111]">{selected.author}</p>
-            <p className="mt-[9px] text-[13px] font-normal leading-none text-[#666666]">{selected.role}</p>
-          </PanelBlock>
+              <PanelBlock label="Author">
+                <p className="text-[15px] font-normal leading-none text-[#111111]">{selected.author}</p>
+                <p className="mt-[9px] text-[13px] font-normal leading-none text-[#666666]">{selected.role}</p>
+              </PanelBlock>
 
-          <PanelBlock label="Session">
-            <p className="text-[15px] font-normal leading-none text-[#111111]">{selected.session}</p>
-          </PanelBlock>
+              <PanelBlock label="Session">
+                <p className="text-[15px] font-normal leading-none text-[#111111]">{selected.session}</p>
+              </PanelBlock>
 
-          <PanelBlock label="Created">
-            <p className="text-[15px] font-normal leading-none text-[#111111]">{selected.createdAt}</p>
-          </PanelBlock>
+              <PanelBlock label="Created">
+                <p className="text-[15px] font-normal leading-none text-[#111111]">{selected.createdAt}</p>
+              </PanelBlock>
 
-          <PanelBlock label="Content">
-            <p className="text-[15px] font-normal leading-[21px] text-[#111111]">{selected.snippet}</p>
-          </PanelBlock>
+              <PanelBlock label="Content">
+                <p className="text-[15px] font-normal leading-[21px] text-[#111111]">{selected.snippet}</p>
+              </PanelBlock>
 
-          <div className="mt-[16px] space-y-[16px]">
-            <button
-              onClick={() => setModal("approve")}
-              className="flex h-[41px] w-full items-center justify-center gap-[8px] rounded-[8px] bg-[#00ab42] text-[18px] font-normal text-white transition-colors hover:bg-[#009438]"
-            >
-              <img src="/images/admin-notes-icon-8.svg" alt="" className="h-4 w-4" />
-              Approve Note
-            </button>
-            <button
-              onClick={() => setModal("reject")}
-              className="flex h-[41px] w-full items-center justify-center gap-[8px] rounded-[8px] bg-[#ef0010] text-[18px] font-normal text-white transition-colors hover:bg-[#d8000e]"
-            >
-              <img src="/images/admin-notes-icon-7.svg" alt="" className="h-5 w-5" />
-              Reject Note
-            </button>
-            <button className="flex h-[43px] w-full items-center justify-center gap-[8px] rounded-[8px] border border-[#d6d6d6] bg-white text-[18px] font-normal text-[#666666] transition-colors hover:bg-[#f7f7f7]">
-              <img src="/images/admin-notes-icon-9.svg" alt="" className="h-4 w-4" />
-              Flag for Review
-            </button>
-            <button
-              onClick={() => setModal("detail")}
-              className="flex h-[43px] w-full items-center justify-center gap-[8px] rounded-[8px] border border-[#d6d6d6] bg-white text-[18px] font-normal text-[#1976D2] transition-colors hover:bg-[#f7fbff]"
-            >
-              <img src="/images/admin-notes-icon-10.svg" alt="" className="h-4 w-4" />
-              View Full Details
-            </button>
-          </div>
+              <div className="mt-[16px] space-y-[16px]">
+                <button
+                  onClick={() => setModal("approve")}
+                  className="flex h-[41px] w-full items-center justify-center gap-[8px] rounded-[8px] bg-[#00ab42] text-[18px] font-normal text-white transition-colors hover:bg-[#009438]"
+                >
+                  <img src="/images/admin-notes-icon-8.svg" alt="" className="h-4 w-4" />
+                  Approve Note
+                </button>
+                <button
+                  onClick={() => setModal("reject")}
+                  className="flex h-[41px] w-full items-center justify-center gap-[8px] rounded-[8px] bg-[#ef0010] text-[18px] font-normal text-white transition-colors hover:bg-[#d8000e]"
+                >
+                  <img src="/images/admin-notes-icon-7.svg" alt="" className="h-5 w-5" />
+                  Reject Note
+                </button>
+                <button
+                  onClick={() => updateStatus("flagged")}
+                  className="flex h-[43px] w-full items-center justify-center gap-[8px] rounded-[8px] border border-[#d6d6d6] bg-white text-[18px] font-normal text-[#666666] transition-colors hover:bg-[#f7f7f7]"
+                >
+                  <img src="/images/admin-notes-icon-9.svg" alt="" className="h-4 w-4" />
+                  Flag for Review
+                </button>
+                <button
+                  onClick={() => setModal("detail")}
+                  className="flex h-[43px] w-full items-center justify-center gap-[8px] rounded-[8px] border border-[#d6d6d6] bg-white text-[18px] font-normal text-[#1976D2] transition-colors hover:bg-[#f7fbff]"
+                >
+                  <img src="/images/admin-notes-icon-10.svg" alt="" className="h-4 w-4" />
+                  View Full Details
+                </button>
+              </div>
+            </>
+          )}
         </aside>
       </div>
 
-      {modal === "detail" && (
+      {modal === "detail" && selected && (
         <NoteDetailModal
           note={selected}
           onClose={() => setModal(null)}
@@ -295,7 +271,7 @@ export default function Notesmode() {
         />
       )}
 
-      {modal === "approve" && (
+      {modal === "approve" && selected && (
         <ConfirmModal
           title="Approve Note"
           message={`Are you sure you want to approve the note "${selected.title}"?`}
@@ -309,7 +285,7 @@ export default function Notesmode() {
         />
       )}
 
-      {modal === "reject" && (
+      {modal === "reject" && selected && (
         <ConfirmModal
           title="Reject Note"
           message={`Are you sure you want to reject the note "${selected.title}"?`}
