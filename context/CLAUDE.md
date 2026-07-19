@@ -227,10 +227,13 @@ enrolled in "Computer Science").
 - **Profile** (`Profile.tsx`) — WIRED & verified: `getStudentProfile()` (real profiles+students +
   assigned mentor + metrics + activity), `updateStudentProfile()`, `getStudentGoals()`/`addStudentGoal()`
   (`student_goals`). Fabricated badges/mentor-directory trimmed.
-- **Still to wire:** the **iPad check-in kiosk** (`attendancewrk`, MediaPipe selfie +
-  4-digit code + schedule window → `attendance_records`), Mentor Notes (read own), Messages/
-  Notifications (reuse), Calendar/Documents/Resources/Blog (read), Profile, and the student **auth
-  flow** (`studentverify`/`createpass`/`forgetpassword` — verify code → set password).
+- **iPad check-in kiosk** (`Attendancewrk.tsx`) — WIRED & verified: **public** `lib/data/kiosk.ts`
+  (no auth — the 4-digit code is the credential): `verifyAttendanceCode` (→ `students.attendance_code`)
+  + `markKioskAttendance` (finds today's enrolled session, uploads selfie to private `attendance`
+  bucket, upserts `attendance_records` method='selfie'/code_used/photo_url, present-or-late by start+15m).
+  MediaPipe face-detect is client-only. Needs a session dated today.
+- **Still to wire:** only the student **auth flow** (`studentverify`/`createpass`/`forgetpassword` —
+  verify code → set password).
 
 ## 6. Frontend — Tech Stack & Structure
 

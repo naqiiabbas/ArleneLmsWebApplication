@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
+import { verifyAttendanceCode, markKioskAttendance } from "@/lib/data/kiosk";
 
 export default function AttendanceFlow() {
   const [currentStep, setCurrentStep] = useState(0);
@@ -10,6 +11,10 @@ export default function AttendanceFlow() {
   const [error, setError] = useState<string | null>(null);
   const [isFaceDetected, setIsFaceDetected] = useState(false);
   const [isLoadingModel, setIsLoadingModel] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [codeError, setCodeError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [result, setResult] = useState<{ name: string; status: "present" | "late" } | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -22,6 +27,34 @@ export default function AttendanceFlow() {
   const captureTimeoutRef = useRef<number | null>(null);
   const videoReadyRef = useRef(false);
   const lastVideoTimeRef = useRef(-1);
+  const passcodeRef = useRef(passcode);
+
+  useEffect(() => {
+    passcodeRef.current = passcode;
+  }, [passcode]);
+
+  const handleVerifyCode = async () => {
+    if (verifying || passcode.length < 4) return;
+    setCodeError(null);
+    setVerifying(true);
+    const res = await verifyAttendanceCode(passcode);
+    setVerifying(false);
+    if (res.error) {
+      setCodeError(res.error);
+      return;
+    }
+    setCurrentStep(2);
+  };
+
+  const resetFlow = () => {
+    setCurrentStep(0);
+    setPasscode("");
+    setError(null);
+    setCodeError(null);
+    setResult(null);
+    setCapturedImg(null);
+    hasCapturedRef.current = false;
+  };
 
   const loadModel = async () => {
     if (faceLandmarkerRef.current) return faceLandmarkerRef.current;
@@ -93,7 +126,7 @@ export default function AttendanceFlow() {
     }
   }, []);
 
-  const capturePhoto = useCallback(() => {
+  const capturePhoto = useCallback(async () => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
     if (!video || !canvas || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
@@ -110,9 +143,23 @@ export default function AttendanceFlow() {
     ctx.setTransform(-1, 0, 0, 1, width, 0);
     ctx.drawImage(video, 0, 0, width, height);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    setCapturedImg(canvas.toDataURL("image/png"));
+    const dataUrl = canvas.toDataURL("image/png");
+    setCapturedImg(dataUrl);
+
+    // Stop the camera/detection and submit the check-in.
+    stopDetection();
+    stopCamera();
+    setSubmitting(true);
+    const res = await markKioskAttendance(passcodeRef.current, dataUrl);
+    setSubmitting(false);
+    if (res.error) {
+      setError(res.error);
+      setCurrentStep(5);
+      return;
+    }
+    setResult({ name: res.name ?? "Student", status: res.status ?? "present" });
     setCurrentStep(4);
-  }, []);
+  }, [stopDetection, stopCamera]);
 
   const runDetection = useCallback(() => {
     const video = videoRef.current;
@@ -302,8 +349,11 @@ export default function AttendanceFlow() {
               0
             </button>
           </div>
-          <button disabled={passcode.length < 4} onClick={() => setCurrentStep(2)} className={`mt-[32px] h-[84px] w-full max-w-[282px] rounded-[12px] text-[30px] font-bold leading-none text-white transition ${passcode.length === 4 ? "bg-[#F9A618] active:scale-[0.99]" : "cursor-not-allowed bg-[#ffd88d]"}`}>
-            Continue
+          {codeError && (
+            <p className="mt-[24px] text-center text-[24px] font-normal leading-none text-[#e0342b] max-sm:text-[18px]">{codeError}</p>
+          )}
+          <button disabled={passcode.length < 4 || verifying} onClick={handleVerifyCode} className={`mt-[32px] h-[84px] w-full max-w-[282px] rounded-[12px] text-[30px] font-bold leading-none text-white transition ${passcode.length === 4 && !verifying ? "bg-[#F9A618] active:scale-[0.99]" : "cursor-not-allowed bg-[#ffd88d]"}`}>
+            {verifying ? "Checking…" : "Continue"}
           </button>
         </div>
       )}
@@ -340,8 +390,8 @@ export default function AttendanceFlow() {
           </div>
           <div className="flex w-full flex-col items-center">
             {currentStep === 3 ? (
-              <button onClick={capturePhoto} className="mt-[32px] h-[85px] w-full max-w-[282px] rounded-[12px] bg-[#F9A618] text-[30px] font-bold leading-none text-[#0a0a0a] transition active:scale-[0.99]">
-                Capture Phone
+              <button onClick={capturePhoto} disabled={submitting} className="mt-[32px] h-[85px] w-full max-w-[282px] rounded-[12px] bg-[#F9A618] text-[30px] font-bold leading-none text-[#0a0a0a] transition active:scale-[0.99] disabled:opacity-60">
+                {submitting ? "Marking…" : "Capture Photo"}
               </button>
             ) : (
               <p className="mt-[34px] text-center text-[24px] font-normal leading-none text-[#737373]">{isFaceDetected ? "Face clear and ready to capture..." : "Please look at the camera..."}</p>
@@ -350,11 +400,36 @@ export default function AttendanceFlow() {
         </div>
       )}
 
+      {submitting && (
+        <div className="fixed inset-0 z-[9998] flex flex-col items-center justify-center bg-white/90 text-[#4d4d4d]">
+          <span className="mb-6 h-[54px] w-[54px] animate-spin rounded-full border-[5px] border-[#ffd88d] border-t-[#F9A618]" />
+          <span className="text-[28px] font-normal max-sm:text-[22px]">Marking attendance…</span>
+        </div>
+      )}
+
       {currentStep === 4 && (
-        <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-[#12C79A] px-6 text-center text-white animate-in fade-in duration-500">
+        <div
+          className={`fixed inset-0 z-[9999] flex flex-col items-center justify-center px-6 text-center text-white animate-in fade-in duration-500 ${result?.status === "late" ? "bg-[#F9A618]" : "bg-[#12C79A]"}`}
+          onClick={resetFlow}
+        >
           <img src="/images/attendance-success-icon.svg" alt="" aria-hidden="true" className="h-[160px] w-[160px]" />
-          <h1 className="mt-[42px] text-[48px] font-bold leading-tight max-sm:text-[34px]">Attendance Marked Successfully</h1>
+          <h1 className="mt-[42px] text-[48px] font-bold leading-tight max-sm:text-[34px]">
+            {result?.status === "late" ? "Marked Late" : "Attendance Marked"}
+            {result?.name ? `, ${result.name.split(" ")[0]}` : ""}
+          </h1>
           <p className="mt-[18px] text-[28px] font-medium leading-none opacity-95 max-sm:text-[22px]">You may now take your seat</p>
+          <p className="mt-[40px] text-[18px] font-normal leading-none opacity-80">Tap anywhere to finish</p>
+        </div>
+      )}
+
+      {currentStep === 5 && (
+        <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-[#e0342b] px-6 text-center text-white animate-in fade-in duration-300">
+          <div className="flex h-[130px] w-[130px] items-center justify-center rounded-full border-[6px] border-white text-[80px] font-bold leading-none">!</div>
+          <h1 className="mt-[36px] text-[44px] font-bold leading-tight max-sm:text-[30px]">Check-in Failed</h1>
+          <p className="mt-[18px] max-w-[560px] text-[24px] font-normal leading-[1.35] opacity-95 max-sm:text-[18px]">{error ?? "Something went wrong. Please try again."}</p>
+          <button onClick={resetFlow} className="mt-[44px] h-[84px] w-full max-w-[282px] rounded-[12px] bg-white text-[28px] font-bold leading-none text-[#e0342b] transition active:scale-[0.99]">
+            Try Again
+          </button>
         </div>
       )}
 
