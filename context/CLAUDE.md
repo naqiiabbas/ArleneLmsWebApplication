@@ -196,7 +196,7 @@ mentor's `mentor_student_assignments`.
   Cross-cutting follow-ups: attachments for notes & messaging, a resources storage bucket,
   event-driven notification writers.
 
-## 5c. Student Panel (in progress)
+## 5c. Student Panel (COMPLETE)
 
 The student-facing side of everything above. Guard: **`assertStudent()`** (`lib/data/guards.ts`,
 role='student'; returns userId = `students.id` = `profiles.id`; middleware already restricts
@@ -232,8 +232,11 @@ enrolled in "Computer Science").
   + `markKioskAttendance` (finds today's enrolled session, uploads selfie to private `attendance`
   bucket, upserts `attendance_records` method='selfie'/code_used/photo_url, present-or-late by start+15m).
   MediaPipe face-detect is client-only. Needs a session dated today.
-- **Still to wire:** only the student **auth flow** (`studentverify`/`createpass`/`forgetpassword` —
-  verify code → set password).
+- **Student auth flow** (`Studentforget`/`Studentverification`/`Studentcreatepass`) — WIRED: 6-digit
+  OTP reset/setup via `verifyRecoveryCode` (verifyOtp type='recovery') + `updatePassword`; login
+  "Student ID" tab → `startResetByStudentId` (student_code → email → send code). **Requires** the
+  Supabase Reset-Password email template to include `{{ .Token }}` so the code is emailed.
+- **Student panel COMPLETE** — every screen + kiosk + auth flow wired.
 
 ## 6. Frontend — Tech Stack & Structure
 

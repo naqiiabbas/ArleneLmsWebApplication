@@ -23,12 +23,11 @@ export default function ForgotPasswordSection({
 }: ForgotPasswordProps) {
   const router = useRouter()
   const [error, setError] = useState('')
-  const [sent, setSent] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    const email = String(new FormData(event.currentTarget).get('email') || '')
+    const email = String(new FormData(event.currentTarget).get('email') || '').trim()
     if (!email) {
       setError('Please enter your email address.')
       return
@@ -42,7 +41,9 @@ export default function ForgotPasswordSection({
       return
     }
     onSendCode?.(email)
-    setSent(true)
+    // Carry the email into the verify step and continue the OTP flow.
+    sessionStorage.setItem('reset_email', email)
+    router.push('/studentpanel/studentverify')
   }
 
   const handleBack = () => {
@@ -85,18 +86,13 @@ export default function ForgotPasswordSection({
           {error && (
             <p className="mt-3 text-[13px] font-medium text-[#ef4444]">{error}</p>
           )}
-          {sent && (
-            <p className="mt-3 text-[13px] font-medium text-[#16a34a]">
-              If an account exists for that email, a password reset link is on its way. Check your inbox.
-            </p>
-          )}
 
           <button
             type="submit"
-            disabled={isLoading || sent}
+            disabled={isLoading}
             className="mt-5 h-[46px] w-full rounded-[9px] bg-[#f9a514] text-[16px] font-medium text-white transition hover:bg-[#e69412] focus:outline-none focus:ring-4 focus:ring-[#f4a11d]/25 disabled:cursor-not-allowed disabled:opacity-70"
           >
-            {isLoading ? 'Sending...' : sent ? 'Link Sent' : 'Send Reset Link'}
+            {isLoading ? 'Sending...' : 'Send Verification Code'}
           </button>
 
           <div className="mt-4 border-t border-[#e3e3e3] pt-4 text-center text-[13px] text-[#666666]">

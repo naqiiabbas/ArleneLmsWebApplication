@@ -5,7 +5,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Eye, Lock, LogIn, Mail, UserCircle } from 'lucide-react'
-import { signIn } from '@/lib/auth/actions'
+import { signIn, startResetByStudentId } from '@/lib/auth/actions'
 
 interface AuthTab {
   id: 'email' | 'student'
@@ -34,20 +34,33 @@ export default function LoginForm({
   const [activeTab, setActiveTab] = useState<AuthTab['id']>('email')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [studentId, setStudentId] = useState('')
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    setError('')
 
-    // Student ID tab uses the invite/verification flow (not yet backed by auth).
+    // Student ID tab: resolve the ID to an email and send a verification code.
     if (activeTab === 'student') {
+      if (!studentId.trim()) {
+        setError('Please enter your Student ID.')
+        return
+      }
+      setIsLoading(true)
+      const res = await startResetByStudentId(studentId)
+      setIsLoading(false)
+      if (res.error || !res.email) {
+        setError(res.error ?? 'Could not start verification.')
+        return
+      }
+      sessionStorage.setItem('reset_email', res.email)
       router.push('/studentpanel/studentverify')
       return
     }
 
-    setError('')
     if (!email || !password) {
       setError('Please enter your email and password.')
       return
@@ -127,7 +140,7 @@ export default function LoginForm({
               <label className="mb-2 block text-[14px] font-medium text-[#555555]">Student ID</label>
               <div className="relative">
                 <UserCircle className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#6f6f6f]" />
-                <input className={inputClass} type="text" placeholder="Enter your student ID (e.g., CS2025-001)" autoComplete="username" />
+                <input className={inputClass} type="text" placeholder="Enter your student ID (e.g., STU001)" autoComplete="username" value={studentId} onChange={(e) => setStudentId(e.target.value)} />
               </div>
               <p className="mt-2 text-[12px] text-[#666666]">Your student ID can be found on your student card</p>
             </div>
@@ -143,7 +156,7 @@ export default function LoginForm({
             className="mt-4 flex h-[46px] w-full items-center justify-center gap-2 rounded-[9px] bg-[#f9a514] text-[16px] font-medium text-white transition hover:bg-[#e69412] focus:outline-none focus:ring-4 focus:ring-[#f4a11d]/25 disabled:cursor-not-allowed disabled:opacity-70"
           >
             <LogIn className="h-5 w-5" />
-            {isLoading ? 'Signing in...' : 'Sign In'}
+            {isLoading ? 'Please wait...' : activeTab === 'student' ? 'Send Verification Code' : 'Sign In'}
           </button>
 
           <div className="mt-4 border-t border-[#e3e3e3] pt-4 text-center text-[13px] text-[#666666]">

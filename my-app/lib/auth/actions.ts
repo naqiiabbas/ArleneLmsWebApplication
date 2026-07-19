@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import {
   PORTAL_ROLES,
   PORTAL_HOME,
@@ -81,7 +82,8 @@ export async function sendPasswordReset(email: string): Promise<AuthResult> {
 
 /**
  * Set a new password for the user in the current (recovery) session. Called
- * from the /auth/reset-password page the reset email links to.
+ * from the /auth/reset-password page the reset email links to, and from the
+ * student create-password step after the OTP is verified.
  */
 export async function updatePassword(newPassword: string): Promise<AuthResult> {
   const supabase = await createClient()
@@ -90,10 +92,56 @@ export async function updatePassword(newPassword: string): Promise<AuthResult> {
     data: { user },
   } = await supabase.auth.getUser()
   if (!user) {
-    return { error: "Your reset link has expired. Request a new one." }
+    return { error: "Your reset session has expired. Please request a new code." }
   }
 
   const { error } = await supabase.auth.updateUser({ password: newPassword })
   if (error) return { error: error.message }
   return { sent: true }
+}
+
+/**
+ * Verify the 6-digit recovery code from the reset email. On success a recovery
+ * session is established (cookies), so the next step can set a new password.
+ */
+export async function verifyRecoveryCode(
+  email: string,
+  code: string,
+): Promise<AuthResult> {
+  const c = code.trim()
+  if (!/^\d{6}$/.test(c)) return { error: "Please enter the 6-digit code." }
+  const supabase = await createClient()
+
+  const { error } = await supabase.auth.verifyOtp({
+    email: email.trim(),
+    token: c,
+    type: "recovery",
+  })
+  if (error) return { error: "Invalid or expired code. Please try again." }
+  return { sent: true }
+}
+
+/**
+ * Start the reset/first-time-setup flow from a Student ID: resolve the student's
+ * email, then send them a recovery code. Returns the email so the client can
+ * carry it into the verify step. No user enumeration beyond the ID itself.
+ */
+export async function startResetByStudentId(
+  studentId: string,
+): Promise<{ email?: string; error?: string }> {
+  const id = studentId.trim()
+  if (!id) return { error: "Please enter your Student ID." }
+  const admin = createAdminClient()
+
+  const { data: student } = await admin
+    .from("students")
+    .select("profile:profiles ( email ) ")
+    .eq("student_code", id)
+    .maybeSingle()
+  const email = (student as unknown as { profile: { email: string | null } | null } | null)?.profile?.email
+  if (!email) return { error: "No account was found for that Student ID." }
+
+  const res = await sendPasswordReset(email)
+  if (res.error) return { error: res.error }
+  return { email }
 }

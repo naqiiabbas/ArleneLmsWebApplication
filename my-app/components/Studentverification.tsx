@@ -1,12 +1,12 @@
 'use client'
 
-import React, { useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
+import { verifyRecoveryCode, sendPasswordReset } from '@/lib/auth/actions'
 
 interface VerificationCodeProps {
-  email?: string
   onVerify?: (code: string) => void
   onResend?: () => void
   onBack?: () => void
@@ -14,16 +14,25 @@ interface VerificationCodeProps {
 }
 
 export default function VerificationCodeSection({
-  email = 'newmail@gmail.com',
   onVerify,
   onResend,
   onBack,
   logoSrc = '/images/student-sidebar-logo.svg',
 }: VerificationCodeProps) {
   const [code, setCode] = useState(Array(6).fill(''))
+  const [email, setEmail] = useState('')
+  const [error, setError] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+  const [resent, setResent] = useState(false)
   const inputRefs = useRef<Array<HTMLInputElement | null>>([])
   const router = useRouter()
   const value = useMemo(() => code.join(''), [code])
+
+  useEffect(() => {
+    const stored = typeof window !== 'undefined' ? sessionStorage.getItem('reset_email') : ''
+    if (stored) setEmail(stored)
+    else router.replace('/studentpanel/forgetpassword')
+  }, [router])
 
   const handleBack = () => {
     onBack?.()
@@ -46,10 +55,31 @@ export default function VerificationCodeSection({
     }
   }
 
-  const handleVerify = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleVerify = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    if (value.length < 6 || isLoading) return
+    setError('')
+    setIsLoading(true)
+    const res = await verifyRecoveryCode(email, value)
+    setIsLoading(false)
+    if (res.error) {
+      setError(res.error)
+      return
+    }
     onVerify?.(value)
     router.push('/studentpanel/createpass')
+  }
+
+  const handleResend = async () => {
+    onResend?.()
+    if (!email) return
+    setError('')
+    const res = await sendPasswordReset(email)
+    if (res.error) setError(res.error)
+    else {
+      setResent(true)
+      window.setTimeout(() => setResent(false), 4000)
+    }
   }
 
   return (
@@ -96,16 +126,26 @@ export default function VerificationCodeSection({
             ))}
           </div>
 
+          {error && (
+            <p className="mb-3 text-[13px] font-medium text-[#ef4444]">{error}</p>
+          )}
+          {resent && (
+            <p className="mb-3 text-[13px] font-medium text-[#16a34a]">A new code has been sent.</p>
+          )}
+
           <button
             type="submit"
-            className="h-[46px] w-full rounded-[9px] bg-[#c7c7c7] text-[16px] font-medium text-white transition hover:bg-[#f9a514] focus:outline-none focus:ring-4 focus:ring-[#f4a11d]/25"
+            disabled={value.length < 6 || isLoading}
+            className={`h-[46px] w-full rounded-[9px] text-[16px] font-medium text-white transition focus:outline-none focus:ring-4 focus:ring-[#f4a11d]/25 ${
+              value.length === 6 && !isLoading ? 'bg-[#f9a514] hover:bg-[#e69412]' : 'cursor-not-allowed bg-[#c7c7c7]'
+            }`}
           >
-            Verify Code
+            {isLoading ? 'Verifying...' : 'Verify Code'}
           </button>
 
           <div className="mt-5 text-[14px] text-[#666666]">
             Didn't receive the code?{' '}
-            <button type="button" onClick={onResend} className="font-semibold text-[#006ee6] hover:underline">
+            <button type="button" onClick={handleResend} className="font-semibold text-[#006ee6] hover:underline">
               Resend
             </button>
           </div>

@@ -4,6 +4,7 @@ import React, { useMemo, useState } from 'react'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Eye, Lock } from 'lucide-react'
+import { updatePassword } from '@/lib/auth/actions'
 
 interface CreateNewPasswordProps {
   logoSrc?: string
@@ -28,6 +29,8 @@ export default function CreateNewPassword({
 }: CreateNewPasswordProps) {
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [error, setError] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
 
   const isValid = useMemo(
@@ -40,9 +43,19 @@ export default function CreateNewPassword({
     router.push('/studentpanel/studentverify')
   }
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    if (!isValid || isLoading) return
+    setError('')
+    setIsLoading(true)
+    const res = await updatePassword(password)
+    setIsLoading(false)
+    if (res.error) {
+      setError(res.error)
+      return
+    }
     onSubmit?.(password)
+    sessionStorage.removeItem('reset_email')
     router.push('/studentpanel/passsuccessful')
   }
 
@@ -116,13 +129,18 @@ export default function CreateNewPassword({
             </ul>
           </div>
 
+          {error && (
+            <p className="mt-3 text-[13px] font-medium text-[#ef4444]">{error}</p>
+          )}
+
           <button
             type="submit"
+            disabled={!isValid || isLoading}
             className={`mt-4 h-[50px] w-full rounded-[9px] text-[16px] font-medium text-white transition focus:outline-none focus:ring-4 focus:ring-[#f4a11d]/25 ${
-              isValid ? 'bg-[#f9a514] hover:bg-[#e69412]' : 'bg-[#d4d4d4] hover:bg-[#c7c7c7]'
+              isValid && !isLoading ? 'bg-[#f9a514] hover:bg-[#e69412]' : 'cursor-not-allowed bg-[#d4d4d4]'
             }`}
           >
-            Reset Password
+            {isLoading ? 'Saving...' : 'Reset Password'}
           </button>
         </form>
       </div>
