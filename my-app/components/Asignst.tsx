@@ -27,86 +27,17 @@ import {
   YAxis,
 } from "recharts";
 import { domToPng } from "modern-screenshot";
+import { getAssignedStudents, getStudentDetail } from "@/lib/data/mentor";
+import type {
+  MentorStudent,
+  MentorAttendanceRecord,
+  MentorStudentNote,
+  RiskLevel,
+} from "@/lib/data/mentor.types";
 
-type RiskLevel = "Low" | "Medium" | "High";
-
-interface AttendanceRecord {
-  date: string;
-  session: string;
-  status: "Present" | "Absent";
-  notes: string;
-}
-
-interface StudentNote {
-  id: string;
-  type: "Academic" | "Career" | "Personal";
-  date: string;
-  author: string;
-  content: string;
-}
-
-interface Student {
-  id: string;
-  name: string;
-  avatar: string;
-  school: string;
-  grade: string;
-  riskLevel: RiskLevel;
-  attendance: number;
-  totalSessions: number;
-  email: string;
-  phone: string;
-  attendanceHistory: AttendanceRecord[];
-  notes: StudentNote[];
-  academicProgress: { month: string; score: number }[];
-}
-
-const baseAttendance: AttendanceRecord[] = [
-  { date: "2024-11-25", session: "Math Tutoring", status: "Present", notes: "Great progress on algebra" },
-  { date: "2024-11-22", session: "Career Discussion", status: "Present", notes: "Interested in engineering" },
-  { date: "2024-11-20", session: "Study Skills", status: "Present", notes: "Improved time management" },
-  { date: "2024-11-18", session: "Math Tutoring", status: "Absent", notes: "Family emergency" },
-  { date: "2024-11-15", session: "Check-in", status: "Present", notes: "Discussed upcoming exams" },
-];
-
-const baseNotes: StudentNote[] = [
-  { id: "n1", type: "Academic", date: "2024-11-25", author: "John", content: "Marcus showed exceptional understanding of quadratic equations today." },
-  { id: "n2", type: "Career", date: "2024-11-22", author: "John", content: "Discussed various engineering pathways. Will arrange campus visit." },
-  { id: "n3", type: "Personal", date: "2024-11-20", author: "John", content: "Marcus is developing better organizational skills and meeting deadlines." },
-];
-
-const baseProgress = [
-  { month: "Aug", score: 65 },
-  { month: "Sep", score: 70 },
-  { month: "Oct", score: 75 },
-  { month: "Nov", score: 84 },
-  { month: "Dec", score: 87 },
-];
-
-const STUDENTS_DATA: Student[] = [
-  {
-    id: "1",
-    name: "Marcus Johnson",
-    avatar: "/images/avatar1.png",
-    school: "Lincoln High",
-    grade: "9th",
-    riskLevel: "Low",
-    attendance: 95,
-    totalSessions: 28,
-    email: "marcus.j@school.edu",
-    phone: "(555) 123-4567",
-    attendanceHistory: baseAttendance,
-    notes: baseNotes,
-    academicProgress: baseProgress,
-  },
-  { id: "2", name: "David Williams", avatar: "/images/avatar2.png", school: "Roosevelt High", grade: "10th", riskLevel: "Medium", attendance: 78, totalSessions: 20, email: "david.w@school.edu", phone: "(555) 000-1111", attendanceHistory: baseAttendance.slice(0, 3), notes: [], academicProgress: baseProgress.slice(0, 4) },
-  { id: "3", name: "James Brown", avatar: "/images/avatar3.png", school: "Washington Middle", grade: "8th", riskLevel: "High", attendance: 62, totalSessions: 15, email: "james.b@school.edu", phone: "(555) 222-3333", attendanceHistory: baseAttendance.slice(2), notes: [], academicProgress: [{ month: "Aug", score: 45 }, { month: "Sep", score: 48 }, { month: "Oct", score: 52 }, { month: "Nov", score: 55 }] },
-  { id: "4", name: "Michael Davis", avatar: "/images/avatar.png", school: "Lincoln High", grade: "11th", riskLevel: "Low", attendance: 92, totalSessions: 30, email: "m.davis@school.edu", phone: "(555) 444-5555", attendanceHistory: baseAttendance, notes: [], academicProgress: [{ month: "Aug", score: 78 }, { month: "Sep", score: 80 }, { month: "Oct", score: 84 }, { month: "Nov", score: 88 }] },
-  { id: "5", name: "Robert Miller", avatar: "/images/mentor1.png", school: "Jefferson High", grade: "9th", riskLevel: "Medium", attendance: 85, totalSessions: 22, email: "robert.m@school.edu", phone: "(555) 555-1111", attendanceHistory: [], notes: [], academicProgress: baseProgress },
-  { id: "6", name: "William Wilson", avatar: "/images/avatar1.png", school: "Roosevelt High", grade: "10th", riskLevel: "Low", attendance: 88, totalSessions: 24, email: "william.w@school.edu", phone: "(555) 555-2222", attendanceHistory: [], notes: [], academicProgress: baseProgress },
-  { id: "7", name: "Joseph Moore", avatar: "/images/avatar2.png", school: "Lincoln High", grade: "12th", riskLevel: "Low", attendance: 94, totalSessions: 26, email: "joseph.m@school.edu", phone: "(555) 555-3333", attendanceHistory: [], notes: [], academicProgress: baseProgress },
-  { id: "8", name: "Charles Taylor", avatar: "/images/avatar3.png", school: "Washington Middle", grade: "9th", riskLevel: "High", attendance: 58, totalSessions: 14, email: "charles.t@school.edu", phone: "(555) 555-4444", attendanceHistory: [], notes: [], academicProgress: baseProgress },
-];
+type AttendanceRecord = MentorAttendanceRecord;
+type StudentNote = MentorStudentNote;
+type Student = MentorStudent;
 
 const RiskBadge = ({ level }: { level: RiskLevel }) => {
   const styles = {
@@ -140,20 +71,27 @@ export default function AssignedStudentsSection() {
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [uploadedDocs, setUploadedDocs] = useState<string[]>([]);
   const [isMounted, setIsMounted] = useState(false);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const tableRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const filteredStudents = useMemo(() => {
-    return STUDENTS_DATA.filter((student) => {
+    return students.filter((student) => {
       const gradeMatch = filterGrade === "All Grades" || student.grade === filterGrade;
       const riskMatch = filterRisk === "All Risk Levels" || student.riskLevel === filterRisk;
       return gradeMatch && riskMatch;
     });
-  }, [filterGrade, filterRisk]);
+  }, [students, filterGrade, filterRisk]);
 
   useEffect(() => {
     setIsMounted(true);
+    getAssignedStudents()
+      .then(setStudents)
+      .catch((e) => setNotice((e as Error).message))
+      .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => {
@@ -197,12 +135,18 @@ export default function AssignedStudentsSection() {
     }
   };
 
-  const openProfile = (student: Student) => {
+  const openProfile = async (student: Student) => {
     setSelectedStudent(student);
     setActiveTab("Attendance");
     setView("profile");
     setOpenDropdown(null);
     setDropdownPosition(null);
+    try {
+      const detail = await getStudentDetail(student.id);
+      setSelectedStudent((prev) => (prev && prev.id === student.id ? { ...prev, ...detail } : prev));
+    } catch (e) {
+      setNotice((e as Error).message);
+    }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -467,6 +411,12 @@ export default function AssignedStudentsSection() {
         </button>
       </div>
 
+      {notice && (
+        <div className="mb-4 rounded-[8px] border border-red-200 bg-red-50 px-4 py-3 text-[14px] font-semibold text-red-700">
+          {notice}
+        </div>
+      )}
+
       <div className="mb-[24px] flex min-h-[69px] flex-col gap-3 rounded-[8px] border border-[#dddddd] bg-white px-[16px] py-[12px] sm:flex-row sm:items-center">
         <div className="flex items-center gap-[9px] text-[16px] font-normal text-[#666666]">
           <Filter size={20} strokeWidth={1.8} />
@@ -516,7 +466,13 @@ export default function AssignedStudentsSection() {
               </tr>
             </thead>
             <tbody>
-              {filteredStudents.map((student) => (
+              {loading && (
+                <tr><td colSpan={6} className="px-[24px] py-[40px] text-center text-[16px] text-[#666666]">Loading your students...</td></tr>
+              )}
+              {!loading && filteredStudents.length === 0 && (
+                <tr><td colSpan={6} className="px-[24px] py-[40px] text-center text-[16px] text-[#666666]">No students assigned to you yet.</td></tr>
+              )}
+              {!loading && filteredStudents.map((student) => (
                 <tr key={student.id} className="border-b border-[#e5e5e5] last:border-b-0">
                   <td className="px-[24px] py-[17px] md:px-[40px]">
                     <button type="button" onClick={() => openProfile(student)} className="flex items-center gap-[14px] text-left">
@@ -557,7 +513,7 @@ export default function AssignedStudentsSection() {
       </div>
 
       <p className="mt-[27px] max-w-[105px] text-[14px] font-normal leading-[1.35] text-[#666666]">
-        Showing {filteredStudents.length} of {STUDENTS_DATA.length} students
+        Showing {filteredStudents.length} of {students.length} students
       </p>
       {isMounted && openDropdown && dropdownPosition && createPortal(
         <>
@@ -567,7 +523,7 @@ export default function AssignedStudentsSection() {
             style={{ top: dropdownPosition.top, left: dropdownPosition.left }}
           >
             {(() => {
-              const student = STUDENTS_DATA.find((item) => item.id === openDropdown);
+              const student = students.find((item) => item.id === openDropdown);
               if (!student) return null;
               return (
                 <>

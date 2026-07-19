@@ -20,3 +20,23 @@ export async function assertAdmin(): Promise<{ userId: string }> {
   }
   return { userId: user.id }
 }
+
+/** Ensure the caller is a mentor. Returns their user id. */
+export async function assertMentor(): Promise<{ userId: string }> {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) throw new Error("Not authenticated.")
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single()
+
+  if (!profile || profile.role !== "mentor") {
+    throw new Error("You are not authorized to perform this action.")
+  }
+  return { userId: user.id }
+}

@@ -146,6 +146,22 @@ Separate signed addendum. Classroom-mounted **iPad**, zero teacher involvement, 
 
 ---
 
+## 5b. Mentor Panel (in progress)
+
+Making the platform usable for mentors. Guard: **`assertMentor()`** (`lib/data/guards.ts`,
+role='mentor'; middleware already restricts `/mentorshippanel` to mentors). Data scoped to the
+mentor's `mentor_student_assignments`.
+- **Assigned Students** (`Asignst.tsx`) — WIRED & verified: **`lib/data/mentor.ts`**
+  (`getAssignedStudents` = the mentor's active-assignment students + attendance %/sessions from
+  `student_attendance_summary` + risk derived from attendance; `getStudentDetail(studentId)` =
+  attendance history + notes for one assigned student, ownership-checked). Profile view loads
+  detail on open. `academicProgress` empty (no grades-over-time source).
+- **Still to wire:** mentor Dashboard (`Mentorshippanel.tsx`), Attendance marking
+  (`Attendancemen.tsx` — mark Present/Absent/Late per session → `attendance_records`), Notes &
+  Reports (`Notesreport.tsx` — create `notes`), Messaging (`Messagesmen` → reuse `messaging.ts`),
+  Documents/Calendar/Notifications/Resources/Blog/Settings (reuse existing data layers, scoped).
+  Also the **iPad attendance check-in** kiosk.
+
 ## 6. Frontend — Tech Stack & Structure
 
 **The frontend is complete but entirely static/mock.** No backend wiring exists: no `app/api`,
