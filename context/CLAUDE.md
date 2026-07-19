@@ -610,6 +610,20 @@ loading/notice, jspdf export of filtered rows. Seeded 5 sample logs. **NOTE:** n
 `activity_logs` yet — like `createNotification`, actually recording actions from the data modules is
 a follow-up (add an `logActivity()` helper called on create/update/delete/login).
 
+**Admin → Attendance Control** (17th slice, verified live) — **completes the admin panel**:
+**`lib/data/attendance.types.ts`** / **`lib/data/attendance.ts`** (`"use server"`). `getAttendanceData()`
+(gated `assertPermission("attendance.view")`) reads `attendance_records` with a **nested embed**
+`student:students ( student_code, profile:profiles ( full_name ) )` + `class:classes ( name, batch )`
+(attendance→students→profiles; attendance→classes via class_id) and computes stats (this-week
+present/absent/late/rate), weekly Mon–Fri breakdown, and 4-week trend. `setAttendanceExcuse(id, excused|
+unexcused)` (gated `attendance.manage`) — the **Super-Admin absence excuse workflow** (sets
+`excuse`/`excused_by`/`excused_at`). `getAttendancePhotoUrl(id)` — signed URL from the new **private
+`attendance` bucket** (ready for the iPad photo-proof flow). **`components/Attencon.tsx`** — mock
+removed; real records/stats/recharts, detail modal loads the photo via signed URL + adds
+**Mark Excused / Mark Unexcused** buttons for absences, loading/empty/notice. Seeded a sample class
++ 5 attendance records. **iPad check-in flow** (4-digit code entry + photo capture on the kiosk) +
+mentor marking are the student/mentor-side pieces, still to build.
+
 **Pattern for the next modules:** `lib/data/<module>.ts` (`"use server"` + `assertAdmin()` from
 `lib/data/guards.ts` + service role for privileged ops, or the RLS server client for user-scoped
 reads) → wire the existing `components/*.tsx` (load on mount, mutate + refetch, notice/loading

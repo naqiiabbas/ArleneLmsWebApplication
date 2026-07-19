@@ -1,7 +1,9 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Camera, Download, Eye, MapPin, X } from "lucide-react";
+import { getAttendanceData, setAttendanceExcuse, getAttendancePhotoUrl } from "@/lib/data/attendance";
+import type { UIAttendanceRecord, AttendanceStatus, AttendanceData } from "@/lib/data/attendance.types";
 import {
   Bar,
   BarChart,
@@ -15,104 +17,7 @@ import {
   YAxis,
 } from "recharts";
 
-type AttendanceStatus = "Present" | "Absent" | "Late";
-
-type AttendanceRecord = {
-  id: string;
-  studentId: string;
-  studentName: string;
-  className: string;
-  time: string;
-  status: AttendanceStatus;
-  batch: string;
-  date: string;
-  device: string;
-  location: string;
-  photoUrl: string;
-};
-
-const RECORDS: AttendanceRecord[] = [
-  {
-    id: "1",
-    studentId: "STU001",
-    studentName: "Alex Martinez",
-    className: "Computer Science",
-    time: "09:15 AM",
-    status: "Present",
-    batch: "Batch A",
-    date: "2026-01-19",
-    device: "iPhone 13 Pro",
-    location: "Building A, Room 101",
-    photoUrl: "/images/avatar1.png",
-  },
-  {
-    id: "2",
-    studentId: "STU002",
-    studentName: "Emma Williams",
-    className: "Data Science",
-    time: "09:12 AM",
-    status: "Present",
-    batch: "Batch B",
-    date: "2026-01-19",
-    device: "Samsung S23",
-    location: "Building B, Room 203",
-    photoUrl: "/images/avatar2.png",
-  },
-  {
-    id: "3",
-    studentId: "STU003",
-    studentName: "James Taylor",
-    className: "Computer Science",
-    time: "09:35 AM",
-    status: "Late",
-    batch: "Batch C",
-    date: "2026-01-19",
-    device: "MacBook Pro",
-    location: "Building A, Room 201",
-    photoUrl: "/images/avatar3.png",
-  },
-  {
-    id: "4",
-    studentId: "STU004",
-    studentName: "Sophia Brown",
-    className: "Web Development",
-    time: "09:10 AM",
-    status: "Present",
-    batch: "Batch B",
-    date: "2026-01-19",
-    device: "iPhone 12",
-    location: "Building C, Room 101",
-    photoUrl: "/images/avatar.png",
-  },
-  {
-    id: "5",
-    studentId: "STU005",
-    studentName: "Noah Johnson",
-    className: "Data Science",
-    time: "-",
-    status: "Absent",
-    batch: "Batch A",
-    date: "2026-01-19",
-    device: "N/A",
-    location: "N/A",
-    photoUrl: "/images/avatar1.png",
-  },
-];
-
-const WEEKLY_BREAKDOWN = [
-  { day: "Mon", present: 42, absent: 3, late: 2 },
-  { day: "Tue", present: 45, absent: 1, late: 1 },
-  { day: "Wed", present: 44, absent: 2, late: 1 },
-  { day: "Thu", present: 46, absent: 1, late: 0 },
-  { day: "Fri", present: 43, absent: 2, late: 2 },
-];
-
-const MONTHLY_TREND = [
-  { week: "Week 1", rate: 95 },
-  { week: "Week 2", rate: 91 },
-  { week: "Week 3", rate: 97 },
-  { week: "Week 4", rate: 94 },
-];
+type AttendanceRecord = UIAttendanceRecord;
 
 const statusBadgeClass: Record<AttendanceStatus, string> = {
   Present: "bg-[#d9f8e6] text-[#009a3d]",
@@ -143,27 +48,71 @@ const ChartCard = ({ title, children }: { title: string; children: React.ReactNo
   </section>
 );
 
+const EMPTY_ATTENDANCE: AttendanceData = {
+  records: [],
+  stats: { present: 0, absent: 0, late: 0, rate: 0 },
+  weekly: [],
+  monthly: [],
+};
+
 export default function Attencon() {
+  const [data, setData] = useState<AttendanceData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [notice, setNotice] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<AttendanceStatus | "All">("All");
   const [filteredDate, setFilteredDate] = useState<string | null>(null);
   const [selected, setSelected] = useState<AttendanceRecord | null>(null);
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+
+  const attendance = data ?? EMPTY_ATTENDANCE;
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+
+  const refresh = async () => {
+    setLoading(true);
+    try {
+      setData(await getAttendanceData());
+    } catch (e) {
+      setNotice((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    refresh();
+  }, []);
+
+  useEffect(() => {
+    if (!selected) {
+      setPhotoUrl(null);
+      return;
+    }
+    setPhotoUrl(null);
+    getAttendancePhotoUrl(selected.id).then((r) => setPhotoUrl(r.url ?? null));
+  }, [selected]);
+
+  const handleExcuse = async (excuse: "excused" | "unexcused") => {
+    if (!selected) return;
+    const res = await setAttendanceExcuse(selected.id, excuse);
+    if (res.error) {
+      setNotice(res.error);
+      return;
+    }
+    setSelected((prev) => (prev ? { ...prev, excuse } : prev));
+    setNotice(`Marked ${excuse}.`);
+    await refresh();
+  };
 
   const filteredRecords = useMemo(() => {
-    return RECORDS.filter((r) => {
+    return attendance.records.filter((r) => {
       const matchStatus = statusFilter === "All" || r.status === statusFilter;
       const matchDate = !filteredDate || r.date === filteredDate;
       return matchStatus && matchDate;
     });
-  }, [statusFilter, filteredDate]);
+  }, [attendance.records, statusFilter, filteredDate]);
 
-  const summary = useMemo(() => {
-    return {
-      present: 220,
-      absent: 9,
-      late: 6,
-      rate: 93.6,
-    };
-  }, []);
+  const summary = attendance.stats;
 
   const downloadReport = async () => {
     if (typeof window === "undefined") return;
@@ -204,11 +153,13 @@ export default function Attencon() {
 
         <div className="flex items-center gap-[12px]">
           <button
-            onClick={() => setFilteredDate((prev) => (prev ? null : "2026-01-19"))}
-            className="flex h-[48px] min-w-[126px] items-center justify-center gap-[10px] rounded-[8px] border border-[#d6d6d6] bg-white px-[20px] text-[16px] font-normal text-[#F9A618] transition-colors hover:bg-[#fff7e8]"
+            onClick={() => setFilteredDate((prev) => (prev ? null : todayStr))}
+            className={`flex h-[48px] min-w-[126px] items-center justify-center gap-[10px] rounded-[8px] border border-[#d6d6d6] px-[20px] text-[16px] font-normal text-[#F9A618] transition-colors hover:bg-[#fff7e8] ${
+              filteredDate ? "bg-[#fff7e8]" : "bg-white"
+            }`}
           >
             <img src="/images/admin-attendance-filter.svg" alt="" className="h-4 w-4" />
-            Filter
+            {filteredDate ? "Today" : "Filter"}
           </button>
           <button
             onClick={downloadReport}
@@ -220,6 +171,15 @@ export default function Attencon() {
         </div>
       </div>
 
+      {notice && (
+        <div className="mb-[24px] flex items-start justify-between gap-4 rounded-[8px] border border-green-200 bg-green-50 px-4 py-3 text-[14px] font-semibold text-green-700">
+          <span className="break-all">{notice}</span>
+          <button type="button" onClick={() => setNotice(null)} className="shrink-0 text-[13px] underline">
+            Dismiss
+          </button>
+        </div>
+      )}
+
       <div className="mb-[24px] grid grid-cols-1 gap-[18px] sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Total Present" value={summary.present} sub="This week" color="text-[#00a641]" />
         <StatCard label="Total Absent" value={summary.absent} sub="This week" color="text-[#ff0000]" />
@@ -230,7 +190,7 @@ export default function Attencon() {
       <div className="mb-[24px] grid grid-cols-1 gap-[18px] xl:grid-cols-2">
         <ChartCard title="Weekly Attendance Breakdown">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={WEEKLY_BREAKDOWN} margin={{ top: 0, right: 10, left: 18, bottom: 12 }}>
+            <BarChart data={attendance.weekly} margin={{ top: 0, right: 10, left: 18, bottom: 12 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e4d7bd" vertical />
               <XAxis dataKey="day" stroke="#666666" fontSize={13} tickLine={false} axisLine={{ stroke: "#777777" }} />
               <YAxis domain={[0, 60]} ticks={[0, 15, 30, 45, 60]} stroke="#666666" fontSize={13} tickLine={false} axisLine={{ stroke: "#777777" }} />
@@ -250,7 +210,7 @@ export default function Attencon() {
 
         <ChartCard title="Monthly Attendance Trend">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={MONTHLY_TREND} margin={{ top: 3, right: 10, left: 18, bottom: 15 }}>
+            <LineChart data={attendance.monthly} margin={{ top: 3, right: 10, left: 18, bottom: 15 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e4d7bd" vertical />
               <XAxis dataKey="week" stroke="#666666" fontSize={13} tickLine={false} axisLine={{ stroke: "#777777" }} />
               <YAxis domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} stroke="#666666" fontSize={13} tickLine={false} axisLine={{ stroke: "#777777" }} />
@@ -298,7 +258,13 @@ export default function Attencon() {
               </tr>
             </thead>
             <tbody>
-              {filteredRecords.map((r) => (
+              {loading && (
+                <tr><td colSpan={6} className="px-[24px] py-[40px] text-center text-[#777777]">Loading attendance...</td></tr>
+              )}
+              {!loading && filteredRecords.length === 0 && (
+                <tr><td colSpan={6} className="px-[24px] py-[40px] text-center text-[#777777]">No attendance records found.</td></tr>
+              )}
+              {!loading && filteredRecords.map((r) => (
                 <tr key={r.id} className="border-b border-[#e5e5e5] text-[16px] font-normal leading-none text-[#666666] last:border-b-0">
                   <td className="px-[24px] py-[20px] text-[#111111]">{r.studentId}</td>
                   <td className="px-[24px] py-[20px] text-[#111111]">{r.studentName}</td>
@@ -323,12 +289,29 @@ export default function Attencon() {
 
       <AdminFooter />
 
-      {selected && <AttendanceDetailModal record={selected} onClose={() => setSelected(null)} />}
+      {selected && (
+        <AttendanceDetailModal
+          record={selected}
+          photoUrl={photoUrl}
+          onExcuse={handleExcuse}
+          onClose={() => setSelected(null)}
+        />
+      )}
     </div>
   );
 }
 
-function AttendanceDetailModal({ record, onClose }: { record: AttendanceRecord; onClose: () => void }) {
+function AttendanceDetailModal({
+  record,
+  photoUrl,
+  onExcuse,
+  onClose,
+}: {
+  record: AttendanceRecord;
+  photoUrl: string | null;
+  onExcuse: (excuse: "excused" | "unexcused") => void;
+  onClose: () => void;
+}) {
   return (
     <div className="fixed inset-0 z-[250] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
       <div className="flex max-h-[calc(100vh-24px)] w-full max-w-[670px] flex-col overflow-hidden rounded-[8px] bg-white shadow-2xl">
@@ -363,16 +346,51 @@ function AttendanceDetailModal({ record, onClose }: { record: AttendanceRecord; 
           </div>
 
           <h3 className="mt-[25px] text-[16px] font-normal leading-none text-[#666666]">Attendance Status</h3>
-          <div className="mt-[18px]">
+          <div className="mt-[18px] flex items-center gap-[10px]">
             <StatusBadge status={record.status} />
+            {record.excuse !== "none" && (
+              <span
+                className={`inline-flex h-[25px] items-center rounded-full px-[13px] text-[13px] font-normal leading-none ${
+                  record.excuse === "excused" ? "bg-[#dbeafe] text-[#0057ff]" : "bg-[#f1f1f1] text-[#666666]"
+                }`}
+              >
+                {record.excuse === "excused" ? "Excused" : "Unexcused"}
+              </span>
+            )}
           </div>
+
+          {record.status === "Absent" && (
+            <div className="mt-[18px] rounded-[8px] border border-[#d6d6d6] bg-[#fafafa] px-[16px] py-[16px]">
+              <p className="text-[14px] font-normal leading-none text-[#666666]">Absence Management (Super Admin)</p>
+              <div className="mt-[14px] flex gap-[12px]">
+                <button
+                  onClick={() => onExcuse("excused")}
+                  className="h-[38px] rounded-[8px] bg-[#0057ff] px-[18px] text-[15px] font-medium text-white hover:bg-[#0048d1]"
+                >
+                  Mark Excused
+                </button>
+                <button
+                  onClick={() => onExcuse("unexcused")}
+                  className="h-[38px] rounded-[8px] border border-[#d6d6d6] bg-white px-[18px] text-[15px] font-medium text-[#666666] hover:bg-[#f2f2f2]"
+                >
+                  Mark Unexcused
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="mt-[25px] flex items-center gap-[7px] text-[16px] font-normal leading-none text-[#666666]">
             <Camera size={16} strokeWidth={1.8} />
             Photo Proof (Read-Only)
           </div>
-          <div className="mt-[18px] h-[258px] overflow-hidden rounded-t-[8px] bg-[#f4f4f4] px-[112px] pt-[16px]">
-            <img src={record.photoUrl} alt="Attendance proof" className="mx-auto h-[278px] w-full max-w-[400px] rounded-[8px] object-cover object-top" />
+          <div className="mt-[18px] flex h-[258px] items-center justify-center overflow-hidden rounded-[8px] bg-[#f4f4f4]">
+            {photoUrl ? (
+              <img src={photoUrl} alt="Attendance proof" className="h-full w-full max-w-[400px] object-contain" />
+            ) : (
+              <span className="text-[14px] text-[#999999]">
+                {record.hasPhoto ? "Loading photo..." : "No photo proof for this record."}
+              </span>
+            )}
           </div>
         </div>
 
