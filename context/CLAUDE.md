@@ -196,6 +196,27 @@ mentor's `mentor_student_assignments`.
   Cross-cutting follow-ups: attachments for notes & messaging, a resources storage bucket,
   event-driven notification writers.
 
+## 5c. Student Panel (in progress)
+
+The student-facing side of everything above. Guard: **`assertStudent()`** (`lib/data/guards.ts`,
+role='student'; returns userId = `students.id` = `profiles.id`; middleware already restricts
+`/studentpanel`). Data scoped to **self**. Seeded student login: **student@arlene.com** ("Alex",
+enrolled in "Computer Science").
+- **Dashboard** (`Studentpanel.tsx`) — WIRED & verified: **`lib/data/student.ts`** —
+  `getStudentDashboard()` (stats: attendance % + attended/total from `student_attendance_summary`,
+  upcoming sessions within 7d, pending tasks = pending `absence_reports` + pending owned `documents`;
+  today's session from enrolled `class_sessions`; recent messages reuse `listConversations()`;
+  calendar dots from enrolled sessions — classes via `enrollments`) and `submitAbsenceReport(input)`
+  (inserts `absence_reports` pending + notifies the student's active mentor(s) via `createNotification`).
+  Removed fabricated agenda/materials from the session modal.
+- **My Attendance** (`Attendance.tsx`) — WIRED & verified: `getStudentAttendance()` — stats
+  (total/attended/missed/rate/late from `student_attendance_summary`) + history from
+  `attendance_records` (session/mentor/time embeds); month + status filters.
+- **Still to wire:** the **iPad check-in kiosk** (`attendancewrk`, MediaPipe selfie +
+  4-digit code + schedule window → `attendance_records`), Mentor Notes (read own), Messages/
+  Notifications (reuse), Calendar/Documents/Resources/Blog (read), Profile, and the student **auth
+  flow** (`studentverify`/`createpass`/`forgetpassword` — verify code → set password).
+
 ## 6. Frontend — Tech Stack & Structure
 
 **The frontend is complete but entirely static/mock.** No backend wiring exists: no `app/api`,

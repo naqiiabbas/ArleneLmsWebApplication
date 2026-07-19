@@ -1,14 +1,14 @@
 "use client";
 
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Poppins } from 'next/font/google';
-// @ts-ignore
-import type { toJpeg } from 'html-to-image';
-import { 
+import {
   Download,
   ChevronDown,
   Funnel
 } from 'lucide-react';
+import { getStudentAttendance } from '@/lib/data/student';
+import type { StudentAttendance } from '@/lib/data/student.types';
 
 const poppins = Poppins({
   subsets: ['latin'],
@@ -16,36 +16,43 @@ const poppins = Poppins({
   variable: '--font-poppins',
 });
 
-const ATTENDANCE_HISTORY = [
-  { id: 1, date: "Nov 22, 2025", month: "November", session: "Career Development", mentor: "Dr. Sarah Mitchell", time: "2:00 PM - 3:30 PM", status: "Present" },
-  { id: 2, date: "Nov 18, 2025", month: "November", session: "Skills Workshop", mentor: "Prof. James Wilson", time: "10:00 AM - 11:30 AM", status: "Present" },
-  { id: 3, date: "Nov 15, 2025", month: "November", session: "Progress Review", mentor: "Dr. Sarah Mitchell", time: "2:00 PM - 3:00 PM", status: "Present" },
-  { id: 4, date: "Nov 11, 2025", month: "November", session: "Goal Setting", mentor: "Prof. James Wilson", time: "10:00 AM - 11:30 AM", status: "Absent" },
-  { id: 5, date: "Nov 8, 2025", month: "November", session: "Career Development", mentor: "Dr. Sarah Mitchell", time: "2:00 PM - 3:30 PM", status: "Present" },
-  { id: 6, date: "Nov 4, 2025", month: "November", session: "Academic Planning", mentor: "Prof. James Wilson", time: "10:00 AM - 11:30 AM", status: "Present" },
-  { id: 7, date: "Nov 1, 2025", month: "November", session: "Monthly Review", mentor: "Dr. Sarah Mitchell", time: "2:00 PM - 3:00 PM", status: "Absent" },
+const STAT_META: { key: keyof StudentAttendance["stats"]; label: string; icon: string; suffix?: string }[] = [
+  { key: "total", label: "Total Sessions", icon: "/images/attendance-total-sessions.svg" },
+  { key: "attended", label: "Attended", icon: "/images/attendance-attended.svg" },
+  { key: "missed", label: "Missed", icon: "/images/attendance-missed.svg" },
+  { key: "ratePct", label: "Attendance Rate", icon: "/images/attendance-rate.svg", suffix: "%" },
+  { key: "late", label: "Late Arrivals", icon: "/images/attendance-time.svg" },
 ];
 
-const ATTENDANCE_STATS = [
-  { id: 1, label: "Total Sessions", value: "25", icon: "/images/attendance-total-sessions.svg" },
-  { id: 2, label: "Attended", value: "23", icon: "/images/attendance-attended.svg" },
-  { id: 3, label: "Missed", value: "2", icon: "/images/attendance-missed.svg" },
-  { id: 4, label: "Attendance Rate", value: "92%", icon: "/images/attendance-rate.svg" },
-  { id: 5, label: "Attendance Time", value: "2:00", icon: "/images/attendance-time.svg" }
-];
+const EMPTY: StudentAttendance = {
+  stats: { total: 0, attended: 0, missed: 0, ratePct: 0, late: 0 },
+  history: [],
+};
 
 export default function AttendanceSection() {
+  const [data, setData] = useState<StudentAttendance | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [notice, setNotice] = useState<string | null>(null);
   const [selectedMonth, setSelectedMonth] = useState("All Months");
   const [selectedStatus, setSelectedStatus] = useState("All Status");
   const reportRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    getStudentAttendance()
+      .then(setData)
+      .catch((e) => setNotice((e as Error).message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const d = data ?? EMPTY;
+
   const filteredHistory = useMemo(() => {
-    return ATTENDANCE_HISTORY.filter(row => {
+    return d.history.filter(row => {
       const matchesMonth = selectedMonth === "All Months" || row.month === selectedMonth;
       const matchesStatus = selectedStatus === "All Status" || row.status === selectedStatus;
       return matchesMonth && matchesStatus;
     });
-  }, [selectedMonth, selectedStatus]);
+  }, [d.history, selectedMonth, selectedStatus]);
 
   // --- New Stable Export Logic ---
   const handleExportReport = async () => {
@@ -71,7 +78,7 @@ export default function AttendanceSection() {
     }
   };
 
-  const months = ["All Months", ...Array.from(new Set(ATTENDANCE_HISTORY.map(item => item.month)))];
+  const months = ["All Months", ...Array.from(new Set(d.history.map(item => item.month).filter(Boolean)))];
   const statuses = ["All Status", "Present", "Absent"];
 
   return (
@@ -90,18 +97,24 @@ export default function AttendanceSection() {
         </button>
       </div>
 
+      {notice && (
+        <div className="mb-[16px] rounded-[8px] border border-red-200 bg-red-50 px-4 py-3 text-[14px] font-semibold text-red-700">
+          {notice}
+        </div>
+      )}
+
       <div ref={reportRef}>
         {/* Stats Grid */}
         <div className="mb-[24px] grid grid-cols-1 gap-[16px] sm:grid-cols-2 lg:grid-cols-5">
-          {ATTENDANCE_STATS.map((stat) => {
+          {STAT_META.map((stat) => {
             return (
-              <div key={stat.id} className="h-[126px] min-w-0 rounded-[12px] border border-[#dddddd] bg-white px-[22px] py-[24px]">
+              <div key={stat.key} className="h-[126px] min-w-0 rounded-[12px] border border-[#dddddd] bg-white px-[22px] py-[24px]">
                 <div className="grid h-[48px] grid-cols-[48px_minmax(0,1fr)] items-center gap-3">
                   <div className="flex h-[48px] w-[48px] shrink-0 items-center justify-center overflow-hidden rounded-[10px]">
                     <img src={stat.icon} alt="" className="h-[48px] w-[48px]" />
                   </div>
                   <span className="flex h-[48px] items-center justify-end text-[30px] font-medium leading-none text-[#111111]">
-                    {stat.value}
+                    {d.stats[stat.key]}{stat.suffix ?? ""}
                   </span>
                 </div>
                 <p className="mt-[15px] truncate text-[15px] font-normal leading-none text-[#666666]">
@@ -156,6 +169,12 @@ export default function AttendanceSection() {
                 </tr>
               </thead>
               <tbody>
+                {loading && (
+                  <tr><td colSpan={5} className="px-[24px] py-[28px] text-center text-[14px] text-[#666666]">Loading attendance…</td></tr>
+                )}
+                {!loading && filteredHistory.length === 0 && (
+                  <tr><td colSpan={5} className="px-[24px] py-[28px] text-center text-[14px] text-[#666666]">No attendance records found.</td></tr>
+                )}
                 {filteredHistory.map((row) => (
                   <tr key={row.id} className="border-b border-[#e9e9e9] transition-colors last:border-b-0 hover:bg-[#fafafa]">
                     <td className="px-[24px] py-[19px] text-[14px] font-normal text-[#111111]">{row.date}</td>
