@@ -212,6 +212,12 @@ enrolled in "Computer Science").
 - **My Attendance** (`Attendance.tsx`) — WIRED & verified: `getStudentAttendance()` — stats
   (total/attended/missed/rate/late from `student_attendance_summary`) + history from
   `attendance_records` (session/mentor/time embeds); month + status filters.
+- **Notifications** (`Notification.tsx`) — WIRED: reuses `notifications.ts` unchanged (per-user).
+- **Messages** (`Messagesst.tsx`) — WIRED & verified: reuses `messaging.ts` (rewrote from localStorage);
+  new-chat recipient dropdown = `getStudentContacts()` (student's mentors); subject folded into the
+  first message; priority/templates/file-attach UI-only.
+- **Mentor Notes** (`Mentornotes.tsx`) — WIRED & verified: `getStudentNotes()` = notes about the
+  student that are approved + shared + not self-authored; in-page view modal.
 - **Still to wire:** the **iPad check-in kiosk** (`attendancewrk`, MediaPipe selfie +
   4-digit code + schedule window → `attendance_records`), Mentor Notes (read own), Messages/
   Notifications (reuse), Calendar/Documents/Resources/Blog (read), Profile, and the student **auth

@@ -46,6 +46,26 @@ export interface AbsenceReportInput {
   notes: string
 }
 
+export interface StudentContact {
+  id: string
+  name: string
+  role: string
+}
+
+export interface StudentNote {
+  id: string
+  title: string
+  mentor: string
+  role: string
+  date: string
+  description: string
+  content: string
+  attachments: number
+  category: string
+  avatar: string
+  isNew: boolean
+}
+
 export interface StudentAttendanceRow {
   id: string
   date: string // "Nov 22, 2025"

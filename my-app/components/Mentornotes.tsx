@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Poppins } from "next/font/google";
 import {
   Calendar,
@@ -13,6 +13,8 @@ import {
   User,
   X,
 } from "lucide-react";
+import { getStudentNotes } from "@/lib/data/student";
+import type { StudentNote as MentorNote } from "@/lib/data/student.types";
 
 const poppins = Poppins({
   subsets: ["latin"],
@@ -20,119 +22,7 @@ const poppins = Poppins({
   variable: "--font-poppins",
 });
 
-type MentorNote = {
-  id: number;
-  title: string;
-  mentor: string;
-  role: string;
-  date: string;
-  description: string;
-  content: string;
-  attachments: number;
-  category: string;
-  avatar: string;
-  isNew: boolean;
-  borderColor: string;
-};
-
-const MENTOR_NOTES_DATA: MentorNote[] = [
-  {
-    id: 1,
-    title: "Career Development Plan - Q1 Goals",
-    mentor: "Dr. Emily Chen",
-    role: "Career Mentor",
-    date: "3/5/2025",
-    description:
-      "Hi there, I've reviewed your progress from last semester and I'm impressed with your growth! Here are some key areas I'd like you to focus on this qu...",
-    content:
-      "Hi there,\n\nI've reviewed your progress from last semester and I'm impressed with your growth! Here are some key areas I'd like you to focus on this quarter:\n\n**Technical Skills:**\n- Complete the advanced JavaScript course on frontend frameworks\n- Build at least 2 portfolio projects showcasing React skills\n- Practice algorithm problems (aim for 3-4 per week)\n\n**Soft Skills:**\n- Work on presentation skills - prepare for the upcoming project showcase\n- Network with at least 5 professionals in your field of interest",
-    attachments: 2,
-    category: "Career Development",
-    avatar: "/images/avatar1.png",
-    isNew: false,
-    borderColor: "border-[#dddddd]",
-  },
-  {
-    id: 2,
-    title: "Research Paper Feedback",
-    mentor: "Prof. Michael Rodriguez",
-    role: "Academic Mentor",
-    date: "3/4/2025",
-    description:
-      'Hello, I\'ve finished reviewing your draft research paper on "AI in Healthcare". Overall, it\'s a strong piece of work! Here are my notes: **Strengths...',
-    content:
-      'Hello, I\'ve finished reviewing your draft research paper on "AI in Healthcare". Overall, it\'s a strong piece of work! Here are my notes:\n\n**Strengths:**\n- Clear topic and structure\n- Strong literature review\n- Good examples throughout\n\nPlease revise the conclusion and citation formatting before final submission.',
-    attachments: 1,
-    category: "Academic",
-    avatar: "/images/avatar2.png",
-    isNew: false,
-    borderColor: "border-[#dddddd]",
-  },
-  {
-    id: 3,
-    title: "Upcoming Workshop - Leadership Skills",
-    mentor: "Sarah Martinez",
-    role: "Leadership Coach",
-    date: "3/3/2025",
-    description:
-      "Dear Student, I'm organizing a leadership workshop next week and I think you'd benefit greatly from attending. **Workshop Details:** - Date: March ...",
-    content:
-      "Dear Student, I'm organizing a leadership workshop next week and I think you'd benefit greatly from attending.\n\n**Workshop Details:**\n- Date: March 12, 2025\n- Focus: presentation, teamwork, and confidence building\n\nPlease review the attached preparation notes before the session.",
-    attachments: 1,
-    category: "Professional Development",
-    avatar: "/images/avatar3.png",
-    isNew: true,
-    borderColor: "border-[#1976d2]",
-  },
-  {
-    id: 4,
-    title: "Internship Opportunity - Tech Startup",
-    mentor: "James Thompson",
-    role: "Industry Mentor",
-    date: "3/2/2025",
-    description:
-      "Hi, Great news! I came across an internship opportunity that perfectly matches your interests and skills. **Company:** InnovateTech Solutions **Posi...",
-    content:
-      "Hi, Great news! I came across an internship opportunity that perfectly matches your interests and skills.\n\n**Company:** InnovateTech Solutions\n**Position:** Frontend Engineering Intern\n\nPlease prepare your resume and portfolio so we can review them together.",
-    attachments: 2,
-    category: "Career Development",
-    avatar: "/images/avatar.png",
-    isNew: true,
-    borderColor: "border-[#1976d2]",
-  },
-  {
-    id: 5,
-    title: "Monthly Progress Review - February",
-    mentor: "Dr. Emily Chen",
-    role: "Career Mentor",
-    date: "3/1/2025",
-    description:
-      "Hello, Here's a summary of your progress for February: **Achievements:** Completed 3 online courses, attended all mentorship sessions and submitted...",
-    content:
-      "Hello, Here's a summary of your progress for February:\n\n**Achievements:** Completed 3 online courses, attended all mentorship sessions, and submitted the required documents on time.\n\nNext month, let's focus on interview preparation and project documentation.",
-    attachments: 0,
-    category: "Progress Review",
-    avatar: "/images/mentor1.png",
-    isNew: false,
-    borderColor: "border-[#dddddd]",
-  },
-  {
-    id: 6,
-    title: "Study Resources for Upcoming Exam",
-    mentor: "Prof. Michael Rodriguez",
-    role: "Academic Mentor",
-    date: "2/28/2025",
-    description:
-      "Hi there, I've compiled some study resources that will help you prepare for your upcoming Data Structures exam: **Recommended Materials:** - Chapter...",
-    content:
-      "Hi there, I've compiled some study resources that will help you prepare for your upcoming Data Structures exam:\n\n**Recommended Materials:**\n- Chapter review notes\n- Practice problems\n- Recorded workshop links\n\nStart with arrays, linked lists, and recursion before moving to graphs.",
-    attachments: 2,
-    category: "Academic",
-    avatar: "/images/avatar1.png",
-    isNew: false,
-    borderColor: "border-[#dddddd]",
-  },
-];
+const borderFor = (isNew: boolean) => (isNew ? "border-[#1976d2]" : "border-[#dddddd]");
 
 const NoteViewModal = ({
   note,
@@ -187,7 +77,7 @@ const NoteViewModal = ({
 };
 
 const NoteCard = ({ note, onClick }: { note: MentorNote; onClick: () => void }) => (
-  <article className={`relative min-h-[212px] rounded-[12px] border ${note.borderColor} bg-white px-[22px] py-[24px]`}>
+  <article className={`relative min-h-[212px] rounded-[12px] border ${borderFor(note.isNew)} bg-white px-[22px] py-[24px]`}>
     <div className="flex items-start gap-[16px]">
       <img src={note.avatar} alt={note.mentor} className="h-[48px] w-[48px] shrink-0 rounded-full object-cover" />
       <div className="min-w-0 flex-1 pr-[54px] md:pr-[150px]">
@@ -221,7 +111,9 @@ const NoteCard = ({ note, onClick }: { note: MentorNote; onClick: () => void }) 
 );
 
 const MentorNotesPanel = () => {
-  const [notes, setNotes] = useState(MENTOR_NOTES_DATA);
+  const [notes, setNotes] = useState<MentorNote[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [notice, setNotice] = useState<string | null>(null);
   const [selectedNote, setSelectedNote] = useState<MentorNote | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedMentor, setSelectedMentor] = useState("All Mentor");
@@ -229,16 +121,19 @@ const MentorNotesPanel = () => {
   const [showMentorDropdown, setShowMentorDropdown] = useState(false);
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
 
+  useEffect(() => {
+    getStudentNotes()
+      .then(setNotes)
+      .catch((e) => setNotice((e as Error).message))
+      .finally(() => setLoading(false));
+  }, []);
+
   const newNotesCount = useMemo(() => notes.filter((n) => n.isNew).length, [notes]);
 
-  const handleViewNote = (id: number) => {
+  const handleViewNote = (id: string) => {
     const noteToView = notes.find((note) => note.id === id) || null;
-    setNotes((prev) =>
-      prev.map((note) =>
-        note.id === id ? { ...note, isNew: false, borderColor: "border-[#dddddd]" } : note
-      )
-    );
-    setSelectedNote(noteToView ? { ...noteToView, isNew: false, borderColor: "border-[#dddddd]" } : null);
+    setNotes((prev) => prev.map((note) => (note.id === id ? { ...note, isNew: false } : note)));
+    setSelectedNote(noteToView ? { ...noteToView, isNew: false } : null);
   };
 
   const mentors = useMemo(() => ["All Mentor", ...Array.from(new Set(notes.map((n) => n.mentor)))], [notes]);
@@ -331,14 +226,24 @@ const MentorNotesPanel = () => {
         </div>
       </div>
 
+      {notice && (
+        <div className="mb-[16px] rounded-[12px] border border-red-200 bg-red-50 px-4 py-3 text-[14px] font-semibold text-red-700">
+          {notice}
+        </div>
+      )}
+
       <div className="space-y-[16px]">
-        {filteredNotes.length > 0 ? (
+        {loading ? (
+          <div className="rounded-[12px] border border-dashed border-[#dddddd] bg-white py-20 text-center">
+            <p className="text-[15px] font-normal text-[#666666]">Loading notes…</p>
+          </div>
+        ) : filteredNotes.length > 0 ? (
           filteredNotes.map((note) => (
             <NoteCard key={note.id} note={note} onClick={() => handleViewNote(note.id)} />
           ))
         ) : (
           <div className="rounded-[12px] border border-dashed border-[#dddddd] bg-white py-20 text-center">
-            <p className="text-[15px] font-normal text-[#666666]">No notes found matching your criteria.</p>
+            <p className="text-[15px] font-normal text-[#666666]">No notes from your mentors yet.</p>
           </div>
         )}
       </div>

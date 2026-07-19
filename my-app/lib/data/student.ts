@@ -9,9 +9,13 @@ import type {
   StudentAttendance,
   StudentAttendanceRow,
   StudentCalendarEvent,
+  StudentContact,
   StudentDashboard,
+  StudentNote,
   StudentTodaySession,
 } from "@/lib/data/student.types"
+
+const DEFAULT_AVATAR = "/images/avatar1.png"
 
 function clock(iso: string | null): string {
   if (!iso) return ""
@@ -212,6 +216,88 @@ export async function getStudentAttendance(): Promise<StudentAttendance> {
     stats: { total, attended: present + late, missed: absent, ratePct, late },
     history,
   }
+}
+
+function snippet(content: string | null, len = 160): string {
+  const t = (content ?? "").replace(/\s+/g, " ").trim()
+  return t.length > len ? `${t.slice(0, len)}...` : t
+}
+
+function formatRole(r: string | null): string {
+  if (!r) return ""
+  return r
+    .split("_")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ")
+}
+
+/** Approved, shared notes written about this student (Mentor Notes). */
+export async function getStudentNotes(): Promise<StudentNote[]> {
+  const { userId } = await assertStudent()
+  const admin = createAdminClient()
+
+  const { data, error } = await admin
+    .from("notes")
+    .select(
+      "id, title, content, category, created_at, author_role, author:profiles ( full_name, avatar_url ), note_attachments ( id )",
+    )
+    .eq("student_id", userId)
+    .eq("status", "approved")
+    .eq("visibility", "shared")
+    .neq("author_id", userId) // exclude the student's own notes — this screen is notes *from* mentors
+    .order("created_at", { ascending: false })
+  if (error) throw new Error(error.message)
+
+  const weekAgo = new Date()
+  weekAgo.setDate(weekAgo.getDate() - 7)
+
+  return ((data ?? []) as unknown as {
+    id: string
+    title: string
+    content: string | null
+    category: string | null
+    created_at: string | null
+    author_role: string | null
+    author: { full_name: string | null; avatar_url: string | null } | null
+    note_attachments: { id: string }[] | null
+  }[]).map((n) => ({
+    id: n.id,
+    title: n.title,
+    mentor: n.author?.full_name ?? "Your mentor",
+    role: formatRole(n.author_role) || "Mentor",
+    date: n.created_at ? new Date(n.created_at).toLocaleDateString("en-US") : "",
+    description: snippet(n.content),
+    content: n.content ?? "",
+    attachments: (n.note_attachments ?? []).length,
+    category: n.category ?? "Note",
+    avatar: n.author?.avatar_url || DEFAULT_AVATAR,
+    isNew: !!n.created_at && new Date(n.created_at) >= weekAgo,
+  }))
+}
+
+/** The student's assigned mentor(s) — recipients for the "New Conversation" dropdown. */
+export async function getStudentContacts(): Promise<StudentContact[]> {
+  const { userId } = await assertStudent()
+  const admin = createAdminClient()
+
+  const { data } = await admin
+    .from("mentor_student_assignments")
+    .select("mentor:profiles!mentor_student_assignments_mentor_id_fkey ( id, full_name, role )")
+    .eq("student_id", userId)
+    .eq("status", "active")
+
+  const rows = (data ?? []) as unknown as {
+    mentor: { id: string; full_name: string | null; role: string | null } | null
+  }[]
+  const seen = new Set<string>()
+  const contacts: StudentContact[] = []
+  for (const r of rows) {
+    if (r.mentor?.id && !seen.has(r.mentor.id)) {
+      seen.add(r.mentor.id)
+      contacts.push({ id: r.mentor.id, name: r.mentor.full_name ?? "Mentor", role: "Mentor" })
+    }
+  }
+  return contacts
 }
 
 /** Submit an absence report; notifies the student's active mentor(s). */
