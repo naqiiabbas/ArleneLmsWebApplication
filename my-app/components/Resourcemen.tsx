@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
   CheckCircle2,
@@ -17,71 +17,16 @@ import {
   Upload,
   X,
 } from "lucide-react";
+import {
+  getMentorResources,
+  createMentorResource,
+  updateMentorResource,
+  deleteMentorResource,
+} from "@/lib/data/mentor";
+import type { MentorResource, MentorResourceStatus } from "@/lib/data/mentor.types";
 
-type ResourceStatus = "Approved" | "Pending" | "Rejected";
-
-interface Resource {
-  id: string;
-  title: string;
-  description: string;
-  category: string;
-  type: string;
-  status: ResourceStatus;
-  isFeatured: boolean;
-  rating: number;
-  submittedDate: string;
-  link?: string;
-  fileName?: string;
-}
-
-const INITIAL_RESOURCES: Resource[] = [
-  {
-    id: "1",
-    title: "College Application Guide 2025",
-    description: "Complete step-by-step guide for college applications, essays, and deadlines",
-    category: "College Preparation",
-    type: "Applications",
-    status: "Approved",
-    isFeatured: true,
-    rating: 4.8,
-    submittedDate: "2024-11-20",
-    link: "https://example.com/college-guide",
-  },
-  {
-    id: "2",
-    title: "SAT & ACT Test Prep - Khan Academy",
-    description: "Free comprehensive test preparation courses with practice tests and video lessons",
-    category: "College Preparation",
-    type: "Test Prep",
-    status: "Approved",
-    isFeatured: true,
-    rating: 4.9,
-    submittedDate: "2024-11-18",
-    link: "https://example.com/sat-prep",
-  },
-  {
-    id: "3",
-    title: "Resume Building Workshop",
-    description: "Interactive workshop on creating professional resumes for college and career",
-    category: "Career Development",
-    type: "Workshop",
-    status: "Pending",
-    isFeatured: false,
-    rating: 0,
-    submittedDate: "2024-11-25",
-  },
-  {
-    id: "4",
-    title: "Mental Health Resources for Students",
-    description: "Comprehensive guide to mental health support and wellness practices",
-    category: "Health & Wellness",
-    type: "Interactive",
-    status: "Rejected",
-    isFeatured: false,
-    rating: 0,
-    submittedDate: "2024-11-15",
-  },
-];
+type ResourceStatus = MentorResourceStatus;
+type Resource = MentorResource;
 
 const categories = ["College Preparation", "Career Development", "Health & Wellness"];
 const resourceTypes = ["Applications", "Test Prep", "Workshop", "Interactive"];
@@ -222,7 +167,9 @@ const ResourceCard = ({
 );
 
 export default function LearningResourcesSection() {
-  const [resources, setResources] = useState<Resource[]>(INITIAL_RESOURCES);
+  const [resources, setResources] = useState<Resource[]>([]);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterCategory, setFilterCategory] = useState("All");
   const [filterStatus, setFilterStatus] = useState("All");
@@ -235,6 +182,14 @@ export default function LearningResourcesSection() {
   const editFileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
   const [editFileName, setEditFileName] = useState<string | null>(null);
+
+  const loadResources = () => {
+    getMentorResources()
+      .then(setResources)
+      .catch((e) => setNotice((e as Error).message));
+  };
+
+  useEffect(loadResources, []);
 
   const stats = useMemo(
     () => ({
@@ -263,47 +218,49 @@ export default function LearningResourcesSection() {
     else setEditFileName(event.target.files[0].name);
   };
 
-  const handleAddSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleAddSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (saving) return;
     const formData = new FormData(event.currentTarget);
-    const newResource: Resource = {
-      id: Math.random().toString(36).slice(2, 11),
-      title: formData.get("title") as string,
-      description: formData.get("description") as string,
-      category: formData.get("category") as string,
-      type: formData.get("type") as string,
-      status: "Pending",
-      isFeatured: formData.get("featured") === "on",
-      rating: 0,
-      submittedDate: new Date().toISOString().split("T")[0],
-      link: formData.get("link") as string,
-      fileName: selectedFileName || undefined,
-    };
-    setResources([newResource, ...resources]);
+    setSaving(true);
+    const res = await createMentorResource({
+      title: (formData.get("title") as string) ?? "",
+      description: (formData.get("description") as string) ?? "",
+      category: (formData.get("category") as string) ?? "",
+      type: (formData.get("type") as string) ?? "",
+      link: (formData.get("link") as string) ?? "",
+      featured: formData.get("featured") === "on",
+    });
+    setSaving(false);
+    if (res.error) {
+      setNotice(res.error);
+      return;
+    }
     setIsAddModalOpen(false);
     setSelectedFileName(null);
+    loadResources();
   };
 
-  const handleEditSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleEditSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!activeResource) return;
+    if (!activeResource || saving) return;
     const formData = new FormData(event.currentTarget);
-    setResources((current) =>
-      current.map((resource) =>
-        resource.id === activeResource.id
-          ? {
-              ...resource,
-              title: formData.get("title") as string,
-              description: formData.get("description") as string,
-              category: formData.get("category") as string,
-              type: formData.get("type") as string,
-              link: formData.get("link") as string,
-              fileName: editFileName || resource.fileName,
-            }
-          : resource,
-      ),
-    );
+    setSaving(true);
+    const res = await updateMentorResource(activeResource.id, {
+      title: (formData.get("title") as string) ?? "",
+      description: (formData.get("description") as string) ?? "",
+      category: (formData.get("category") as string) ?? "",
+      type: (formData.get("type") as string) ?? "",
+      link: (formData.get("link") as string) ?? "",
+      featured: activeResource.isFeatured,
+    });
+    setSaving(false);
+    if (res.error) {
+      setNotice(res.error);
+      return;
+    }
     setIsEditModalOpen(false);
+    loadResources();
   };
 
   const openEditModal = (resource: Resource) => {
@@ -312,11 +269,17 @@ export default function LearningResourcesSection() {
     setIsEditModalOpen(true);
   };
 
-  const handleDeleteConfirm = () => {
+  const handleDeleteConfirm = async () => {
     if (!deleteId) return;
-    setResources(resources.filter((resource) => resource.id !== deleteId));
+    const id = deleteId;
+    setResources(resources.filter((resource) => resource.id !== id));
     setIsDeleteModalOpen(false);
     setDeleteId(null);
+    const res = await deleteMentorResource(id);
+    if (res.error) {
+      setNotice(res.error);
+      loadResources();
+    }
   };
 
   return (
@@ -339,6 +302,13 @@ export default function LearningResourcesSection() {
             Add Resource
           </button>
         </div>
+
+        {notice && (
+          <div className="mb-[16px] flex items-start justify-between gap-4 rounded-[8px] border border-red-200 bg-red-50 px-4 py-3 text-[14px] font-semibold text-red-700">
+            <span className="break-all">{notice}</span>
+            <button type="button" onClick={() => setNotice(null)} className="shrink-0 text-[13px] underline">Dismiss</button>
+          </div>
+        )}
 
         <div className="mb-[25px] grid grid-cols-1 gap-[16px] md:grid-cols-2 xl:grid-cols-4">
           <StatCard label="Total Resources" value={stats.total} icon={<LinkIcon size={25} />} iconClass="bg-[#dceaff] text-[#006dff]" />

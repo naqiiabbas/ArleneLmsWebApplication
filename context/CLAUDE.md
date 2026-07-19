@@ -146,7 +146,7 @@ Separate signed addendum. Classroom-mounted **iPad**, zero teacher involvement, 
 
 ---
 
-## 5b. Mentor Panel (in progress)
+## 5b. Mentor Panel (COMPLETE — except iPad check-in kiosk)
 
 Making the platform usable for mentors. Guard: **`assertMentor()`** (`lib/data/guards.ts`,
 role='mentor'; middleware already restricts `/mentorshippanel` to mentors). Data scoped to the
@@ -175,8 +175,26 @@ mentor's `mentor_student_assignments`.
   user-scoped via `currentUserId()`, not admin-gated). Component mirrors the admin `Messagesadmin`
   pattern (load + 5s poll + mark-read + scroll); new-chat modal uses `getAssignedStudentOptions()`
   (new mentor.ts export) → `createDirectConversation(name)` + initial message. Attachments UI-only.
-- **Still to wire:** Documents/Calendar/Notifications/Resources/Blog/Settings (reuse existing data
-  layers, scoped). Also the **iPad attendance check-in** kiosk.
+- **Notifications** (`Notificationmentor.tsx`) — WIRED & verified: **reuses `notifications.ts`
+  unchanged** (already per-user). Maps DB `type` → icon/colour; mark-read / mark-all / delete.
+- **Calendar** (`Calendarmen.tsx`) — WIRED & verified: `getMentorCalendar()` (mentor's `class_sessions`
+  + classes for the dropdown) + `createMentorSession(input)` (inserts a `class_sessions` row with
+  mentor_id=me). Read grid/upcoming/details; create picks a class. Session notes not persisted
+  (no column).
+- **Documents** (`Documentmen.tsx`) — WIRED & verified: owner-scoped `getMentorDocuments` +
+  `uploadMentorDocument` (real file → `documents` bucket, status pending → admin approval) +
+  `getMentorDocumentUrl` (signed) + `deleteMentorDocument`.
+- **Resources** (`Resourcemen.tsx`) — WIRED & verified: owner-scoped get/create/update/delete;
+  **link-based** (kind='link'); UI "type" round-trips via `tags[0]`; status pending → admin
+  moderation. File-upload UI-only (no resources bucket) — follow-up.
+- **Blog** (`Blogsmen.tsx`) — WIRED & verified: owner-scoped `getMentorBlogPosts` +
+  `saveMentorBlogPost` (create/update own, real image → `blog` bucket, publish/draft) +
+  `deleteMentorBlogPost`. blog_posts has no moderation state, so mentor posts publish live
+  (matches the "Publish Now" UI).
+- **Settings** — the mentor route renders the admin `Settings` component, already wired & self-scoped.
+- **Remaining:** only the **iPad attendance check-in** kiosk (student-facing, separate build).
+  Cross-cutting follow-ups: attachments for notes & messaging, a resources storage bucket,
+  event-driven notification writers.
 
 ## 6. Frontend — Tech Stack & Structure
 

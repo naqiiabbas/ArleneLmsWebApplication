@@ -1,6 +1,6 @@
 "use client";
 
-import React, { ChangeEvent, ReactNode, useMemo, useState } from "react";
+import React, { ChangeEvent, ReactNode, useEffect, useMemo, useState } from "react";
 import {
   ChevronDown,
   Clock,
@@ -13,18 +13,15 @@ import {
   Upload,
   X,
 } from "lucide-react";
+import {
+  getMentorDocuments,
+  uploadMentorDocument,
+  getMentorDocumentUrl,
+  deleteMentorDocument,
+} from "@/lib/data/mentor";
+import type { MentorDocument } from "@/lib/data/mentor.types";
 
-interface DocumentItem {
-  id: string;
-  name: string;
-  category: string;
-  student: string;
-  uploadDate: string;
-  size: string;
-  numericSize: number;
-  type?: string;
-  status: string;
-}
+type DocumentItem = MentorDocument;
 
 interface ModalProps {
   isOpen: boolean;
@@ -35,65 +32,8 @@ interface ModalProps {
   icon?: ReactNode;
 }
 
-const initialDocuments: DocumentItem[] = [
-  {
-    id: "1",
-    name: "Math Study Guide.pdf",
-    category: "Academic Resources",
-    student: "Marcus Johnson",
-    uploadDate: "2024-11-25",
-    size: "2.4 MB",
-    numericSize: 2.4,
-    type: "pdf",
-    status: "approved",
-  },
-  {
-    id: "2",
-    name: "College Application Checklist.docx",
-    category: "Career Planning",
-    student: "David Williams",
-    uploadDate: "2024-11-22",
-    size: "156 KB",
-    numericSize: 0.15,
-    type: "docx",
-    status: "approved",
-  },
-  {
-    id: "3",
-    name: "Progress Report - Q1.pdf",
-    category: "Reports",
-    student: "James Brown",
-    uploadDate: "2024-11-20",
-    size: "890 KB",
-    numericSize: 0.89,
-    type: "pdf",
-    status: "approved",
-  },
-  {
-    id: "4",
-    name: "SAT Prep Resources.zip",
-    category: "Academic Resources",
-    student: "All Students",
-    uploadDate: "2024-11-18",
-    size: "15.2 MB",
-    numericSize: 15.2,
-    type: "zip",
-    status: "approved",
-  },
-  {
-    id: "5",
-    name: "Meeting Notes Template.docx",
-    category: "Templates",
-    student: "Personal",
-    uploadDate: "2024-11-15",
-    size: "45 KB",
-    numericSize: 0.04,
-    type: "docx",
-    status: "approved",
-  },
-];
-
 const categories = ["All Categories", "Academic Resources", "Career Planning", "Reports", "Templates"];
+const uploadCategories = ["Academic Resources", "Career Planning", "Reports", "Templates"];
 
 const Modal = ({ isOpen, onClose, title, children, width = "max-w-[448px]", icon }: ModalProps) => {
   if (!isOpen) return null;
@@ -134,16 +74,30 @@ const ModalSvgIcon = ({ src, size = 20 }: { src: string; size?: number }) => (
 );
 
 export default function DocumentManagement() {
-  const [documents, setDocuments] = useState<DocumentItem[]>(initialDocuments);
+  const [documents, setDocuments] = useState<DocumentItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [notice, setNotice] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All Categories");
   const [pendingUpload, setPendingUpload] = useState<DocumentItem | null>(null);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [uploadCategory, setUploadCategory] = useState("Academic Resources");
+  const [uploading, setUploading] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [activeDoc, setActiveDoc] = useState<DocumentItem | null>(null);
+
+  const loadDocuments = () => {
+    getMentorDocuments()
+      .then(setDocuments)
+      .catch((e) => setNotice((e as Error).message))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(loadDocuments, []);
 
   const totalLimitMB = 1024;
   const currentUsedMB = useMemo(() => documents.reduce((acc, doc) => acc + doc.numericSize, 0), [documents]);
@@ -167,39 +121,63 @@ export default function DocumentManagement() {
     const file = event.target.files?.[0];
     if (!file) return;
     const sizeMB = file.size / (1024 * 1024);
+    setPendingFile(file);
     setPendingUpload({
       id: Math.random().toString(36).slice(2, 11),
       name: file.name,
-      category: "Academic Resources",
-      student: "All Students",
+      category: uploadCategory,
+      student: "—",
       uploadDate: new Date().toISOString().split("T")[0],
       size: sizeMB < 1 ? `${(file.size / 1024).toFixed(0)} KB` : `${sizeMB.toFixed(1)} MB`,
       numericSize: sizeMB,
-      type: file.name.split(".").pop(),
+      type: (file.name.split(".").pop() ?? "file").toLowerCase(),
       status: "pending",
     });
   };
 
-  const confirmUpload = () => {
-    if (!pendingUpload) return;
-    setDocuments((previous) => [pendingUpload, ...previous]);
+  const confirmUpload = async () => {
+    if (!pendingFile || uploading) return;
+    setUploading(true);
+    const fd = new FormData();
+    fd.append("file", pendingFile);
+    fd.append("name", pendingUpload?.name ?? pendingFile.name);
+    fd.append("category", uploadCategory);
+    const res = await uploadMentorDocument(fd);
+    setUploading(false);
+    if (res.error) {
+      setNotice(res.error);
+      return;
+    }
     setPendingUpload(null);
+    setPendingFile(null);
     setIsUploadModalOpen(false);
     setIsSuccessModalOpen(true);
+    loadDocuments();
   };
 
-  const deleteDocument = () => {
+  const deleteDocument = async () => {
     if (!activeDoc) return;
-    setDocuments((previous) => previous.filter((document) => document.id !== activeDoc.id));
+    const id = activeDoc.id;
+    setDocuments((previous) => previous.filter((document) => document.id !== id));
     setIsDeleteModalOpen(false);
     setActiveDoc(null);
+    const res = await deleteMentorDocument(id);
+    if (res.error) {
+      setNotice(res.error);
+      loadDocuments();
+    }
   };
 
-  const downloadFile = (doc: DocumentItem | null) => {
+  const downloadFile = async (doc: DocumentItem | null) => {
     if (!doc) return;
-    console.log(`Downloading: ${doc.name}`);
     setIsDownloadModalOpen(false);
     setIsViewModalOpen(false);
+    const res = await getMentorDocumentUrl(doc.id);
+    if (res.error || !res.url) {
+      setNotice(res.error ?? "Could not open the file.");
+      return;
+    }
+    window.open(res.url, "_blank", "noopener,noreferrer");
   };
 
   const openDocModal = (doc: DocumentItem, modal: "view" | "download" | "delete") => {
@@ -225,6 +203,13 @@ export default function DocumentManagement() {
           Upload Document
         </button>
       </div>
+
+      {notice && (
+        <div className="mb-[16px] flex items-start justify-between gap-4 rounded-[8px] border border-red-200 bg-red-50 px-4 py-3 text-[14px] font-semibold text-red-700">
+          <span className="break-all">{notice}</span>
+          <button type="button" onClick={() => setNotice(null)} className="shrink-0 text-[13px] underline">Dismiss</button>
+        </div>
+      )}
 
       <div className="mb-[24px] rounded-[8px] border border-[#d8dde3] bg-white p-[16px]">
         <div className="flex flex-col gap-[18px] lg:flex-row lg:items-center">
@@ -301,6 +286,12 @@ export default function DocumentManagement() {
               </tr>
             </thead>
             <tbody className="divide-y divide-[#e7e7e7]">
+              {loading && (
+                <tr><td colSpan={6} className="px-[16px] py-[28px] text-center text-[15px] text-[#666666]">Loading documents…</td></tr>
+              )}
+              {!loading && filteredDocs.length === 0 && (
+                <tr><td colSpan={6} className="px-[16px] py-[28px] text-center text-[15px] text-[#666666]">No approved documents yet.</td></tr>
+              )}
               {filteredDocs.map((doc) => (
                 <tr key={doc.id} className="h-[65px] text-[16px] font-normal text-[#666666]">
                   <td className="px-[16px]">
@@ -353,15 +344,21 @@ export default function DocumentManagement() {
           </label>
           <div className="mt-[20px]">
             <label className="mb-[9px] block text-[16px] font-normal leading-none text-[#6c757d]">Category</label>
-            <div className="flex h-[43px] w-full items-center rounded-[8px] border border-[#d8dde3] bg-white px-[10px] text-[16px] font-normal text-[#6c757d]">
-              Academic Resources
+            <div className="relative">
+              <select
+                value={uploadCategory}
+                onChange={(event) => setUploadCategory(event.target.value)}
+                className="h-[43px] w-full appearance-none rounded-[8px] border border-[#d8dde3] bg-white px-[10px] pr-[42px] text-[16px] font-normal text-[#2b3b4d] outline-none focus:border-[#ffa313]"
+              >
+                {uploadCategories.map((category) => (
+                  <option key={category} value={category}>{category}</option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-[16px] top-1/2 -translate-y-1/2 text-[#666666]" size={20} />
             </div>
           </div>
-          <div className="mt-[16px]">
-            <label className="mb-[9px] block text-[16px] font-normal leading-none text-[#6c757d]">Share with (optional)</label>
-            <div className="flex h-[43px] w-full items-center rounded-[8px] border border-[#d8dde3] bg-white px-[10px] text-[16px] font-normal text-[#6c757d]">
-              All Students
-            </div>
+          <div className="mt-[16px] rounded-[8px] border border-[#ffdc29] bg-[#fffce6] px-[13px] py-[11px] text-[13px] font-normal leading-[18px] text-[#a95c00]">
+            Uploaded documents are submitted for admin approval before they appear as approved.
           </div>
         </div>
         <ModalFooter>
@@ -371,10 +368,10 @@ export default function DocumentManagement() {
           <button
             type="button"
             onClick={confirmUpload}
-            disabled={!pendingUpload}
-            className={`h-[39px] rounded-[8px] px-[20px] text-[15px] font-medium text-white ${pendingUpload ? "bg-[#ffa313]" : "bg-[#ffd28a]"}`}
+            disabled={!pendingFile || uploading}
+            className={`h-[39px] rounded-[8px] px-[20px] text-[15px] font-medium text-white ${pendingFile && !uploading ? "bg-[#ffa313]" : "bg-[#ffd28a]"}`}
           >
-            Upload
+            {uploading ? "Uploading…" : "Upload"}
           </button>
         </ModalFooter>
       </Modal>
