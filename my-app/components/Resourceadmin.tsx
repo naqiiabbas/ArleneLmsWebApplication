@@ -1,147 +1,10 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { listResources, setResourceStatus } from "@/lib/data/resources";
+import type { UIResource, ResourceStatus } from "@/lib/data/resources.types";
 
-type ResourceStatus = "pending" | "approved" | "rejected";
-
-type Resource = {
-  id: string;
-  title: string;
-  description: string;
-  uploader: string;
-  role: string;
-  course: string;
-  size: string;
-  date: string;
-  status: ResourceStatus;
-  tags: string[];
-  category: string;
-  type: string;
-  downloads: number;
-  rating?: string;
-  difficulty?: string;
-  estimatedTime?: string;
-  featured?: boolean;
-  iconType?: "file" | "link" | "image";
-};
-
-const DATA: Resource[] = [
-  {
-    id: "r1",
-    title: "Introduction to Python Programming",
-    description: "Comprehensive guide covering Python basics, data types, control structures, and functions.",
-    uploader: "Dr. Sarah Johnson",
-    role: "Mentor",
-    course: "Python Fundamentals",
-    size: "2.5 MB",
-    date: "2025-11-27 02:30 PM",
-    status: "pending",
-    tags: ["python", "beginner", "programming"],
-    category: "tutorial",
-    type: "pdf",
-    downloads: 0,
-    rating: "4.8 / 5.0",
-    difficulty: "Beginner",
-    estimatedTime: "2 hours",
-    featured: true,
-    iconType: "file",
-  },
-  {
-    id: "r2",
-    title: "Advanced React Patterns Video Series",
-    description: "Video tutorial series covering advanced React patterns including hooks, context, and performance optimization.",
-    uploader: "Prof. Michael Chen",
-    role: "Mentor",
-    course: "Web Development",
-    size: "150 MB",
-    date: "2025-11-26 11:00 AM",
-    status: "approved",
-    tags: ["react", "advanced", "javascript"],
-    category: "video",
-    type: "mp4",
-    downloads: 45,
-    rating: "4.7 / 5.0",
-    difficulty: "Advanced",
-    estimatedTime: "3 hours",
-    iconType: "link",
-  },
-  {
-    id: "r3",
-    title: "Data Structures Cheat Sheet",
-    description: "Quick reference guide for common data structures with time complexity analysis.",
-    uploader: "Dr. Robert Kim",
-    role: "Mentor",
-    course: "Data Structures",
-    size: "1.2 MB",
-    date: "2025-11-26 09:00 AM",
-    status: "approved",
-    tags: ["data-structures", "reference", "algorithms"],
-    category: "reference",
-    type: "pdf",
-    downloads: 128,
-    rating: "4.6 / 5.0",
-    difficulty: "Intermediate",
-    estimatedTime: "45 min",
-    iconType: "link",
-  },
-  {
-    id: "r4",
-    title: "Machine Learning Assignment 5",
-    description: "Practical exercises on neural networks and backpropagation with starter code.",
-    uploader: "Prof. Emily Rodriguez",
-    role: "Mentor",
-    course: "Machine Learning",
-    size: "3.8 MB",
-    date: "2025-11-27 04:00 PM",
-    status: "pending",
-    tags: ["machine-learning", "neural-networks", "assignment"],
-    category: "assignment",
-    type: "pdf",
-    downloads: 12,
-    rating: "4.5 / 5.0",
-    difficulty: "Advanced",
-    estimatedTime: "4 hours",
-    iconType: "file",
-  },
-  {
-    id: "r5",
-    title: "Database Design Diagrams",
-    description: "Collection of ER diagrams and normalization examples for database design.",
-    uploader: "Dr. James Wilson",
-    role: "Mentor",
-    course: "Database Systems",
-    size: "5.4 MB",
-    date: "2025-11-25 01:30 PM",
-    status: "approved",
-    tags: ["database", "diagrams", "design"],
-    category: "design",
-    type: "pdf",
-    downloads: 67,
-    rating: "4.9 / 5.0",
-    difficulty: "Intermediate",
-    estimatedTime: "1 hour",
-    iconType: "image",
-  },
-  {
-    id: "r6",
-    title: "External Resource: MDN Web Docs",
-    description: "Comprehensive web development documentation and tutorials.",
-    uploader: "Dr. Sarah Johnson",
-    role: "Mentor",
-    course: "Web Development",
-    size: "-",
-    date: "2025-11-24 10:00 AM",
-    status: "pending",
-    tags: ["documentation", "web", "reference"],
-    category: "link",
-    type: "html",
-    downloads: 5,
-    rating: "4.8 / 5.0",
-    difficulty: "Beginner",
-    estimatedTime: "2 hours",
-    iconType: "link",
-  },
-];
+type Resource = UIResource;
 
 const statusStyle: Record<ResourceStatus, string> = {
   pending: "bg-[#ffe6c2] text-[#c94f00]",
@@ -152,14 +15,33 @@ const statusStyle: Record<ResourceStatus, string> = {
 const labelFor = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
 
 export default function Resourceadmin() {
-  const [resources, setResources] = useState<Resource[]>(DATA);
+  const [resources, setResources] = useState<Resource[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [notice, setNotice] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | ResourceStatus>("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
-  const [selected, setSelected] = useState<Resource | null>(DATA[0]);
+  const [selected, setSelected] = useState<Resource | null>(null);
   const [modal, setModal] = useState<"detail" | "approve" | "reject" | null>(null);
   const [rejectReason, setRejectReason] = useState("");
+
+  const refresh = async () => {
+    setLoading(true);
+    try {
+      const data = await listResources();
+      setResources(data);
+      setSelected((prev) => (prev && data.find((r) => r.id === prev.id)) || data[0] || null);
+    } catch (e) {
+      setNotice((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    refresh();
+  }, []);
 
   useEffect(() => {
     if (!modal) return;
@@ -195,12 +77,18 @@ export default function Resourceadmin() {
     [resources]
   );
 
-  const setStatus = (status: ResourceStatus) => {
+  const setStatus = async (status: ResourceStatus) => {
     if (!selected) return;
-    setResources((previous) => previous.map((resource) => (resource.id === selected.id ? { ...resource, status } : resource)));
-    setSelected((previous) => (previous ? { ...previous, status } : previous));
+    const target = selected;
     setModal(null);
     setRejectReason("");
+    const res = await setResourceStatus(target.id, status);
+    if (res.error) {
+      setNotice(res.error);
+      return;
+    }
+    setNotice(`Resource ${status}.`);
+    await refresh();
   };
 
   return (
@@ -216,6 +104,15 @@ export default function Resourceadmin() {
           </p>
         </div>
       </div>
+
+      {notice && (
+        <div className="mb-4 flex items-start justify-between gap-4 rounded-[8px] border border-green-200 bg-green-50 px-4 py-3 text-[14px] font-semibold text-green-700">
+          <span className="break-all">{notice}</span>
+          <button type="button" onClick={() => setNotice(null)} className="shrink-0 text-[13px] underline">
+            Dismiss
+          </button>
+        </div>
+      )}
 
       <div className="mb-[24px] grid grid-cols-1 gap-[16px] sm:grid-cols-2 xl:grid-cols-5">
         <Stat label="Total Resources" value={stats.total} color="text-[#d6b15c]" />
@@ -245,6 +142,12 @@ export default function Resourceadmin() {
           </div>
 
           <div>
+            {loading && (
+              <p className="px-[18px] py-[24px] text-[14px] text-[#666666]">Loading resources...</p>
+            )}
+            {!loading && filtered.length === 0 && (
+              <p className="px-[18px] py-[24px] text-[14px] text-[#666666]">No resources found.</p>
+            )}
             {filtered.map((resource) => (
               <button
                 key={resource.id}

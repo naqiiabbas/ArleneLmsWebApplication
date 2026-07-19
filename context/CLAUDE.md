@@ -570,6 +570,21 @@ plan detection), loading/empty/notice; simplified the legacy `Amount` special-ca
 sample invoices. No subscription seeded → shows "No active plan". No invoice create/edit UI in the
 mock (view-only); payments gateway still record-keeping (per §9 open item).
 
+**Admin → Resources** (14th slice, verified live): **`lib/data/resources.types.ts`** /
+**`lib/data/resources.ts`** (`"use server"`, `assertAdmin` — admin-tier, no catalog permission).
+`listResources` (embeds `uploader:profiles(full_name)` — resources→profiles only via uploaded_by;
+size formatted from `size_bytes`; `type` derived from file_url/link_url extension or `kind`;
+iconType from kind; rating "X.X / 5.0"; status flagged→pending for the 3-value UI),
+`setResourceStatus(id, status)` (approve/reject). **`components/Resourceadmin.tsx`** — mock removed;
+loads real resources, moderation persists + refetch, filters (search/status/category/type),
+detail/approve/reject modals, loading/empty/notice. Reject reason field kept but not persisted (no
+column). Seeded 2 sample resources. Resources are uploaded by mentors elsewhere (not wired) — this
+is the admin review view.
+
+> **supabase-js gotcha (seed scripts):** a multi-row `.insert([a, b])` where objects have DIFFERENT
+> keys sends NULL for keys missing in some rows (overriding column defaults) → NOT-NULL violation.
+> Insert rows individually, or give every object the same keys.
+
 **Pattern for the next modules:** `lib/data/<module>.ts` (`"use server"` + `assertAdmin()` from
 `lib/data/guards.ts` + service role for privileged ops, or the RLS server client for user-scoped
 reads) → wire the existing `components/*.tsx` (load on mount, mutate + refetch, notice/loading
