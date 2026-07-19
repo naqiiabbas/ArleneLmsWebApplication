@@ -238,6 +238,7 @@ create table if not exists public.profiles (
   role              user_role not null default 'student',
   custom_role_id    uuid references public.custom_roles(id) on delete set null,
   status            user_status not null default 'active',
+  bio               text,
   organization_id   uuid,   -- FK added after organizations table
   last_login_at     timestamptz,
   created_at        timestamptz not null default now(),

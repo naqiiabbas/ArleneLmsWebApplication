@@ -585,6 +585,20 @@ is the admin review view.
 > keys sends NULL for keys missing in some rows (overriding column defaults) → NOT-NULL violation.
 > Insert rows individually, or give every object the same keys.
 
+**Admin → Settings** (15th slice, verified live): **`lib/data/settings.types.ts`** /
+**`lib/data/settings.ts`** (`"use server"`, `assertAdmin`). Four tabs map to different stores:
+**General** + **Security** → `system_settings` (jsonb key/value: site.name/email/timezone/language,
+registration.allow_new/require_approval, security.two_factor_enabled/session_timeout_minutes);
+**Notifications** → the current user's `notification_preferences` (email_enabled/in_app_enabled +
+type_overrides jsonb weekly/monthly); **Profile** → the current admin's `profiles` row (full_name
+from first+last, email w/ auth sync, phone, **bio** [new column], avatar → **first real use of the
+`avatars` public bucket**, stores the public URL). `getSettings` loads all four; `saveGeneral/
+saveSecurity/saveNotifications/saveProfile` persist per-tab. **`components/Settingsadmin.tsx`** —
+mock removed; loads on mount, per-tab save routed by `activeTab`, real avatar upload (tracks File
+separately), notice banner (replaces the old alert). **Schema:** added `profiles.bio` (migration +
+init.sql + regenerated types). Note: 2FA + session-timeout are stored settings, **not yet enforced**
+(2FA would need Supabase MFA).
+
 **Pattern for the next modules:** `lib/data/<module>.ts` (`"use server"` + `assertAdmin()` from
 `lib/data/guards.ts` + service role for privileged ops, or the RLS server client for user-scoped
 reads) → wire the existing `components/*.tsx` (load on mount, mutate + refetch, notice/loading

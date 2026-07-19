@@ -1,45 +1,22 @@
 "use client";
 
-import React, { ChangeEvent, FormEvent, useRef, useState } from "react";
+import React, { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
+import {
+  getSettings,
+  saveGeneral,
+  saveNotifications,
+  saveSecurity,
+  saveProfile,
+} from "@/lib/data/settings";
+import type {
+  GeneralData,
+  NotificationData,
+  SecurityData,
+  ProfileData,
+  SettingsData,
+} from "@/lib/data/settings.types";
 
 type TabId = "general" | "notifications" | "security" | "profile";
-
-interface GeneralData {
-  siteName: string;
-  siteEmail: string;
-  timezone: string;
-  language: string;
-  allowRegistrations: boolean;
-  requireApproval: boolean;
-}
-
-interface NotificationData {
-  emailNotifications: boolean;
-  pushNotifications: boolean;
-  weeklyReports: boolean;
-  monthlyReports: boolean;
-}
-
-interface SecurityData {
-  twoFactorEnabled: boolean;
-  sessionTimeout: string;
-}
-
-interface ProfileData {
-  firstName: string;
-  lastName: string;
-  email: string;
-  phone: string;
-  bio: string;
-  avatarUrl: string;
-}
-
-interface SettingsData {
-  general: GeneralData;
-  notifications: NotificationData;
-  security: SecurityData;
-  profile: ProfileData;
-}
 
 const INITIAL_SETTINGS_DATA: SettingsData = {
   general: {
@@ -90,6 +67,14 @@ export default function Settingsadmin() {
   const [activeTab, setActiveTab] = useState<TabId>("general");
   const [formData, setFormData] = useState<SettingsData>(INITIAL_SETTINGS_DATA);
   const [isLoading, setIsLoading] = useState(false);
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [notice, setNotice] = useState<{ type: "success" | "error"; msg: string } | null>(null);
+
+  useEffect(() => {
+    getSettings()
+      .then(setFormData)
+      .catch((e) => setNotice({ type: "error", msg: (e as Error).message }));
+  }, []);
 
   const handleUpdate = <K extends keyof SettingsData>(
     section: K,
@@ -108,10 +93,31 @@ export default function Settingsadmin() {
   const handleSave = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setIsLoading(true);
-    await new Promise((resolve) => setTimeout(resolve, 800));
-    console.log("Saved Data:", formData[activeTab]);
-    alert(`${labelForTab(activeTab)} updated successfully!`);
+    let res: { error?: string } = {};
+    if (activeTab === "general") res = await saveGeneral(formData.general);
+    else if (activeTab === "notifications") res = await saveNotifications(formData.notifications);
+    else if (activeTab === "security") res = await saveSecurity(formData.security);
+    else if (activeTab === "profile") {
+      const fd = new FormData();
+      fd.set("firstName", formData.profile.firstName);
+      fd.set("lastName", formData.profile.lastName);
+      fd.set("email", formData.profile.email);
+      fd.set("phone", formData.profile.phone);
+      fd.set("bio", formData.profile.bio);
+      if (avatarFile) fd.set("avatar", avatarFile);
+      else if (formData.profile.avatarUrl === "") fd.set("removeAvatar", "true");
+      res = await saveProfile(fd);
+    }
     setIsLoading(false);
+    if (res.error) {
+      setNotice({ type: "error", msg: res.error });
+      return;
+    }
+    setNotice({ type: "success", msg: `${labelForTab(activeTab)} updated successfully.` });
+    if (activeTab === "profile") {
+      setAvatarFile(null);
+      getSettings().then(setFormData).catch(() => {});
+    }
   };
 
   return (
@@ -123,6 +129,21 @@ export default function Settingsadmin() {
           <p className="text-[15px] leading-5 text-[#666666]">Manage your application preferences</p>
         </div>
       </header>
+
+      {notice && (
+        <div
+          className={`mb-5 flex items-start justify-between gap-4 rounded-[8px] border px-4 py-3 text-[14px] font-semibold ${
+            notice.type === "success"
+              ? "border-green-200 bg-green-50 text-green-700"
+              : "border-red-200 bg-red-50 text-red-700"
+          }`}
+        >
+          <span className="break-all">{notice.msg}</span>
+          <button type="button" onClick={() => setNotice(null)} className="shrink-0 text-[13px] underline">
+            Dismiss
+          </button>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[270px_minmax(0,1fr)]">
         <aside className="min-h-[690px] rounded-[8px] border border-[#d8d8d8] bg-white p-4">
@@ -176,6 +197,7 @@ export default function Settingsadmin() {
               <ProfileSettings
                 data={formData.profile}
                 onChange={(field, value) => handleUpdate("profile", field, value)}
+                onAvatarFile={setAvatarFile}
                 isLoading={isLoading}
               />
             )}
@@ -311,10 +333,12 @@ function SecuritySettings({
 function ProfileSettings({
   data,
   onChange,
+  onAvatarFile,
   isLoading,
 }: {
   data: ProfileData;
   onChange: (field: keyof ProfileData, value: string) => void;
+  onAvatarFile: (file: File | null) => void;
   isLoading: boolean;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -323,6 +347,7 @@ function ProfileSettings({
     const file = event.target.files?.[0];
     if (file) {
       onChange("avatarUrl", URL.createObjectURL(file));
+      onAvatarFile(file);
     }
   };
 
@@ -346,7 +371,10 @@ function ProfileSettings({
         </button>
         <button
           type="button"
-          onClick={() => onChange("avatarUrl", "")}
+          onClick={() => {
+            onChange("avatarUrl", "");
+            onAvatarFile(null);
+          }}
           className="h-[38px] rounded-[8px] border border-[#d8d8d8] bg-white px-4 text-[15px] text-[#666666]"
         >
           Remove
