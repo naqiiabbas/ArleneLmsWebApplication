@@ -419,6 +419,14 @@ async function assignedStudentOptions(
   return { ids: options.map((o) => o.id), options }
 }
 
+/** Just the assigned-student options (id + name) — for dropdowns (e.g. new-chat). */
+export async function getAssignedStudentOptions(): Promise<MentorStudentOption[]> {
+  const { userId } = await assertMentor()
+  const admin = createAdminClient()
+  const { options } = await assignedStudentOptions(admin, userId)
+  return options
+}
+
 /** The mentor's authored notes + assigned-student options (Notes & Reports panel). */
 export async function getMentorNotes(): Promise<{
   notes: MentorNote[]

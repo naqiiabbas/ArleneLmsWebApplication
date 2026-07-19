@@ -171,9 +171,12 @@ mentor's `mentor_student_assignments`.
   `updateMentorNote(id, input)` edits own note (ownership-checked) and resets to pending. Both guard
   that the target student is an active assignment. Each card shows a moderation-status pill.
   **Attachments are UI-only (not persisted)** — follow-up (needs a notes bucket + `note_attachments`).
-- **Still to wire:** Messaging (`Messagesmen` → reuse `messaging.ts`), Documents/Calendar/
-  Notifications/Resources/Blog/Settings (reuse existing data layers, scoped). Also the **iPad
-  attendance check-in** kiosk.
+- **Messaging** (`Messagesmen.tsx`) — WIRED & verified: **reuses `messaging.ts` unchanged** (already
+  user-scoped via `currentUserId()`, not admin-gated). Component mirrors the admin `Messagesadmin`
+  pattern (load + 5s poll + mark-read + scroll); new-chat modal uses `getAssignedStudentOptions()`
+  (new mentor.ts export) → `createDirectConversation(name)` + initial message. Attachments UI-only.
+- **Still to wire:** Documents/Calendar/Notifications/Resources/Blog/Settings (reuse existing data
+  layers, scoped). Also the **iPad attendance check-in** kiosk.
 
 ## 6. Frontend — Tech Stack & Structure
 
