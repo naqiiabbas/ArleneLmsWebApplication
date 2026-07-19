@@ -2,18 +2,27 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Poppins } from 'next/font/google';
-import { 
-  Search, 
-  Plus, 
-  Send, 
-  Paperclip, 
+import {
+  Search,
+  Plus,
+  Send,
+  Paperclip,
   X,
   Filter,
   ChevronDown,
   FileIcon,
-  Download,
   MessageSquarePlus
 } from 'lucide-react';
+import {
+  listConversations,
+  getMessages,
+  sendMessage,
+  markConversationRead,
+  createDirectConversation,
+} from '@/lib/data/messaging';
+import { getStudentContacts } from '@/lib/data/student';
+import type { UIConversation, UIMessage } from '@/lib/data/messaging.types';
+import type { StudentContact } from '@/lib/data/student.types';
 
 const poppins = Poppins({
   subsets: ['latin'],
@@ -21,213 +30,147 @@ const poppins = Poppins({
   variable: '--font-poppins',
 });
 
-// --- Constants ---
-const AVATAR_MAP: Record<string, string> = {
-  m1: "/images/avatar.png",
-  m2: "/images/avatar1.png",
-  m3: "/images/avatar2.png",
-  m4: "/images/avatar3.png",
-  m5: "/images/mentor1.png",
-};
-
-const RECIPIENTS_LIST = [
-  { id: 'm1', name: "Dr. Sarah Mitchell", role: "Senior Career Counselor", avatar: AVATAR_MAP.m1 },
-  { id: 'm2', name: "Prof. James Wilson", role: "Academic Advisor", avatar: AVATAR_MAP.m2 },
-  { id: 'm3', name: "Mentorship & Scholarship Group", role: "83 Member", avatar: AVATAR_MAP.m3 },
-  { id: 'm4', name: "Admin Office", role: "Administration", avatar: AVATAR_MAP.m4 },
-  { id: 'm5', name: "Student Support", role: "Support Team", avatar: AVATAR_MAP.m5 },
-];
-
-const INITIAL_CONVERSATIONS = [
-  { 
-    id: 'm1', 
-    name: "Dr. Sarah Mitchell", 
-    role: "Senior Career Counselor", 
-    avatar: AVATAR_MAP.m1, 
-    lastMsg: "Looking forward to our...", 
-    time: "10m ago", 
-    unread: 2,
-    messages: [
-      { id: 1, text: "Hi Alex! I hope you're doing well. I wanted to remind you about our session today at 2 PM.", time: "10:30 AM", isMe: false },
-      { id: 2, text: "Thank you Dr. Mitchell! I'll be there. Should I bring anything special?", time: "10:35 AM", isMe: true },
-      { id: 3, text: "Yes, please bring your progress report and any questions you might have about your career goals.", time: "10:40 AM", isMe: false },
-      { id: 4, text: "Perfect! I have my report ready and a few questions about internship opportunities.", time: "10:45 AM", isMe: true },
-      { id: 5, text: "Excellent! Looking forward to discussing those opportunities with you. See you soon!", time: "10:50 AM", isMe: false },
-    ]
-  },
-  { 
-    id: 'm2', 
-    name: "Prof. James Wilson", 
-    role: "Academic Advisor", 
-    avatar: AVATAR_MAP.m2, 
-    lastMsg: "Great work on your last...", 
-    time: "1h ago", 
-    unread: 0,
-    messages: [{ id: 1, text: "Great work on your last assignment!", time: "11:00 AM", isMe: false }]
-  },
-  {
-    id: 'm3',
-    name: "Mentorship & Scholarship Group",
-    role: "83 Member",
-    avatar: AVATAR_MAP.m3,
-    lastMsg: "Great work on your last...",
-    time: "1h ago",
-    unread: 0,
-    messages: [{ id: 1, text: "Great work on your last milestone, everyone.", time: "9:15 AM", isMe: false }]
-  },
-  {
-    id: 'm4',
-    name: "Admin Office",
-    role: "Administration",
-    avatar: AVATAR_MAP.m4,
-    lastMsg: "Reminder: Monthly attend...",
-    time: "2h ago",
-    unread: 1,
-    messages: [{ id: 1, text: "Reminder: Monthly attendance verification is due soon.", time: "8:30 AM", isMe: false }]
-  },
-  {
-    id: 'm5',
-    name: "Student Support",
-    role: "Support Team",
-    avatar: AVATAR_MAP.m5,
-    lastMsg: "How can we help you today?",
-    time: "Yesterday",
-    unread: 0,
-    messages: [{ id: 1, text: "How can we help you today?", time: "Yesterday", isMe: false }]
-  }
-];
-
-const STORAGE_KEY = 'student_messages_v2';
-
-const avatarFor = (conversation: any) => AVATAR_MAP[conversation?.id] || conversation?.avatar || "/images/avatar.png";
-
-const normalizeConversations = (items: any[]) =>
-  items.map((item) => ({
-    ...item,
-    avatar: avatarFor(item),
-  }));
-
 export default function MessagingSection() {
-  const [conversations, setConversations] = useState(INITIAL_CONVERSATIONS);
-  const [activeId, setActiveId] = useState(INITIAL_CONVERSATIONS[0]?.id);
-  const [hasLoadedMessages, setHasLoadedMessages] = useState(false);
+  const [conversations, setConversations] = useState<UIConversation[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<UIMessage[]>([]);
+  const [myId, setMyId] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [notice, setNotice] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [msgInput, setMsgInput] = useState("");
+  const [sending, setSending] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [showUnreadOnly, setShowUnreadOnly] = useState(false);
-  
-  // File Upload State
+
+  // File Upload State (UI-only — messaging has no attachment storage yet)
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Modal States
+  // Modal state
+  const [contacts, setContacts] = useState<StudentContact[]>([]);
   const [selectedRecipientId, setSelectedRecipientId] = useState("");
   const [subject, setSubject] = useState("");
   const [priority, setPriority] = useState("Normal");
   const [newMsgText, setNewMsgText] = useState("");
+  const [starting, setStarting] = useState(false);
+
+  const loadConversations = async () => {
+    try {
+      const data = await listConversations();
+      setConversations(data);
+      setActiveId((prev) => prev ?? data[0]?.id ?? null);
+    } catch (e) {
+      setNotice((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadMessages = async (conversationId: string) => {
+    const res = await getMessages(conversationId);
+    if (res.error) {
+      setNotice(res.error);
+      return;
+    }
+    setMyId(res.myId);
+    setMessages(res.messages);
+  };
 
   useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setConversations(normalizeConversations(parsed));
-          setActiveId(parsed[0]?.id);
-        }
-      } catch {
-        localStorage.removeItem(STORAGE_KEY);
-      }
-    }
-    setHasLoadedMessages(true);
+    loadConversations();
   }, []);
 
   useEffect(() => {
-    if (hasLoadedMessages) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(conversations));
+    if (!activeId) {
+      setMessages([]);
+      return;
     }
-  }, [conversations, hasLoadedMessages]);
+    loadMessages(activeId);
+    markConversationRead(activeId).then(() =>
+      setConversations((prev) => prev.map((c) => (c.id === activeId ? { ...c, unreadCount: 0 } : c)))
+    );
+  }, [activeId]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      loadConversations();
+      if (activeId) loadMessages(activeId);
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [activeId]);
+
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [messages]);
 
   const filteredConversations = useMemo(() => {
-    return conversations.filter((conv: any) => {
+    return conversations.filter((conv) => {
       const matchesSearch = conv.name.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesUnread = showUnreadOnly ? conv.unread > 0 : true;
+      const matchesUnread = showUnreadOnly ? conv.unreadCount > 0 : true;
       return matchesSearch && matchesUnread;
     });
   }, [conversations, searchQuery, showUnreadOnly]);
 
-  const activeConv = conversations.find((c: any) => c.id === activeId) || conversations[0];
+  const activeConv = conversations.find((c) => c.id === activeId) ?? null;
 
-  const handleSend = (text: string, file?: File | null) => {
-    if (!text.trim() && !file) return;
-
-    let fileData = null;
-    if (file) {
-      // In real app, you'd upload to server. Here we create a preview URL.
-      fileData = {
-        name: file.name,
-        size: (file.size / 1024).toFixed(1) + " KB",
-        type: file.type,
-        url: URL.createObjectURL(file)
-      };
+  const handleSend = async () => {
+    const text = msgInput.trim();
+    if (!text || !activeId || sending) return;
+    setSending(true);
+    const res = await sendMessage(activeId, text);
+    setSending(false);
+    if (res.error) {
+      setNotice(res.error);
+      return;
     }
-
-    const newMsg = {
-      id: Date.now(),
-      text: text.trim(),
-      file: fileData,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      isMe: true
-    };
-
-    setConversations((prev: any) => prev.map((c: any) => 
-      c.id === activeId ? { 
-        ...c, 
-        messages: [...c.messages, newMsg], 
-        lastMsg: text || (file ? `File: ${file.name}` : ""), 
-        time: "Just now" 
-      } : c
-    ));
-
     setMsgInput("");
     setSelectedFile(null);
+    await loadMessages(activeId);
+    await loadConversations();
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setSelectedFile(e.target.files[0]);
+    if (e.target.files && e.target.files[0]) setSelectedFile(e.target.files[0]);
+  };
+
+  const openModal = async () => {
+    setSelectedRecipientId("");
+    setSubject("");
+    setNewMsgText("");
+    setIsModalOpen(true);
+    try {
+      const c = await getStudentContacts();
+      setContacts(c);
+      if (c[0]) setSelectedRecipientId(c[0].id);
+    } catch (e) {
+      setNotice((e as Error).message);
     }
   };
 
-  const handleStartConversation = () => {
-    if (!selectedRecipientId || !newMsgText.trim()) return;
-    const recipient = RECIPIENTS_LIST.find(r => r.id === selectedRecipientId);
-    
-    const exists = conversations.find((c: any) => c.id === selectedRecipientId);
-    if (exists) {
-      handleSend(`[${subject}] ${newMsgText}`);
-      setActiveId(selectedRecipientId);
-    } else if (recipient) {
-      const newConv = {
-        ...recipient,
-        lastMsg: newMsgText,
-        time: "Just now",
-        unread: 0,
-        messages: [{
-          id: Date.now(),
-          text: `Subject: ${subject}\n\n${newMsgText}`,
-          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          isMe: true
-        }]
-      };
-      setConversations([newConv, ...conversations]);
-      setActiveId(selectedRecipientId);
+  const handleStartConversation = async () => {
+    const recipient = contacts.find((c) => c.id === selectedRecipientId);
+    if (!recipient || !newMsgText.trim() || !subject.trim() || starting) return;
+    setStarting(true);
+    const conv = await createDirectConversation(recipient.name);
+    if (conv.error || !conv.id) {
+      setStarting(false);
+      setNotice(conv.error ?? "Could not start the conversation.");
+      return;
     }
-    
+    const body = `[${subject.trim()}] ${newMsgText.trim()}`;
+    const sent = await sendMessage(conv.id, body);
+    setStarting(false);
+    if (sent.error) {
+      setNotice(sent.error);
+      return;
+    }
     setIsModalOpen(false);
     setNewMsgText("");
     setSubject("");
-    setSelectedRecipientId("");
+    await loadConversations();
+    setActiveId(conv.id);
   };
 
   return (
@@ -238,13 +181,20 @@ export default function MessagingSection() {
           <h1 className="text-[24px] font-semibold leading-none text-[#111111]">Messages</h1>
           <p className="mt-[14px] text-[16px] font-normal leading-none text-[#666666]">Connect with your mentors and support team</p>
         </div>
-        <button 
-          onClick={() => setIsModalOpen(true)}
+        <button
+          onClick={openModal}
           className="flex h-[48px] w-full items-center justify-center gap-[10px] rounded-[10px] bg-[#ffa313] px-[27px] text-[16px] font-normal text-white transition hover:bg-[#f59a0d] md:w-auto"
         >
           <Plus size={19} strokeWidth={2.2} /> New Conversation
         </button>
       </div>
+
+      {notice && (
+        <div className="mb-4 flex items-start justify-between gap-4 rounded-[10px] border border-red-200 bg-red-50 px-4 py-3 text-[14px] font-semibold text-red-700">
+          <span className="break-all">{notice}</span>
+          <button type="button" onClick={() => setNotice(null)} className="shrink-0 text-[13px] underline">Dismiss</button>
+        </div>
+      )}
 
       <div className="flex min-h-[642px] flex-col overflow-hidden rounded-[12px] border border-[#dddddd] bg-white lg:h-[642px] lg:flex-row">
         {/* Sidebar */}
@@ -252,15 +202,15 @@ export default function MessagingSection() {
           <div className="border-b border-[#dddddd] px-[16px] py-[16px]">
             <div className="relative mb-[12px]">
               <Search className="absolute left-[12px] top-1/2 -translate-y-1/2 text-[#777777]" size={20} strokeWidth={1.8} />
-              <input 
-                type="text" 
-                placeholder="Search messages..." 
+              <input
+                type="text"
+                placeholder="Search messages..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="h-[37px] w-full rounded-[9px] bg-[#f1f1f1] pl-[40px] pr-4 text-[14px] font-normal text-[#111111] outline-none placeholder:text-[#8a8a8a]"
               />
             </div>
-            <button 
+            <button
               onClick={() => setShowUnreadOnly(!showUnreadOnly)}
               className={`flex h-[36px] w-full items-center justify-center gap-[6px] rounded-[8px] text-[14px] font-normal transition-all ${showUnreadOnly ? 'bg-[#ffa313] text-white' : 'bg-[#f1f1f1] text-[#666666]'}`}
             >
@@ -268,31 +218,35 @@ export default function MessagingSection() {
             </button>
           </div>
           <div className="max-h-[420px] overflow-y-auto lg:max-h-none">
-            {filteredConversations.map((conv: any) => (
-              <div 
+            {loading && (
+              <p className="px-[16px] py-[20px] text-[14px] text-[#777777]">Loading conversations…</p>
+            )}
+            {!loading && filteredConversations.length === 0 && (
+              <p className="px-[16px] py-[20px] text-[14px] text-[#777777]">No conversations yet.</p>
+            )}
+            {filteredConversations.map((conv) => (
+              <div
                 key={conv.id}
-                onClick={() => { setActiveId(conv.id); setConversations((p: any) => p.map((c: any) => c.id === conv.id ? {...c, unread: 0} : c)); }}
+                onClick={() => setActiveId(conv.id)}
                 className={`flex h-[98px] cursor-pointer items-center gap-[11px] border-b border-[#e5e5e5] px-[16px] transition ${activeId === conv.id ? 'bg-[#fff8ef]' : 'hover:bg-[#fafafa]'}`}
               >
-                <img
-                  src={avatarFor(conv)}
-                  className="h-[48px] w-[48px] shrink-0 rounded-full bg-[#f1f1f1] object-cover"
-                  alt={conv.name}
-                />
+                <span className="flex h-[48px] w-[48px] shrink-0 items-center justify-center rounded-full bg-[#ffa313] text-[16px] font-semibold text-white">
+                  {conv.avatar}
+                </span>
                 <div className="flex-1 min-w-0">
                   <div className="mb-[6px] flex items-start justify-between gap-2">
-                    <h4 className="truncate text-[15px] font-semibold leading-none text-[#111111]">{conv.id === 'm1' ? 'Dr. Sarah M' : conv.name}</h4>
+                    <h4 className="truncate text-[15px] font-semibold leading-none text-[#111111]">{conv.name}</h4>
                     <div className="flex shrink-0 items-center gap-[7px]">
                       <span className="text-[12px] font-normal leading-none text-[#666666]">{conv.time}</span>
-                      {conv.unread > 0 && (
+                      {conv.unreadCount > 0 && (
                         <span className="flex h-[20px] min-w-[20px] items-center justify-center rounded-full bg-[#ff666c] px-[6px] text-[11px] font-semibold leading-none text-white">
-                          {conv.unread}
+                          {conv.unreadCount}
                         </span>
                       )}
                     </div>
                   </div>
                   <p className="truncate text-[13px] font-normal leading-none text-[#666666]">{conv.role}</p>
-                  <p className="mt-[8px] truncate text-[14px] font-normal leading-none text-[#666666]">{conv.lastMsg}</p>
+                  <p className="mt-[8px] truncate text-[14px] font-normal leading-none text-[#666666]">{conv.lastMessage}</p>
                 </div>
               </div>
             ))}
@@ -301,55 +255,39 @@ export default function MessagingSection() {
 
         {/* Chat Area */}
         <div className="flex min-w-0 flex-1 flex-col bg-white">
-          {activeConv && (
+          {activeConv ? (
             <>
               <div className="flex h-[73px] items-center border-b border-[#dddddd] px-[20px]">
                 <div className="flex items-center gap-[13px]">
-                  <img
-                    src={avatarFor(activeConv)}
-                    className="h-[42px] w-[42px] rounded-full bg-[#f1f1f1] object-cover"
-                    alt={activeConv.name}
-                  />
+                  <span className="flex h-[42px] w-[42px] items-center justify-center rounded-full bg-[#ffa313] text-[15px] font-semibold text-white">
+                    {activeConv.avatar}
+                  </span>
                   <div>
                     <h3 className="text-[15px] font-semibold leading-none text-[#111111]">{activeConv.name}</h3>
                     <p className="mt-[7px] text-[12px] font-normal leading-none text-[#666666]">{activeConv.role}</p>
                   </div>
                 </div>
               </div>
-              
-              <div className="flex-1 space-y-[16px] overflow-y-auto px-[24px] py-[24px]">
-                {activeConv.messages.map((m: any) => (
-                  <div key={m.id} className={`flex flex-col ${m.isMe ? 'items-end' : 'items-start'}`}>
-                    <div className={`max-w-[90%] rounded-[14px] px-[16px] py-[12px] text-[14px] font-normal leading-[1.35] md:max-w-[65%] ${m.isMe ? 'bg-[#ffa313] text-white' : 'bg-[#f1f1f1] text-[#111111]'}`}>
-                      {/* Text content */}
-                      {m.text && <p className="whitespace-pre-wrap">{m.text}</p>}
-                      
-                      {/* File content preview */}
-                      {m.file && (
-                        <div className={`mt-2 p-3 rounded-xl border flex items-center gap-3 ${m.isMe ? 'bg-orange-600/20 border-orange-400' : 'bg-white border-gray-200'}`}>
-                          {m.file.type.startsWith('image/') ? (
-                            <img src={m.file.url} className="w-12 h-12 rounded object-cover" alt="attachment" />
-                          ) : (
-                            <div className="bg-white/20 p-2 rounded"><FileIcon size={20} /></div>
-                          )}
-                          <div className="flex-1 min-w-0">
-                            <p className="text-[12px] font-bold truncate">{m.file.name}</p>
-                            <p className="text-[10px] opacity-70">{m.file.size}</p>
-                          </div>
-                          <a href={m.file.url} download={m.file.name} className="p-1.5 hover:bg-black/10 rounded-full transition-colors">
-                            <Download size={16} />
-                          </a>
-                        </div>
-                      )}
+
+              <div ref={scrollRef} className="flex-1 space-y-[16px] overflow-y-auto px-[24px] py-[24px]">
+                {messages.length === 0 && (
+                  <p className="mt-[8px] text-center text-[14px] text-[#999999]">No messages yet. Say hello!</p>
+                )}
+                {messages.map((m) => {
+                  const isMe = m.senderId === myId;
+                  return (
+                    <div key={m.id} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
+                      <div className={`max-w-[90%] whitespace-pre-wrap break-words rounded-[14px] px-[16px] py-[12px] text-[14px] font-normal leading-[1.35] md:max-w-[65%] ${isMe ? 'bg-[#ffa313] text-white' : 'bg-[#f1f1f1] text-[#111111]'}`}>
+                        {m.text}
+                      </div>
+                      <span className="mt-[6px] text-[11px] font-normal leading-none text-[#666666]">{m.time}</span>
                     </div>
-                    <span className="mt-[6px] text-[11px] font-normal leading-none text-[#666666]">{m.time}</span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               {/* Input Area */}
               <div className="border-t border-[#dddddd] px-[24px] py-[16px]">
-                {/* Selected File Preview */}
                 {selectedFile && (
                   <div className="mb-3 flex items-center gap-3 bg-gray-50 p-2 rounded-xl border border-dashed border-gray-200 w-fit">
                     <div className="bg-white p-2 rounded-lg text-[#F9A618]"><FileIcon size={16} /></div>
@@ -361,36 +299,36 @@ export default function MessagingSection() {
                 )}
 
                 <div className="flex items-center gap-[14px]">
-                  <input 
-                    type="file" 
-                    className="hidden" 
-                    ref={fileInputRef} 
-                    onChange={handleFileChange}
-                  />
-                  <button 
+                  <input type="file" className="hidden" ref={fileInputRef} onChange={handleFileChange} />
+                  <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
                     className="flex h-[36px] w-[28px] shrink-0 items-center justify-center rounded-full text-[#666666] transition-colors hover:bg-gray-100"
                   >
                     <Paperclip size={22} strokeWidth={2} />
                   </button>
-                  <input 
-                    type="text" 
-                    placeholder="Type your message..." 
+                  <input
+                    type="text"
+                    placeholder="Type your message..."
                     value={msgInput}
                     onChange={(e) => setMsgInput(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleSend(msgInput, selectedFile)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSend()}
                     className="h-[44px] min-w-0 flex-1 rounded-[9px] bg-[#f1f1f1] px-[16px] text-[14px] font-normal text-[#111111] outline-none placeholder:text-[#8a8a8a]"
                   />
-                  <button 
-                    onClick={() => handleSend(msgInput, selectedFile)} 
-                    className="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-[9px] bg-[#ffa313] text-white transition-all hover:scale-105 active:scale-95"
+                  <button
+                    onClick={handleSend}
+                    disabled={sending}
+                    className="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-[9px] bg-[#ffa313] text-white transition-all hover:scale-105 active:scale-95 disabled:opacity-60"
                   >
                     <Send size={22} strokeWidth={2} />
                   </button>
                 </div>
               </div>
             </>
+          ) : (
+            <div className="flex flex-1 items-center justify-center text-[15px] text-[#777777]">
+              {loading ? "Loading…" : "Select or start a conversation."}
+            </div>
           )}
         </div>
       </div>
@@ -412,7 +350,7 @@ export default function MessagingSection() {
                 </button>
               </div>
               <p className="mt-[26px] max-w-[590px] text-[15px] font-normal leading-[1.35] text-[#666666]">
-                Send a message to your mentor, advisor, or support team. All fields marked with * are required.
+                Send a message to your mentor. All fields marked with * are required.
               </p>
             </div>
 
@@ -420,13 +358,13 @@ export default function MessagingSection() {
               <div>
                 <label className="mb-[10px] block text-[15px] font-normal leading-none text-[#666666]">To (Recipient) <span className="text-[#ff5f64]">*</span></label>
                 <div className="relative">
-                  <select 
+                  <select
                     value={selectedRecipientId}
                     onChange={(e) => setSelectedRecipientId(e.target.value)}
                     className="h-[56px] w-full appearance-none rounded-[9px] border border-[#dddddd] bg-white px-[10px] pr-[40px] text-[16px] font-normal text-[#666666] outline-none transition focus:border-[#ffa313] max-[760px]:h-[48px]"
                   >
-                    <option value="">Select recipient...</option>
-                    {RECIPIENTS_LIST.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                    {contacts.length === 0 && <option value="">No mentors assigned</option>}
+                    {contacts.map(r => <option key={r.id} value={r.id}>{r.name} — {r.role}</option>)}
                   </select>
                   <ChevronDown className="pointer-events-none absolute right-[13px] top-1/2 -translate-y-1/2 text-[#666666]" size={20} strokeWidth={1.8} />
                 </div>
@@ -446,7 +384,7 @@ export default function MessagingSection() {
                 <label className="mb-[11px] block text-[15px] font-normal leading-none text-[#666666]">Priority</label>
                 <div className="grid grid-cols-2 gap-[12px] sm:grid-cols-4">
                   {['Low', 'Normal', 'High', 'Urgent'].map((p) => (
-                    <button 
+                    <button
                       type="button"
                       key={p}
                       onClick={() => setPriority(p)}
@@ -460,47 +398,32 @@ export default function MessagingSection() {
 
               <div className="mt-[20px]">
                 <label className="mb-[10px] block text-[15px] font-normal leading-none text-[#666666]">Message<span className="text-[#ff5f64]">*</span></label>
-                <textarea 
+                <textarea
                   placeholder="Type your message here..."
                   value={newMsgText}
                   onChange={(e) => setNewMsgText(e.target.value)}
                   className="h-[170px] w-full resize-none rounded-[9px] border border-[#dddddd] bg-white px-[15px] py-[14px] text-[16px] font-normal text-[#111111] outline-none transition placeholder:text-[#8a8a8a] focus:border-[#ffa313] max-[760px]:h-[104px]"
                 />
-                <p className="mt-[7px] text-[12px] font-normal leading-[1.15] text-[#666666]">{newMsgText.length}/1000<br />characters</p>
-              </div>
-
-              <div className="mt-[12px]">
-                <p className="mb-[11px] text-[15px] font-normal leading-none text-[#666666]">Quick Templates (Optional)</p>
-                <div className="grid grid-cols-1 gap-[8px] sm:grid-cols-2">
-                  {['Session Inquiry', 'Progress Update', 'Question', 'Need Help'].map((template) => (
-                    <button
-                      type="button"
-                      key={template}
-                      className="h-[36px] rounded-[9px] bg-[#f1f1f1] px-4 text-[14px] font-normal text-[#666666] transition hover:bg-[#ededed]"
-                    >
-                      {template}
-                    </button>
-                  ))}
-                </div>
+                <p className="mt-[7px] text-[12px] font-normal leading-[1.15] text-[#666666]">{newMsgText.length}/1000 characters</p>
               </div>
 
               <div className="mt-[20px] rounded-[9px] bg-[#fff8ef] px-[16px] py-[17px] max-[760px]:py-[12px]">
                 <p className="text-[15px] font-normal leading-[1.35] text-[#ff9f0f]">
                   <span className="font-semibold">Tip:</span>
                   <br />
-                  <span>Your recipient will be notified immediately. For urgent matters, please also consider using the priority flag or contacting through your mentor's direct channel.</span>
+                  <span>Your mentor will be notified in their inbox. The subject is added to the start of your message.</span>
                 </p>
               </div>
             </div>
 
             <div className="grid shrink-0 grid-cols-1 gap-[12px] rounded-b-[10px] bg-white px-[40px] pb-[32px] sm:grid-cols-2 max-[760px]:pb-[20px]">
               <button onClick={() => setIsModalOpen(false)} className="h-[50px] rounded-[9px] border border-[#dddddd] bg-white px-4 text-[16px] font-normal text-[#666666] transition hover:bg-[#fafafa]">Cancel</button>
-              <button 
+              <button
                 onClick={handleStartConversation}
-                disabled={!selectedRecipientId || !newMsgText.trim() || !subject.trim()}
+                disabled={!selectedRecipientId || !newMsgText.trim() || !subject.trim() || starting}
                 className="h-[50px] rounded-[9px] bg-[#ffa313] px-4 text-[16px] font-normal text-white transition disabled:bg-[#dddddd] disabled:text-[#999999]"
               >
-                Send Message
+                {starting ? "Sending…" : "Send Message"}
               </button>
             </div>
           </div>
