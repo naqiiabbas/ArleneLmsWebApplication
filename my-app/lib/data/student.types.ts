@@ -46,10 +46,114 @@ export interface AbsenceReportInput {
   notes: string
 }
 
+export interface StudentProfileMentor {
+  id: string
+  name: string
+  role: string
+  department: string
+  email: string
+  phone: string
+  avatar: string
+  tags: string[]
+}
+
+export interface StudentProfileMetric {
+  title: string
+  value: string
+  percent: number
+  color: string
+}
+
+export interface StudentProfileActivity {
+  id: string
+  type: "session" | "report" | "badge" | "goal"
+  title: string
+  date: string
+}
+
+export interface StudentProfile {
+  name: string
+  avatar: string
+  email: string
+  phone: string
+  address: string
+  dob: string
+  about: string
+  major: string
+  year: string
+  studentId: string
+  gpa: string
+  enrollmentDate: string
+  expectedGraduation: string
+  mentor: StudentProfileMentor | null
+  mentors: StudentProfileMentor[]
+  metrics: StudentProfileMetric[]
+  activity: StudentProfileActivity[]
+}
+
+export interface StudentProfileInput {
+  email: string
+  phone: string
+  address: string
+  dob: string
+  about: string
+}
+
+export type StudentGoalStatus = "Not Started" | "In Progress" | "Completed"
+
+export interface StudentGoal {
+  id: string
+  title: string
+  status: StudentGoalStatus
+  dueDate: string
+  progress: number
+}
+
+export interface StudentGoalInput {
+  title: string
+  status: StudentGoalStatus
+  dueDate: string
+}
+
 export interface StudentContact {
   id: string
   name: string
   role: string
+}
+
+export interface StudentDocument {
+  id: string
+  title: string
+  date: string
+  size: string
+  status: "Approved" | "Under Review"
+}
+
+export type StudentSessionType = "In-Person" | "Virtual" | "Deadline" | "Workshop"
+
+export interface StudentSession {
+  id: string
+  title: string
+  mentor: string
+  time: string
+  endTime: string
+  location: string
+  type: StudentSessionType
+  date: string // yyyy-mm-dd
+  description: string
+  agenda: string[]
+}
+
+export interface StudentResource {
+  id: string
+  category: string
+  type: string
+  tag: string
+  title: string
+  description: string
+  rating: number
+  isFeatured: boolean
+  link: string
 }
 
 export interface StudentNote {

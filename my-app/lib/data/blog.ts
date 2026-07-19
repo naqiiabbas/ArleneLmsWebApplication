@@ -46,6 +46,36 @@ type BlogRow = {
   author: { full_name: string | null } | null
 }
 
+/**
+ * Published posts only — readable by any authenticated user (student/mentor
+ * blog readers). No admin guard; never exposes drafts.
+ */
+export async function listPublishedBlogPosts(): Promise<UIBlogPost[]> {
+  const admin = createAdminClient()
+
+  const { data, error } = await admin
+    .from("blog_posts")
+    .select(
+      "id, title, content, excerpt, category, tags, image_url, status, published_at, created_at, author:profiles ( full_name )",
+    )
+    .eq("status", "published")
+    .order("published_at", { ascending: false })
+  if (error) throw new Error(error.message)
+
+  return ((data ?? []) as unknown as BlogRow[]).map((p) => ({
+    id: p.id,
+    title: p.title,
+    content: p.content ?? "",
+    excerpt: p.excerpt ?? "",
+    category: p.category ?? "",
+    tags: p.tags ?? [],
+    image: resolveImageUrl(admin, p.image_url),
+    status: "published",
+    date: new Date(p.published_at ?? p.created_at ?? Date.now()).toLocaleDateString("en-US"),
+    author: p.author?.full_name ?? "",
+  }))
+}
+
 export async function listBlogPosts(): Promise<UIBlogPost[]> {
   await assertAdmin()
   const admin = createAdminClient()

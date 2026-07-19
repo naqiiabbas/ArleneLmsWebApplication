@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { Poppins } from 'next/font/google';
 import {
   ChevronLeft,
@@ -13,6 +13,8 @@ import {
   Video,
   X,
 } from 'lucide-react';
+import { getStudentCalendar } from '@/lib/data/student';
+import type { StudentSession as Session, StudentSessionType as SessionType } from '@/lib/data/student.types';
 
 const poppins = Poppins({
   subsets: ['latin'],
@@ -20,73 +22,8 @@ const poppins = Poppins({
   variable: '--font-poppins',
 });
 
-// --- Types ---
-type SessionType = 'In-Person' | 'Virtual' | 'Deadline' | 'Workshop';
-
-interface Session {
-  id: string;
-  title: string;
-  mentor: string;
-  time: string;
-  endTime: string;
-  location: string;
-  type: SessionType;
-  date: string; // YYYY-MM-DD
-  description: string;
-  agenda: string[];
-}
-
-// --- Data Objects ---
-const SESSIONS_DATA: Session[] = [
-  {
-    id: 's1',
-    title: "Career Development Session",
-    mentor: "Dr. Sarah Mitchell",
-    time: "2:00 PM",
-    endTime: "3:30 PM",
-    location: "Room 304, Building A",
-    type: "In-Person",
-    date: "2025-11-25",
-    description: "Join us for an in-depth career development session where we'll discuss your career goals, explore potential career paths, and create an actionable plan for achieving your professional objectives. We'll also review your resume and discuss strategies for job searching and networking.",
-    agenda: ["Review current skills and interests", "Explore career opportunities", "Create 90-day action plan", "Resume review and feedback"]
-  },
-  {
-    id: 's2',
-    title: "Document Submission Deadline",
-    mentor: "Admin Office",
-    time: "5:00 PM",
-    endTime: "5:00 PM",
-    location: "Online Portal",
-    type: "Deadline",
-    date: "2025-11-27",
-    description: "Final deadline for submitting your monthly progress reports and attendance verification sheets.",
-    agenda: ["Upload PDF documents", "Verify digital signature"]
-  },
-  {
-    id: 's3',
-    title: "Progress Review Meeting",
-    mentor: "Prof. James Wilson",
-    time: "10:00 AM",
-    endTime: "11:00 AM",
-    location: "Virtual Meeting",
-    type: "Virtual",
-    date: "2025-11-28",
-    description: "One-on-one meeting to discuss your academic progress and project milestones.",
-    agenda: ["Milestone check-in", "Feedback session", "Next steps planning"]
-  },
-  {
-    id: 's4',
-    title: "Skills Workshop",
-    mentor: "Multiple Mentors",
-    time: "3:00 PM",
-    endTime: "5:00 PM",
-    location: "Conference Hall",
-    type: "Workshop",
-    date: "2025-11-29",
-    description: "Hands-on workshop focused on technical skill acquisition and collaborative problem solving.",
-    agenda: ["Technical introduction", "Group exercise", "Project showcase"]
-  }
-];
+const initials = (name: string) =>
+  name.split(" ").filter(Boolean).map((p) => p[0]).join("").toUpperCase().slice(0, 3);
 
 // --- Components ---
 
@@ -117,7 +54,7 @@ const SessionModal = ({ session, isOpen, onClose, onAddToCalendar }: {
               </div>
               <p className="mt-[14px] flex items-center gap-[5px] text-[14px] font-normal leading-none text-[#666666]">
                 <Clock size={15} strokeWidth={1.8} />
-                Mar 8, 2026 &bull; {session.time} - {session.endTime}
+                {session.date} &bull; {session.time}{session.endTime ? ` - ${session.endTime}` : ""}
               </p>
             </div>
             <button onClick={onClose} className="mt-[8px] text-[#666666] transition-colors hover:text-[#111111]" aria-label="Close session details">
@@ -128,8 +65,8 @@ const SessionModal = ({ session, isOpen, onClose, onAddToCalendar }: {
 
         <div className="min-h-0 flex-1 overflow-y-auto px-[24px] pb-[24px] pt-[25px]">
           <div className="flex min-h-[80px] items-center gap-[16px] rounded-[8px] bg-[#f4f4f4] px-[16px] py-[16px]">
-            <div className="h-[48px] w-[48px] shrink-0 overflow-hidden rounded-full bg-gray-200">
-              <img src="https://i.pravatar.cc/96?u=sarah-mitchell-calendar" alt={session.mentor} className="h-full w-full object-cover" />
+            <div className="flex h-[48px] w-[48px] shrink-0 items-center justify-center rounded-full bg-[#ffa313] text-[15px] font-semibold text-white">
+              {initials(session.mentor)}
             </div>
             <div>
               <p className="text-[14px] font-normal leading-none text-[#666666]">Hosted by</p>
@@ -147,20 +84,24 @@ const SessionModal = ({ session, isOpen, onClose, onAddToCalendar }: {
 
           <div className="mt-[29px]">
             <h4 className="text-[18px] font-semibold leading-none text-[#111111]">Description</h4>
-            <p className="mt-[16px] text-[16px] font-normal leading-[1.6] text-[#666666]">{session.description}</p>
+            <p className="mt-[16px] text-[16px] font-normal leading-[1.6] text-[#666666]">
+              {session.description || "No additional details for this session."}
+            </p>
           </div>
 
-          <div className="mt-[28px]">
-            <h4 className="text-[16px] font-normal leading-none text-[#111111]">Agenda</h4>
-            <div className="mt-[19px] space-y-[13px]">
-              {session.agenda.map((item, idx) => (
-                <div key={item} className="flex items-center gap-[12px]">
-                  <div className="flex h-[24px] w-[24px] shrink-0 items-center justify-center rounded-full bg-[#e0f2fe] text-[12px] font-normal leading-none text-[#0284c7]">{idx + 1}</div>
-                  <span className="text-[16px] font-normal leading-none text-[#666666]">{item}</span>
-                </div>
-              ))}
+          {session.agenda.length > 0 && (
+            <div className="mt-[28px]">
+              <h4 className="text-[16px] font-normal leading-none text-[#111111]">Agenda</h4>
+              <div className="mt-[19px] space-y-[13px]">
+                {session.agenda.map((item, idx) => (
+                  <div key={item} className="flex items-center gap-[12px]">
+                    <div className="flex h-[24px] w-[24px] shrink-0 items-center justify-center rounded-full bg-[#e0f2fe] text-[12px] font-normal leading-none text-[#0284c7]">{idx + 1}</div>
+                    <span className="text-[16px] font-normal leading-none text-[#666666]">{item}</span>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         <div className="shrink-0 border-t border-[#dddddd] bg-[#f4f4f4] px-[24px] py-[24px]">
@@ -182,12 +123,19 @@ const SessionModal = ({ session, isOpen, onClose, onAddToCalendar }: {
 
 const CalendarSection = () => {
   const [filter, setFilter] = useState<SessionType | 'All Types'>('All Types');
-  
-  // -- NEW WORKABLE CALENDAR LOGIC --
-  const [currentDate, setCurrentDate] = useState(new Date(2025, 10, 1)); // Default Nov 2025
-  const [selectedDay, setSelectedDay] = useState(25);
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const [currentDate, setCurrentDate] = useState(() => { const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), 1); });
+  const [selectedDay, setSelectedDay] = useState(() => new Date().getDate());
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
   const [scheduledSessions, setScheduledSessions] = useState<Session[]>([]);
+
+  useEffect(() => {
+    getStudentCalendar()
+      .then(setSessions)
+      .catch((e) => setNotice((e as Error).message));
+  }, []);
 
   // Month Navigation
   const handlePrevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
@@ -213,32 +161,32 @@ const CalendarSection = () => {
     const d = selectedDay.toString().padStart(2, '0');
     const fullSelectedDate = `${y}-${m}-${d}`;
 
-    return SESSIONS_DATA.filter(s => {
+    return sessions.filter(s => {
       const matchesDay = s.date === fullSelectedDate;
       const matchesType = filter === 'All Types' ? true : s.type === filter;
       return matchesDay && matchesType;
     });
-  }, [filter, selectedDay, currentDate]);
+  }, [sessions, filter, selectedDay, currentDate]);
 
   const upcomingSessions = useMemo(() => {
     const mStr = (currentDate.getMonth() + 1).toString().padStart(2, '0');
     const yStr = currentDate.getFullYear().toString();
 
-    return SESSIONS_DATA.filter(s => {
+    return sessions.filter(s => {
       const matchesMonth = s.date.startsWith(`${yStr}-${mStr}`);
       const matchesType = filter === 'All Types' ? true : s.type === filter;
       return matchesMonth && matchesType;
     });
-  }, [filter, currentDate]);
+  }, [sessions, filter, currentDate]);
 
   // Dots logic for current month
   const sessionDaysInMonth = useMemo(() => {
     const mStr = (currentDate.getMonth() + 1).toString().padStart(2, '0');
     const yStr = currentDate.getFullYear().toString();
-    return SESSIONS_DATA
+    return sessions
       .filter(s => s.date.startsWith(`${yStr}-${mStr}`))
       .map(s => parseInt(s.date.split('-')[2]));
-  }, [currentDate]);
+  }, [sessions, currentDate]);
 
   const handleAddToCalendar = (session: Session) => {
     if (!scheduledSessions.find(s => s.id === session.id)) {
@@ -251,8 +199,14 @@ const CalendarSection = () => {
     <section className={`${poppins.variable} min-h-full w-full overflow-x-hidden bg-[#f5f5f5] px-4 pb-6 pt-6 font-sans md:px-6 md:pt-7`}>
       <header>
         <h2 className="text-[24px] font-semibold leading-none text-[#111111]">Calendar</h2>
-        <p className="mt-[14px] text-[16px] font-normal leading-none text-[#666666]">Manage your mentoring sessions and events</p>
+        <p className="mt-[14px] text-[16px] font-normal leading-none text-[#666666]">Your mentoring sessions and events</p>
       </header>
+
+      {notice && (
+        <div className="mt-[16px] rounded-[12px] border border-red-200 bg-red-50 px-4 py-3 text-[14px] font-semibold text-red-700">
+          {notice}
+        </div>
+      )}
 
       <div className="mt-[26px] grid grid-cols-1 gap-[18px] xl:grid-cols-[1fr_355px]">
         <div className="rounded-[12px] border border-[#dddddd] bg-white px-[22px] py-[24px]">
@@ -406,12 +360,7 @@ const CalendarSection = () => {
             ))
           ) : (
             <div className="py-[24px] text-center">
-              <p className="text-[15px] font-normal text-[#666666]">No more sessions scheduled for today</p>
-            </div>
-          )}
-          {filteredSessions.length > 0 && (
-            <div className="py-[32px] text-center">
-              <p className="text-[15px] font-normal text-[#666666]">No more sessions scheduled for today</p>
+              <p className="text-[15px] font-normal text-[#666666]">No sessions scheduled for this day.</p>
             </div>
           )}
         </div>

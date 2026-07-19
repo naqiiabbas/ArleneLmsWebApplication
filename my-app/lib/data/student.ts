@@ -1,5 +1,6 @@
 "use server"
 
+import { randomUUID } from "node:crypto"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { assertStudent } from "@/lib/data/guards"
 import { listConversations } from "@/lib/data/messaging"
@@ -11,11 +12,32 @@ import type {
   StudentCalendarEvent,
   StudentContact,
   StudentDashboard,
+  StudentDocument,
+  StudentGoal,
+  StudentGoalInput,
+  StudentGoalStatus,
   StudentNote,
+  StudentProfile,
+  StudentProfileInput,
+  StudentProfileMentor,
+  StudentResource,
+  StudentSession,
+  StudentSessionType,
   StudentTodaySession,
 } from "@/lib/data/student.types"
 
 const DEFAULT_AVATAR = "/images/avatar1.png"
+const DOCUMENTS_BUCKET = "documents"
+
+function formatSize(bytes: number | null): string {
+  if (bytes == null) return "—"
+  if (bytes < 1024) return `${bytes} B`
+  const kb = bytes / 1024
+  if (kb < 1024) return `${kb.toFixed(kb < 10 ? 1 : 0)} KB`
+  const mb = kb / 1024
+  if (mb < 1024) return `${mb.toFixed(1)} MB`
+  return `${(mb / 1024).toFixed(1)} GB`
+}
 
 function clock(iso: string | null): string {
   if (!iso) return ""
@@ -229,6 +251,410 @@ function formatRole(r: string | null): string {
     .split("_")
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(" ")
+}
+
+function sessionKind(title: string | null, location: string | null): StudentSessionType {
+  const s = `${title ?? ""} ${location ?? ""}`.toLowerCase()
+  if (/deadline|due|submission/.test(s)) return "Deadline"
+  if (/workshop/.test(s)) return "Workshop"
+  if (/virtual|online|zoom|meet|teams|remote/.test(s)) return "Virtual"
+  return "In-Person"
+}
+
+const GOAL_UI_TO_DB: Record<StudentGoalStatus, "not_started" | "in_progress" | "completed"> = {
+  "Not Started": "not_started",
+  "In Progress": "in_progress",
+  Completed: "completed",
+}
+function goalDbToUi(s: string): StudentGoalStatus {
+  if (s === "completed") return "Completed"
+  if (s === "in_progress") return "In Progress"
+  return "Not Started"
+}
+function fmtLongDate(d: string | null): string {
+  if (!d) return "—"
+  return new Date(d).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
+}
+function fmtMonthYear(d: string | null): string {
+  if (!d) return "—"
+  return new Date(d).toLocaleDateString("en-US", { month: "long", year: "numeric" })
+}
+
+function toMentor(p: { id: string; full_name: string | null; email: string | null; phone: string | null; avatar_url: string | null } | null): StudentProfileMentor | null {
+  if (!p) return null
+  return {
+    id: p.id,
+    name: p.full_name ?? "Mentor",
+    role: "Mentor",
+    department: "Mentorship Program",
+    email: p.email ?? "",
+    phone: p.phone ?? "",
+    avatar: p.avatar_url || DEFAULT_AVATAR,
+    tags: [],
+  }
+}
+
+/** Aggregated student profile (Overview/Progress/Activity/Mentors) + edit source. */
+export async function getStudentProfile(): Promise<StudentProfile> {
+  const { userId } = await assertStudent()
+  const admin = createAdminClient()
+
+  const [{ data: prof }, { data: stu }, { data: assigns }, { data: summary }, { data: docs }, { data: goals }, { data: recentAtt }] =
+    await Promise.all([
+      admin.from("profiles").select("full_name, email, phone, avatar_url").eq("id", userId).single(),
+      admin
+        .from("students")
+        .select("student_code, course, academic_year, gpa, date_of_birth, address, about, enrollment_date, expected_graduation")
+        .eq("id", userId)
+        .maybeSingle(),
+      admin
+        .from("mentor_student_assignments")
+        .select("mentor:profiles!mentor_student_assignments_mentor_id_fkey ( id, full_name, email, phone, avatar_url )")
+        .eq("student_id", userId)
+        .eq("status", "active"),
+      admin.from("student_attendance_summary").select("present, late, total, attendance_pct").eq("student_id", userId).maybeSingle(),
+      admin.from("documents").select("id, name, status, created_at").eq("owner_id", userId),
+      admin.from("student_goals").select("status").eq("student_id", userId),
+      admin
+        .from("attendance_records")
+        .select("attendance_date, marked_at, status, class:classes ( name )")
+        .eq("student_id", userId)
+        .order("marked_at", { ascending: false })
+        .limit(3),
+    ])
+
+  const mentorRows = (assigns ?? []) as unknown as {
+    mentor: { id: string; full_name: string | null; email: string | null; phone: string | null; avatar_url: string | null } | null
+  }[]
+  const mentors: StudentProfileMentor[] = []
+  const seen = new Set<string>()
+  for (const r of mentorRows) {
+    const m = toMentor(r.mentor)
+    if (m && !seen.has(m.id)) {
+      seen.add(m.id)
+      mentors.push(m)
+    }
+  }
+
+  // Metrics
+  const attended = Number(summary?.present ?? 0) + Number(summary?.late ?? 0)
+  const totalSessions = Number(summary?.total ?? 0)
+  const ratePct = summary?.attendance_pct != null ? Math.round(Number(summary.attendance_pct)) : 0
+  const allDocs = docs ?? []
+  const approvedDocs = allDocs.filter((d) => d.status === "approved").length
+  const docPct = allDocs.length ? Math.round((approvedDocs / allDocs.length) * 100) : 0
+  const allGoals = goals ?? []
+  const doneGoals = allGoals.filter((g) => g.status === "completed").length
+  const goalPct = allGoals.length ? Math.round((doneGoals / allGoals.length) * 100) : 0
+
+  const metrics = [
+    { title: "Sessions Completed", value: `${attended}/${totalSessions}`, percent: ratePct, color: "#00D094" },
+    { title: "Documents Submitted", value: `${approvedDocs}/${allDocs.length}`, percent: docPct, color: "#F4A11D" },
+    { title: "Goals Achieved", value: `${doneGoals}/${allGoals.length}`, percent: goalPct, color: "#F4A11D" },
+  ]
+
+  // Activity feed (recent attendance + document uploads)
+  const activity: StudentProfile["activity"] = []
+  for (const r of (recentAtt ?? []) as unknown as { attendance_date: string | null; marked_at: string | null; status: string; class: { name: string | null } | null }[]) {
+    const present = r.status === "present" || r.status === "late"
+    activity.push({
+      id: `att-${r.marked_at ?? r.attendance_date}`,
+      type: "session",
+      title: `Marked ${present ? "present" : "absent"}${r.class?.name ? ` for ${r.class.name}` : ""}`,
+      date: fmtLongDate(r.attendance_date),
+    })
+  }
+  for (const d of [...allDocs].sort((a, b) => new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime()).slice(0, 2)) {
+    activity.push({ id: `doc-${d.id}`, type: "report", title: `Uploaded ${d.name}`, date: fmtLongDate(d.created_at) })
+  }
+
+  return {
+    name: prof?.full_name ?? "Student",
+    avatar: prof?.avatar_url || DEFAULT_AVATAR,
+    email: prof?.email ?? "",
+    phone: prof?.phone ?? "",
+    address: stu?.address ?? "",
+    dob: fmtLongDate(stu?.date_of_birth ?? null),
+    about: stu?.about ?? "",
+    major: stu?.course ?? "—",
+    year: stu?.academic_year ?? "—",
+    studentId: stu?.student_code ?? "—",
+    gpa: stu?.gpa != null ? String(stu.gpa) : "—",
+    enrollmentDate: fmtMonthYear(stu?.enrollment_date ?? null),
+    expectedGraduation: fmtMonthYear(stu?.expected_graduation ?? null),
+    mentor: mentors[0] ?? null,
+    mentors,
+    metrics,
+    activity,
+  }
+}
+
+/** Update the student's own editable profile fields. */
+export async function updateStudentProfile(
+  input: StudentProfileInput,
+): Promise<{ error?: string }> {
+  let userId: string
+  try {
+    ;({ userId } = await assertStudent())
+  } catch (e) {
+    return { error: (e as Error).message }
+  }
+  const admin = createAdminClient()
+
+  const { error: pErr } = await admin
+    .from("profiles")
+    .update({ email: input.email.trim() || null, phone: input.phone.trim() || null })
+    .eq("id", userId)
+  if (pErr) return { error: pErr.message }
+
+  const dob = new Date(input.dob.trim())
+  const dobStr = input.dob.trim() && !isNaN(dob.getTime()) ? ymd(dob) : null
+
+  const { error: sErr } = await admin
+    .from("students")
+    .update({ address: input.address.trim() || null, about: input.about.trim() || null, date_of_birth: dobStr })
+    .eq("id", userId)
+  if (sErr) return { error: sErr.message }
+  return {}
+}
+
+/** The student's own goals (Goals tab). */
+export async function getStudentGoals(): Promise<StudentGoal[]> {
+  const { userId } = await assertStudent()
+  const admin = createAdminClient()
+
+  const { data, error } = await admin
+    .from("student_goals")
+    .select("id, title, status, due_date, progress")
+    .eq("student_id", userId)
+    .order("created_at", { ascending: false })
+  if (error) throw new Error(error.message)
+
+  return ((data ?? []) as unknown as {
+    id: string
+    title: string
+    status: string
+    due_date: string | null
+    progress: number
+  }[]).map((g) => ({
+    id: g.id,
+    title: g.title,
+    status: goalDbToUi(g.status),
+    dueDate: g.due_date ? new Date(g.due_date).toLocaleDateString("en-US", { month: "short", year: "numeric" }) : "—",
+    progress: Number(g.progress ?? 0),
+  }))
+}
+
+/** Add a new goal for the student. */
+export async function addStudentGoal(
+  input: StudentGoalInput,
+): Promise<{ error?: string; id?: string }> {
+  let userId: string
+  try {
+    ;({ userId } = await assertStudent())
+  } catch (e) {
+    return { error: (e as Error).message }
+  }
+  if (!input.title.trim()) return { error: "Please enter a goal title." }
+  const admin = createAdminClient()
+
+  const due = new Date(input.dueDate.trim())
+  const dueStr = input.dueDate.trim() && !isNaN(due.getTime()) ? ymd(due) : null
+  const status = GOAL_UI_TO_DB[input.status] ?? "not_started"
+
+  const { data, error } = await admin
+    .from("student_goals")
+    .insert({
+      student_id: userId,
+      title: input.title.trim(),
+      status,
+      due_date: dueStr,
+      progress: status === "completed" ? 100 : 0,
+    })
+    .select("id")
+    .single()
+  if (error) return { error: error.message }
+  return { id: data.id }
+}
+
+/** The student's own uploaded documents (Documents panel). */
+export async function getStudentDocuments(): Promise<StudentDocument[]> {
+  const { userId } = await assertStudent()
+  const admin = createAdminClient()
+
+  const { data, error } = await admin
+    .from("documents")
+    .select("id, name, size_bytes, status, created_at")
+    .eq("owner_id", userId)
+    .order("created_at", { ascending: false })
+  if (error) throw new Error(error.message)
+
+  return ((data ?? []) as unknown as {
+    id: string
+    name: string
+    size_bytes: number | null
+    status: string
+    created_at: string | null
+  }[]).map((d) => ({
+    id: d.id,
+    title: d.name,
+    date: d.created_at ? new Date(d.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—",
+    size: formatSize(d.size_bytes),
+    status: d.status === "approved" ? "Approved" : "Under Review",
+  }))
+}
+
+/** Upload a real file as the student (status pending → mentor/admin review). */
+export async function uploadStudentDocument(
+  formData: FormData,
+): Promise<{ id?: string; error?: string }> {
+  let userId: string
+  try {
+    ;({ userId } = await assertStudent())
+  } catch (e) {
+    return { error: (e as Error).message }
+  }
+  const admin = createAdminClient()
+
+  const file = formData.get("file")
+  const name = (formData.get("name") as string | null)?.trim() || ""
+  if (!(file instanceof File) || file.size === 0) {
+    return { error: "Please choose a file to upload." }
+  }
+
+  const ext = file.name.includes(".") ? file.name.split(".").pop()! : ""
+  const path = `${userId}/${randomUUID()}${ext ? "." + ext : ""}`
+  const bytes = new Uint8Array(await file.arrayBuffer())
+
+  const { error: upErr } = await admin.storage
+    .from(DOCUMENTS_BUCKET)
+    .upload(path, bytes, { contentType: file.type || "application/octet-stream", upsert: false })
+  if (upErr) return { error: upErr.message }
+
+  const { data, error } = await admin
+    .from("documents")
+    .insert({
+      name: name ? (ext ? `${name}.${ext}` : name) : file.name,
+      file_type: ext ? ext.toUpperCase() : "File",
+      size_bytes: file.size,
+      status: "pending",
+      owner_id: userId,
+      source_role: "student",
+      file_url: path,
+    })
+    .select("id")
+    .single()
+  if (error) {
+    await admin.storage.from(DOCUMENTS_BUCKET).remove([path])
+    return { error: error.message }
+  }
+  return { id: data.id }
+}
+
+/** Short-lived signed URL for one of the student's own documents. */
+export async function getStudentDocumentUrl(
+  id: string,
+): Promise<{ url?: string; name?: string; error?: string }> {
+  let userId: string
+  try {
+    ;({ userId } = await assertStudent())
+  } catch (e) {
+    return { error: (e as Error).message }
+  }
+  const admin = createAdminClient()
+
+  const { data: doc } = await admin
+    .from("documents")
+    .select("file_url, name")
+    .eq("id", id)
+    .eq("owner_id", userId)
+    .maybeSingle()
+  if (!doc) return { error: "Document not found." }
+  if (!doc.file_url) return { error: "No file is attached to this document." }
+
+  const { data, error } = await admin.storage.from(DOCUMENTS_BUCKET).createSignedUrl(doc.file_url, 120)
+  if (error) return { error: error.message }
+  return { url: data.signedUrl, name: doc.name }
+}
+
+/** The student's enrolled-class sessions (Calendar). */
+export async function getStudentCalendar(): Promise<StudentSession[]> {
+  const { userId } = await assertStudent()
+  const admin = createAdminClient()
+
+  const { data: enrolls } = await admin
+    .from("enrollments")
+    .select("class_id")
+    .eq("student_id", userId)
+    .eq("status", "active")
+  const classIds = (enrolls ?? []).map((e) => e.class_id).filter(Boolean) as string[]
+  if (classIds.length === 0) return []
+
+  const { data, error } = await admin
+    .from("class_sessions")
+    .select("id, title, session_date, start_at, end_at, location, class:classes ( name ), mentor:profiles ( full_name )")
+    .in("class_id", classIds)
+    .order("start_at", { ascending: true })
+  if (error) throw new Error(error.message)
+
+  return ((data ?? []) as unknown as {
+    id: string
+    title: string | null
+    session_date: string | null
+    start_at: string | null
+    end_at: string | null
+    location: string | null
+    class: { name: string | null } | null
+    mentor: { full_name: string | null } | null
+  }[]).map((s) => ({
+    id: s.id,
+    title: s.title || s.class?.name || "Session",
+    mentor: s.mentor?.full_name ?? "Your mentor",
+    time: s.start_at ? new Date(s.start_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "",
+    endTime: s.end_at ? new Date(s.end_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "",
+    location: s.location ?? "TBD",
+    type: sessionKind(s.title, s.location),
+    date: s.session_date ?? (s.start_at ? s.start_at.slice(0, 10) : ""),
+    description: "",
+    agenda: [],
+  }))
+}
+
+/** Approved learning resources — the student's read-only resource library. */
+export async function getStudentResources(): Promise<StudentResource[]> {
+  await assertStudent()
+  const admin = createAdminClient()
+
+  const { data, error } = await admin
+    .from("resources")
+    .select("id, title, description, category, tags, kind, link_url, file_url, rating, featured")
+    .eq("status", "approved")
+    .order("featured", { ascending: false })
+    .order("created_at", { ascending: false })
+  if (error) throw new Error(error.message)
+
+  return ((data ?? []) as unknown as {
+    id: string
+    title: string
+    description: string | null
+    category: string | null
+    tags: string[] | null
+    kind: string
+    link_url: string | null
+    file_url: string | null
+    rating: number | string | null
+    featured: boolean
+  }[]).map((r) => ({
+    id: r.id,
+    category: r.category ?? "General",
+    type: (r.tags && r.tags[0]) || (r.kind === "link" ? "Link" : "Resource"),
+    tag: r.category ?? "General",
+    title: r.title,
+    description: r.description ?? "",
+    rating: r.rating != null ? Number(r.rating) : 0,
+    isFeatured: r.featured,
+    link: r.link_url ?? (r.file_url && /^https?:\/\//.test(r.file_url) ? r.file_url : ""),
+  }))
 }
 
 /** Approved, shared notes written about this student (Mentor Notes). */

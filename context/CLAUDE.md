@@ -218,6 +218,15 @@ enrolled in "Computer Science").
   first message; priority/templates/file-attach UI-only.
 - **Mentor Notes** (`Mentornotes.tsx`) — WIRED & verified: `getStudentNotes()` = notes about the
   student that are approved + shared + not self-authored; in-page view modal.
+- **Blog** (`Blogsst.tsx`) — WIRED: read-only reader via `listPublishedBlogPosts()` (published only).
+- **Resources** (`Resource.tsx`) — WIRED & verified: `getStudentResources()` = approved resources;
+  dynamic category/type filters; Open opens `link_url`.
+- **Calendar** (`Calendar.tsx`) — WIRED & verified: `getStudentCalendar()` = enrolled `class_sessions`.
+- **Documents** (`Documentsst.tsx`) — WIRED & verified: owner-scoped list + real upload (pending→review)
+  + signed-URL view/download; fabricated pending-submissions/preview removed.
+- **Profile** (`Profile.tsx`) — WIRED & verified: `getStudentProfile()` (real profiles+students +
+  assigned mentor + metrics + activity), `updateStudentProfile()`, `getStudentGoals()`/`addStudentGoal()`
+  (`student_goals`). Fabricated badges/mentor-directory trimmed.
 - **Still to wire:** the **iPad check-in kiosk** (`attendancewrk`, MediaPipe selfie +
   4-digit code + schedule window → `attendance_records`), Mentor Notes (read own), Messages/
   Notifications (reuse), Calendar/Documents/Resources/Blog (read), Profile, and the student **auth

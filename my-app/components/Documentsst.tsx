@@ -2,44 +2,28 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Poppins } from 'next/font/google';
-import { 
-  FileText, 
-  CloudUpload, 
+import {
+  FileText,
   Upload,
-  Search, 
+  Search,
   X,
-  AlertCircle,
   Clock3,
   Download,
   Eye,
   Funnel,
-  Printer,
-  Share2,
-  ZoomIn,
-  ZoomOut
 } from 'lucide-react';
+import {
+  getStudentDocuments,
+  uploadStudentDocument,
+  getStudentDocumentUrl,
+} from '@/lib/data/student';
+import type { StudentDocument } from '@/lib/data/student.types';
 
 const poppins = Poppins({
   subsets: ['latin'],
   weight: ['400', '500', '600', '700'],
   variable: '--font-poppins',
 });
-
-// --- Dynamic Data ---
-
-const INITIAL_PENDING_DOCS = [
-  { id: 1, title: "Monthly Progress Report", due: "Nov 27, 2025", priority: "High Priority", priorityColor: "text-red-500 bg-red-50" },
-  { id: 2, title: "Attendance Verification Form", due: "Nov 27, 2025", priority: "High Priority", priorityColor: "text-red-500 bg-red-50" },
-  { id: 3, title: "Quarterly Self-Assessment", due: "Dec 1, 2025", priority: "Medium Priority", priorityColor: "text-orange-500 bg-orange-50" },
-];
-
-const INITIAL_UPLOADED_DOCS = [
-  { id: 101, title: "Progress Report - October 2025.pdf", date: "Nov 5, 2025", size: "2.4 MB", status: "Approved", url: null },
-  { id: 102, title: "Attendance Record - Q3 2025.pdf", date: "Oct 28, 2025", size: "1.8 MB", status: "Approved", url: null },
-  { id: 103, title: "Self Assessment - September.pdf", date: "Oct 15, 2025", size: "3.1 MB", status: "Under Review", url: null },
-  { id: 104, title: "Goal Setting Worksheet.pdf", date: "Oct 2, 2025", size: "1.2 MB", status: "Approved", url: null },
-  { id: 105, title: "Mid-term Evaluation.pdf", date: "Sep 15, 2025", size: "2.8 MB", status: "Approved", url: null },
-];
 
 const ApprovedStatusIcon = ({ className }: { className?: string }) => (
   <svg
@@ -76,162 +60,6 @@ const ApprovedStatusIcon = ({ className }: { className?: string }) => (
 );
 
 // --- Sub-Components ---
-
-const ViewModal = ({ isOpen, onClose, doc }: { isOpen: boolean, onClose: () => void, doc: any }) => {
-  if (!isOpen || !doc) return null;
-
-  const handlePrint = () => {
-    const printWindow = window.open(doc.url || '', '_blank');
-    if (printWindow) {
-      printWindow.onload = () => printWindow.print();
-    } else {
-      alert("Please upload a real file to print.");
-    }
-  };
-
-  const handleDownload = () => {
-    if (doc.url) {
-      const link = document.createElement('a');
-      link.href = doc.url;
-      link.download = doc.title;
-      link.click();
-    } else {
-      alert("Placeholder document cannot be downloaded.");
-    }
-  };
-
-  const handleShare = () => {
-    if (navigator.share && doc.url) {
-      navigator.share({ title: doc.title, url: doc.url });
-    } else {
-      alert("Sharing is not supported on this browser or no file available.");
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-[110] bg-[#f4f4f4]">
-      <div className="flex h-screen w-full flex-col overflow-hidden bg-[#f4f4f4]">
-        {/* Modal Navbar */}
-        <div className="shrink-0 border-b border-[#dddddd] bg-white">
-          <div className="flex items-start justify-between gap-4 px-[16px] pb-[12px] pt-[18px]">
-            <div className="flex min-w-0 items-start gap-[12px]">
-              <div className="flex h-[40px] w-[40px] shrink-0 items-center justify-center rounded-[8px] bg-[#ffa313] text-white">
-                <FileText size={20} strokeWidth={1.9} />
-              </div>
-              <div className="min-w-0">
-                <h3 className="truncate text-[18px] font-normal leading-[1.15] text-[#222222]">{doc.title}</h3>
-                <p className="mt-[5px] text-[12px] font-normal leading-none text-[#666666]">
-                  Uploaded: {doc.date} &bull; Size: {doc.size} &bull; Status: {doc.status}
-                </p>
-              </div>
-            </div>
-            <button onClick={onClose} className="mt-[5px] text-[#666666] transition hover:text-[#111111]" aria-label="Close document view">
-              <X size={24} strokeWidth={2} />
-            </button>
-          </div>
-
-          <div className="flex flex-wrap items-center justify-between gap-[12px] px-[16px] pb-[14px]">
-            <div className="flex flex-wrap items-center gap-[8px]">
-              <button className="flex h-[40px] items-center gap-[5px] rounded-[8px] bg-[#e8f4ff] px-[13px] text-[16px] font-normal leading-none text-[#ff9f0f] transition hover:bg-[#dff0ff]">
-                <ZoomOut size={16} strokeWidth={2} /> Zoom Out
-              </button>
-              <div className="flex h-[40px] items-center justify-center rounded-[8px] bg-[#f1f1f1] px-[17px] text-[14px] font-normal text-[#666666]">100%</div>
-              <button className="flex h-[40px] items-center gap-[5px] rounded-[8px] bg-[#e8f4ff] px-[13px] text-[16px] font-normal leading-none text-[#ff9f0f] transition hover:bg-[#dff0ff]">
-                <ZoomIn size={16} strokeWidth={2} /> Zoom In
-              </button>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-[8px]">
-              <button onClick={handlePrint} className="flex h-[40px] items-center gap-[8px] rounded-[8px] bg-[#f1f1f1] px-[16px] text-[16px] font-normal leading-none text-[#666666] transition hover:bg-[#e8e8e8]">
-                <Printer size={17} strokeWidth={2} /> Print
-              </button>
-              <button onClick={handleShare} className="flex h-[40px] items-center gap-[8px] rounded-[8px] bg-[#f1f1f1] px-[16px] text-[16px] font-normal leading-none text-[#666666] transition hover:bg-[#e8e8e8]">
-                <Share2 size={17} strokeWidth={2} /> Share
-              </button>
-              <button onClick={handleDownload} className="flex h-[40px] items-center gap-[7px] rounded-[8px] bg-[#ffa313] px-[18px] text-[16px] font-normal leading-none text-white transition hover:bg-[#f59a0d]">
-                <Download size={17} strokeWidth={2} /> Download
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Document Content Area */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden bg-[#f4f4f4] px-[16px] py-[25px]">
-          <div className="mx-auto w-full max-w-[896px] rounded-[10px] bg-white px-[42px] pb-[38px] pt-[42px] sm:px-[54px]">
-            {doc.url ? (
-              <div className="flex min-h-[680px] items-center justify-center">
-                <img src={doc.url} alt="Document Preview" className="h-auto max-w-full rounded-[8px]" />
-              </div>
-            ) : (
-              <>
-                <div className="text-center">
-                  <div className="mx-auto flex h-[64px] w-[64px] items-center justify-center rounded-full bg-[#ffa313] text-[20px] font-normal text-white">
-                    MP
-                  </div>
-                  <h2 className="mt-[20px] text-[30px] font-normal leading-none text-[#222222]">Monthly Progress Report</h2>
-                  <p className="mt-[14px] text-[16px] font-normal leading-none text-[#666666]">Mentorship Program - Alex Johnson</p>
-                  <p className="mt-[9px] text-[14px] font-normal leading-none text-[#666666]">{doc.date}</p>
-                </div>
-
-                <div className="mt-[29px] h-px w-full bg-[#ffa313]" />
-
-                <div className="mt-[32px] rounded-[8px] bg-[#f4f4f4] px-[24px] py-[24px]">
-                  <h3 className="text-[19px] font-normal leading-none text-[#222222]">Student Information</h3>
-                  <div className="mt-[24px] grid grid-cols-1 gap-x-[72px] gap-y-[19px] sm:grid-cols-2">
-                    <div>
-                      <p className="text-[14px] font-normal leading-none text-[#666666]">Student Name</p>
-                      <p className="mt-[12px] text-[16px] font-normal leading-none text-[#222222]">Alex Johnson</p>
-                    </div>
-                    <div>
-                      <p className="text-[14px] font-normal leading-none text-[#666666]">Student ID</p>
-                      <p className="mt-[12px] text-[16px] font-normal leading-none text-[#222222]">MP-2024-1337</p>
-                    </div>
-                    <div>
-                      <p className="text-[14px] font-normal leading-none text-[#666666]">Mentor</p>
-                      <p className="mt-[12px] text-[16px] font-normal leading-none text-[#222222]">Dr. Sarah Mitchell</p>
-                    </div>
-                    <div>
-                      <p className="text-[14px] font-normal leading-none text-[#666666]">Program</p>
-                      <p className="mt-[12px] text-[16px] font-normal leading-none text-[#222222]">Career Development Mentorship</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-[27px]">
-                  <h3 className="text-[19px] font-normal leading-none text-[#222222]">Progress Summary</h3>
-                  <p className="mt-[19px] text-[17px] font-normal leading-[1.55] text-[#666666]">
-                    This month has been highly productive with significant achievements across multiple areas. I've successfully completed my software development certification course and have begun applying the learned concepts in real-world projects.
-                  </p>
-                  <p className="mt-[18px] text-[17px] font-normal leading-[1.55] text-[#666666]">
-                    My networking skills have improved substantially through attending three industry events and connecting with professionals in my field of interest. These connections have opened up new opportunities for career growth and mentorship.
-                  </p>
-                </div>
-
-                <div className="mt-[28px]">
-                  <h3 className="text-[19px] font-normal leading-none text-[#222222]">Key Achievements</h3>
-                  <div className="mt-[18px] space-y-[12px] text-[16px] font-normal text-[#222222]">
-                    <div className="flex items-start gap-[10px]">
-                      <ApprovedStatusIcon className="mt-[3px] h-[18px] w-[18px] shrink-0 text-[#06d6a0]" />
-                      <span>Completed software development certification course</span>
-                    </div>
-                    <div className="flex items-start gap-[10px]">
-                      <ApprovedStatusIcon className="mt-[3px] h-[18px] w-[18px] shrink-0 text-[#06d6a0]" />
-                      <span>Attended three professional networking events</span>
-                    </div>
-                    <div className="flex items-start gap-[10px]">
-                      <ApprovedStatusIcon className="mt-[3px] h-[18px] w-[18px] shrink-0 text-[#06d6a0]" />
-                      <span>Built first portfolio project with mentor feedback</span>
-                    </div>
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
 
 const UploadModal = ({ isOpen, onClose, onUploadSuccess }: { isOpen: boolean, onClose: () => void, onUploadSuccess: (file: File, name: string) => void }) => {
   const [file, setFile] = useState<File | null>(null);
@@ -340,28 +168,21 @@ const UploadModal = ({ isOpen, onClose, onUploadSuccess }: { isOpen: boolean, on
 // --- Main Component ---
 
 export default function DocumentSection() {
-  const [uploadedDocs, setUploadedDocs] = useState<any[]>([]);
+  const [uploadedDocs, setUploadedDocs] = useState<StudentDocument[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [notice, setNotice] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isViewModalOpen, setIsViewModalOpen] = useState(false);
-  const [selectedDoc, setSelectedDoc] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState("All Status");
 
-  // --- PERSISTENCE LOGIC ---
-  useEffect(() => {
-    const saved = localStorage.getItem('user_docs_data');
-    if (saved) {
-      setUploadedDocs(JSON.parse(saved));
-    } else {
-      setUploadedDocs(INITIAL_UPLOADED_DOCS);
-    }
-  }, []);
+  const loadDocs = () => {
+    getStudentDocuments()
+      .then(setUploadedDocs)
+      .catch((e) => setNotice((e as Error).message))
+      .finally(() => setLoading(false));
+  };
 
-  useEffect(() => {
-    if (uploadedDocs.length > 0) {
-      localStorage.setItem('user_docs_data', JSON.stringify(uploadedDocs));
-    }
-  }, [uploadedDocs]);
+  useEffect(loadDocs, []);
 
   const filteredDocs = useMemo(() => {
     return uploadedDocs.filter(doc => {
@@ -371,40 +192,25 @@ export default function DocumentSection() {
     });
   }, [uploadedDocs, searchTerm, filterStatus]);
 
-  const handleNewUpload = (file: File, name: string) => {
-    const extension = file.name.split('.').pop();
-    const reader = new FileReader();
-
-    reader.onloadend = () => {
-      const newDoc = {
-        id: Date.now(),
-        title: `${name}.${extension}`,
-        date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-        size: (file.size / (1024 * 1024)).toFixed(1) + " MB",
-        status: "Under Review",
-        url: reader.result // This is now a Base64 string that stays in memory
-      };
-      setUploadedDocs(prev => [newDoc, ...prev]);
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const handleView = (doc: any) => {
-    setSelectedDoc(doc);
-    setIsViewModalOpen(true);
-  };
-
-  const handleDownload = (url: string | null, title: string) => {
-    if (url) {
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = title;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    } else {
-      alert("This is a placeholder item. Please upload a real file to download.");
+  const handleNewUpload = async (file: File, name: string) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("name", name);
+    const res = await uploadStudentDocument(fd);
+    if (res.error) {
+      setNotice(res.error);
+      return;
     }
+    loadDocs();
+  };
+
+  const openFile = async (id: string) => {
+    const res = await getStudentDocumentUrl(id);
+    if (res.error || !res.url) {
+      setNotice(res.error ?? "Could not open the file.");
+      return;
+    }
+    window.open(res.url, "_blank", "noopener,noreferrer");
   };
 
   return (
@@ -419,32 +225,12 @@ export default function DocumentSection() {
         </button>
       </div>
 
-      <div className="mb-[24px]">
-        <div className="mb-[18px] flex items-center gap-[10px]">
-          <AlertCircle className="text-[#ff5a5a]" size={22} strokeWidth={2} />
-          <h2 className="text-[19px] font-semibold leading-none text-[#111111]">Pending Submissions</h2>
-          <span className="flex h-[22px] min-w-[22px] items-center justify-center rounded-full bg-[#ff666c] px-[7px] text-[12px] font-semibold leading-none text-white">3</span>
+      {notice && (
+        <div className="mb-[16px] flex items-start justify-between gap-4 rounded-[12px] border border-red-200 bg-red-50 px-4 py-3 text-[14px] font-semibold text-red-700">
+          <span className="break-all">{notice}</span>
+          <button type="button" onClick={() => setNotice(null)} className="shrink-0 text-[13px] underline">Dismiss</button>
         </div>
-        <div className="space-y-[16px]">
-          {INITIAL_PENDING_DOCS.map(doc => (
-            <div key={doc.id} className="flex min-h-[130px] flex-col justify-between gap-4 rounded-[12px] border border-[#ff5a5a] bg-white px-[22px] py-[22px] sm:flex-row sm:items-center">
-              <div className="flex items-center gap-[16px]">
-                <div className="flex h-[48px] w-[48px] shrink-0 items-center justify-center rounded-[10px] bg-[#fff2db] text-[#ff9f0f]"><FileText size={24} strokeWidth={2} /></div>
-                <div>
-                  <h3 className="text-[16px] font-semibold leading-none text-[#111111]">{doc.title}</h3>
-                  <div className="mt-[13px] flex flex-col gap-[10px] sm:flex-row sm:items-center">
-                    <p className="text-[14px] font-normal leading-none text-[#666666]">Due: {doc.due}</p>
-                    <span className={`${doc.priorityColor} w-fit rounded-[8px] px-[12px] py-[5px] text-[12px] font-normal leading-none`}>{doc.priority}</span>
-                  </div>
-                </div>
-              </div>
-              <button onClick={() => setIsModalOpen(true)} className="flex h-[40px] w-full shrink-0 items-center justify-center whitespace-nowrap rounded-[9px] bg-[#ffa313] px-[24px] text-[16px] font-semibold leading-none text-white transition hover:bg-[#f59a0d] sm:w-[146px]">
-                Upload Now
-              </button>
-            </div>
-          ))}
-        </div>
-      </div>
+      )}
 
       <div className="overflow-hidden rounded-[12px] border border-[#dddddd] bg-white">
         <div className="px-[22px] pt-[27px]">
@@ -489,6 +275,12 @@ export default function DocumentSection() {
               </tr>
             </thead>
             <tbody>
+              {loading && (
+                <tr><td colSpan={5} className="px-[24px] py-[28px] text-center text-[14px] text-[#666666]">Loading documents…</td></tr>
+              )}
+              {!loading && filteredDocs.length === 0 && (
+                <tr><td colSpan={5} className="px-[24px] py-[28px] text-center text-[14px] text-[#666666]">No documents uploaded yet.</td></tr>
+              )}
               {filteredDocs.map(doc => (
                 <tr key={doc.id} className="border-b border-[#e9e9e9] transition-colors last:border-b-0 hover:bg-[#fafafa]">
                   <td className="flex items-center gap-[12px] px-[24px] py-[17px]">
@@ -507,10 +299,10 @@ export default function DocumentSection() {
                   </td>
                   <td className="px-[24px] py-[17px]">
                     <div className="flex items-center gap-[22px]">
-                      <button onClick={() => handleView(doc)} className="text-[#ff9f0f] transition-transform hover:scale-110 active:opacity-50" aria-label={`View ${doc.title}`}>
+                      <button onClick={() => openFile(doc.id)} className="text-[#ff9f0f] transition-transform hover:scale-110 active:opacity-50" aria-label={`View ${doc.title}`}>
                         <Eye size={17} strokeWidth={2} />
                       </button>
-                      <button onClick={() => handleDownload(doc.url, doc.title)} className="text-[#ff9f0f] transition-transform hover:scale-110 active:opacity-50" aria-label={`Download ${doc.title}`}>
+                      <button onClick={() => openFile(doc.id)} className="text-[#ff9f0f] transition-transform hover:scale-110 active:opacity-50" aria-label={`Download ${doc.title}`}>
                         <Download size={17} strokeWidth={2} />
                       </button>
                     </div>
@@ -523,16 +315,10 @@ export default function DocumentSection() {
       </div>
 
       {/* Modals */}
-      <UploadModal 
-        isOpen={isModalOpen} 
-        onClose={() => setIsModalOpen(false)} 
-        onUploadSuccess={handleNewUpload} 
-      />
-
-      <ViewModal 
-        isOpen={isViewModalOpen} 
-        onClose={() => setIsViewModalOpen(false)} 
-        doc={selectedDoc} 
+      <UploadModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onUploadSuccess={handleNewUpload}
       />
     </section>
   );
