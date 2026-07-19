@@ -58,3 +58,27 @@ export interface MentorAttendanceRow {
   status: MentorAttendanceStatus
   notes: string
 }
+
+export interface MentorStudentOption {
+  id: string
+  name: string
+}
+
+export interface MentorNote {
+  id: string
+  title: string
+  category: string
+  studentId: string
+  student: string
+  date: string
+  author: string
+  content: string
+  status: string
+}
+
+export interface MentorNoteInput {
+  studentId: string
+  category: string
+  title: string
+  content: string
+}

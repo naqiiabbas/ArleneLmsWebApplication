@@ -1,79 +1,34 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
-import { 
-  Search, 
-  Plus, 
-  Filter, 
-  ChevronDown, 
-  Pencil, 
-  User, 
-  Calendar, 
-  X, 
-  Upload, 
+import React, { useState, useMemo, useEffect } from "react";
+import {
+  Search,
+  Plus,
+  Filter,
+  ChevronDown,
+  Pencil,
+  User,
+  Calendar,
+  X,
+  Upload,
   FileText,
   Tag
 } from "lucide-react";
-
-/**
- * TYPES & INTERFACES
- */
-interface Note {
-  id: number;
-  title: string;
-  category: string;
-  student: string;
-  date: string;
-  author: string;
-  content: string;
-  attachments: string[];
-}
+import {
+  getMentorNotes,
+  createMentorNote,
+  updateMentorNote,
+} from "@/lib/data/mentor";
+import type { MentorNote, MentorStudentOption } from "@/lib/data/mentor.types";
 
 const categories = ["Academic", "Career", "Personal"];
-const students = ["Marcus Johnson", "David Williams", "James Brown", "Michael Davis"];
 
-const initialNotesData: Note[] = [
-  {
-    id: 1,
-    title: "Algebra Progress",
-    category: "Academic",
-    student: "Marcus Johnson",
-    date: "2024-11-27",
-    author: "John Mentor",
-    content: "Marcus showed exceptional understanding of quadratic equations today. He completed all practice problems independently.",
-    attachments: []
-  },
-  {
-    id: 2,
-    title: "Career Discussion",
-    category: "Career",
-    student: "David Williams",
-    date: "2024-11-26",
-    author: "John Mentor",
-    content: "Discussed various engineering pathways. David is particularly interested in software engineering. Will arrange campus visit.",
-    attachments: []
-  },
-  {
-    id: 3,
-    title: "Attendance Concern",
-    category: "Personal",
-    student: "James Brown",
-    date: "2024-11-25",
-    author: "John Mentor",
-    content: "Reached out regarding recent absences. Family situation affecting attendance. Developing support plan.",
-    attachments: []
-  },
-  {
-    id: 4,
-    title: "Study Skills",
-    category: "Academic",
-    student: "Michael Davis",
-    date: "2024-11-24",
-    author: "John Mentor",
-    content: "Michael is developing better organizational skills. Implemented new note-taking system that seems to be working well.",
-    attachments: []
-  }
-];
+const STATUS_STYLES: Record<string, string> = {
+  pending: "bg-[#fff4c6] text-[#c98600]",
+  approved: "bg-[#dff9ea] text-[#009d4c]",
+  rejected: "bg-[#ffe3e6] text-[#ff001a]",
+  flagged: "bg-[#ffe8d6] text-[#d2691e]",
+};
 
 // --- Sub-Components ---
 
@@ -132,47 +87,61 @@ const FileUploadArea = ({
 // --- Main Panel Component ---
 
 const NotesAndReports = () => {
-  const [notes, setNotes] = useState<Note[]>(initialNotesData);
+  const [notes, setNotes] = useState<MentorNote[]>([]);
+  const [students, setStudents] = useState<MentorStudentOption[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingNote, setEditingNote] = useState<Note | null>(null);
-  
+  const [editingNote, setEditingNote] = useState<MentorNote | null>(null);
+
   // Filter States
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All Categories");
 
   // Form States
   const [formData, setFormData] = useState({
-    student: "",
-    date: "",
+    studentId: "",
     category: "Academic",
     title: "",
     content: ""
   });
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
 
+  const loadNotes = () => {
+    getMentorNotes()
+      .then(({ notes, students }) => {
+        setNotes(notes);
+        setStudents(students);
+      })
+      .catch((e) => setNotice((e as Error).message))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(loadNotes, []);
+
   // --- Search & Filter Logic ---
   const filteredNotes = useMemo(() => {
     return notes.filter(note => {
-      const matchesSearch = note.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+      const matchesSearch = note.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                             note.student.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesCategory = selectedCategory === "All Categories" || note.category === selectedCategory;
       return matchesSearch && matchesCategory;
     });
   }, [notes, searchQuery, selectedCategory]);
 
-  const handleOpenModal = (note: Note | null = null) => {
+  const handleOpenModal = (note: MentorNote | null = null) => {
     if (note) {
       setEditingNote(note);
       setFormData({
-        student: note.student,
-        date: note.date,
+        studentId: note.studentId,
         category: note.category,
         title: note.title,
         content: note.content
       });
     } else {
       setEditingNote(null);
-      setFormData({ student: "", date: "", category: "Academic", title: "", content: "" });
+      setFormData({ studentId: "", category: "Academic", title: "", content: "" });
     }
     setAttachedFile(null);
     setIsModalOpen(true);
@@ -184,19 +153,20 @@ const NotesAndReports = () => {
     }
   };
 
-  const handleSave = () => {
-    if (editingNote) {
-      setNotes(notes.map(n => n.id === editingNote.id ? { ...n, ...formData } : n));
-    } else {
-      const newNote: Note = {
-        id: Date.now(),
-        ...formData,
-        author: "John Mentor",
-        attachments: attachedFile ? [attachedFile.name] : []
-      };
-      setNotes([newNote, ...notes]);
+  const handleSave = async () => {
+    if (saving) return;
+    setSaving(true);
+    const res = editingNote
+      ? await updateMentorNote(editingNote.id, formData)
+      : await createMentorNote(formData);
+    setSaving(false);
+    if (res.error) {
+      setNotice(res.error);
+      return;
     }
+    setNotice(null);
     setIsModalOpen(false);
+    loadNotes();
   };
 
   return (
@@ -215,6 +185,12 @@ const NotesAndReports = () => {
           New Note
         </button>
       </div>
+
+      {notice && (
+        <div className="mb-[20px] rounded-[8px] border border-red-200 bg-red-50 px-4 py-3 text-[14px] font-semibold text-red-700">
+          {notice}
+        </div>
+      )}
 
       {/* Filter Bar */}
       <div className="mb-[24px] flex min-h-[80px] flex-col gap-[12px] rounded-[8px] border border-[#dddddd] bg-white px-[16px] py-[16px] lg:flex-row lg:items-center">
@@ -248,13 +224,20 @@ const NotesAndReports = () => {
 
       {/* Notes List */}
       <div className="space-y-[16px]">
-        {filteredNotes.length > 0 ? (
+        {loading ? (
+          <div className="rounded-[8px] border border-dashed border-[#dddddd] bg-white py-20 text-center text-[15px] text-[#657183]">
+            Loading notes…
+          </div>
+        ) : filteredNotes.length > 0 ? (
           filteredNotes.map((note) => (
             <div key={note.id} className="relative min-h-[136px] rounded-[8px] border border-[#dddddd] bg-white px-[24px] py-[25px] transition-shadow hover:shadow-sm">
               <div className="mb-[13px] flex items-start justify-between gap-4">
                 <div className="flex flex-wrap items-center gap-[13px]">
                   <h3 className="text-[17px] font-semibold leading-none text-[#2d3b4f]">{note.title}</h3>
                   <Badge type={note.category} />
+                  <span className={`inline-flex h-[23px] items-center rounded-full px-[12px] text-[12px] font-normal capitalize leading-none ${STATUS_STYLES[note.status] || "bg-gray-100 text-gray-500"}`}>
+                    {note.status}
+                  </span>
                 </div>
                 <button 
                   onClick={() => handleOpenModal(note)}
@@ -302,13 +285,13 @@ const NotesAndReports = () => {
                 <label className="mb-[10px] block text-[16px] font-normal leading-none text-[#657183]">Student</label>
                 <div className="relative">
                   <User className="absolute left-[13px] top-1/2 -translate-y-1/2 text-[#657183]" size={18} strokeWidth={1.8} />
-                  <select 
-                    value={formData.student}
-                    onChange={(e) => setFormData({...formData, student: e.target.value})}
+                  <select
+                    value={formData.studentId}
+                    onChange={(e) => setFormData({...formData, studentId: e.target.value})}
                     className="h-[38px] w-full appearance-none rounded-[8px] border border-[#d6dce3] bg-white pl-[38px] pr-[42px] text-[16px] font-normal text-[#2d3b4f] outline-none focus:border-[#ffa313]"
                   >
                     <option value="">Select Student...</option>
-                    {students.map(s => <option key={s} value={s}>{s}</option>)}
+                    {students.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
                   <ChevronDown className="pointer-events-none absolute right-[13px] top-1/2 -translate-y-1/2 text-[#657183]" size={20} strokeWidth={1.8} />
                 </div>
@@ -319,12 +302,11 @@ const NotesAndReports = () => {
                   <label className="mb-[10px] block text-[16px] font-normal leading-none text-[#657183]">Date</label>
                   <div className="relative">
                     <Calendar className="absolute left-[13px] top-1/2 -translate-y-1/2 text-[#657183]" size={18} strokeWidth={1.8} />
-                    <input 
-                      type="text" 
-                      value={formData.date}
-                      onChange={(e) => setFormData({...formData, date: e.target.value})}
-                      placeholder="DD/MM/YYYY"
-                      className="h-[44px] w-full rounded-[8px] border border-[#d6dce3] bg-white pl-[38px] pr-[13px] text-[16px] font-normal text-[#2d3b4f] outline-none placeholder:text-[#8d949e] focus:border-[#ffa313]" 
+                    <input
+                      type="text"
+                      value={editingNote ? editingNote.date : "Set automatically"}
+                      readOnly
+                      className="h-[44px] w-full cursor-default rounded-[8px] border border-[#d6dce3] bg-[#f7f8fa] pl-[38px] pr-[13px] text-[16px] font-normal text-[#657183] outline-none"
                     />
                   </div>
                 </div>
@@ -379,11 +361,12 @@ const NotesAndReports = () => {
               >
                 Cancel
               </button>
-              <button 
+              <button
                 onClick={handleSave}
-                className="h-[42px] rounded-[8px] bg-[#ffa313] px-[22px] text-[14px] font-semibold text-white transition hover:bg-[#f59a0d]"
+                disabled={saving}
+                className="h-[42px] rounded-[8px] bg-[#ffa313] px-[22px] text-[14px] font-semibold text-white transition hover:bg-[#f59a0d] disabled:opacity-60"
               >
-                {editingNote ? "Save Changes" : "Save & Send Note"}
+                {saving ? "Saving…" : editingNote ? "Save Changes" : "Save & Send Note"}
               </button>
             </div>
           </div>

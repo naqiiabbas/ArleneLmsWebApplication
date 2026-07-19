@@ -165,9 +165,15 @@ mentor's `mentor_student_assignments`.
   mentor's assigned-students' `attendance_records` (session = `class_sessions.title` ?? `classes.name`);
   `updateMentorAttendance(id, status, notes)` — ownership-checked, writes status/notes/method='manual'/
   marked_by/marked_at. UI edit modal (Present/Absent/Late/Pending) + inline notes persist on blur.
-- **Still to wire:** Notes & Reports (`Notesreport.tsx` — create `notes`), Messaging (`Messagesmen`
-  → reuse `messaging.ts`), Documents/Calendar/Notifications/Resources/Blog/Settings (reuse existing
-  data layers, scoped). Also the **iPad attendance check-in** kiosk.
+- **Notes & Reports** (`Notesreport.tsx`) — WIRED & verified: `getMentorNotes()` = the mentor's own
+  authored `notes` + assigned-student dropdown options; `createMentorNote(input)` inserts with
+  `author_role='mentor'` and `status='pending'` (enters the admin Notes Moderation queue);
+  `updateMentorNote(id, input)` edits own note (ownership-checked) and resets to pending. Both guard
+  that the target student is an active assignment. Each card shows a moderation-status pill.
+  **Attachments are UI-only (not persisted)** — follow-up (needs a notes bucket + `note_attachments`).
+- **Still to wire:** Messaging (`Messagesmen` → reuse `messaging.ts`), Documents/Calendar/
+  Notifications/Resources/Blog/Settings (reuse existing data layers, scoped). Also the **iPad
+  attendance check-in** kiosk.
 
 ## 6. Frontend — Tech Stack & Structure
 

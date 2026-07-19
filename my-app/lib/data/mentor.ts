@@ -6,8 +6,11 @@ import type {
   MentorAttendanceRow,
   MentorAttendanceStatus,
   MentorDashboard,
+  MentorNote,
+  MentorNoteInput,
   MentorStudent,
   MentorStudentDetail,
+  MentorStudentOption,
   RiskLevel,
 } from "@/lib/data/mentor.types"
 
@@ -388,6 +391,162 @@ export async function updateMentorAttendance(
       method: "manual",
       marked_by: userId,
       marked_at: new Date().toISOString(),
+    })
+    .eq("id", id)
+  if (error) return { error: error.message }
+  return {}
+}
+
+/** Options for the "Student" dropdown: the mentor's active-assignment students. */
+async function assignedStudentOptions(
+  admin: ReturnType<typeof createAdminClient>,
+  userId: string,
+): Promise<{ ids: string[]; options: MentorStudentOption[] }> {
+  const { data: assigns } = await admin
+    .from("mentor_student_assignments")
+    .select("student:students ( id, profile:profiles ( full_name ) )")
+    .eq("mentor_id", userId)
+    .eq("status", "active")
+
+  const rows = (assigns ?? []) as unknown as {
+    student: { id: string; profile: { full_name: string | null } | null } | null
+  }[]
+  const options: MentorStudentOption[] = []
+  for (const r of rows) {
+    if (r.student?.id) options.push({ id: r.student.id, name: r.student.profile?.full_name ?? "—" })
+  }
+  options.sort((a, b) => a.name.localeCompare(b.name))
+  return { ids: options.map((o) => o.id), options }
+}
+
+/** The mentor's authored notes + assigned-student options (Notes & Reports panel). */
+export async function getMentorNotes(): Promise<{
+  notes: MentorNote[]
+  students: MentorStudentOption[]
+}> {
+  const { userId } = await assertMentor()
+  const admin = createAdminClient()
+
+  const [{ options }, { data: prof }, { data, error }] = await Promise.all([
+    assignedStudentOptions(admin, userId),
+    admin.from("profiles").select("full_name").eq("id", userId).single(),
+    admin
+      .from("notes")
+      .select(
+        "id, title, content, category, status, created_at, student_id, student:students ( profile:profiles ( full_name ) )",
+      )
+      .eq("author_id", userId)
+      .order("created_at", { ascending: false }),
+  ])
+  if (error) throw new Error(error.message)
+
+  const authorName = prof?.full_name ?? "You"
+  const notes = ((data ?? []) as unknown as {
+    id: string
+    title: string
+    content: string | null
+    category: string | null
+    status: string
+    created_at: string | null
+    student_id: string | null
+    student: { profile: { full_name: string | null } | null } | null
+  }[]).map((n) => ({
+    id: n.id,
+    title: n.title,
+    category: n.category ?? "Academic",
+    studentId: n.student_id ?? "",
+    student: n.student?.profile?.full_name ?? "—",
+    date: n.created_at ? n.created_at.slice(0, 10) : "",
+    author: authorName,
+    content: n.content ?? "",
+    status: n.status,
+  }))
+
+  return { notes, students: options }
+}
+
+/** Create a progress note for an assigned student (enters admin moderation as 'pending'). */
+export async function createMentorNote(
+  input: MentorNoteInput,
+): Promise<{ error?: string; id?: string }> {
+  let userId: string
+  try {
+    ;({ userId } = await assertMentor())
+  } catch (e) {
+    return { error: (e as Error).message }
+  }
+  if (!input.studentId) return { error: "Please select a student." }
+  if (!input.title.trim()) return { error: "Please enter a title." }
+  const admin = createAdminClient()
+
+  // Ensure the student is actively assigned to this mentor.
+  const { data: link } = await admin
+    .from("mentor_student_assignments")
+    .select("student_id")
+    .eq("mentor_id", userId)
+    .eq("student_id", input.studentId)
+    .eq("status", "active")
+    .maybeSingle()
+  if (!link) return { error: "This student is not assigned to you." }
+
+  const { data, error } = await admin
+    .from("notes")
+    .insert({
+      student_id: input.studentId,
+      author_id: userId,
+      author_role: "mentor",
+      title: input.title.trim(),
+      content: input.content.trim() || null,
+      category: input.category,
+      status: "pending",
+    })
+    .select("id")
+    .single()
+  if (error) return { error: error.message }
+  return { id: data.id }
+}
+
+/** Edit one of the mentor's own notes (re-enters moderation as 'pending'). */
+export async function updateMentorNote(
+  id: string,
+  input: MentorNoteInput,
+): Promise<{ error?: string }> {
+  let userId: string
+  try {
+    ;({ userId } = await assertMentor())
+  } catch (e) {
+    return { error: (e as Error).message }
+  }
+  if (!input.studentId) return { error: "Please select a student." }
+  if (!input.title.trim()) return { error: "Please enter a title." }
+  const admin = createAdminClient()
+
+  // Ownership: the note must be authored by this mentor.
+  const { data: note } = await admin
+    .from("notes")
+    .select("author_id")
+    .eq("id", id)
+    .maybeSingle()
+  if (!note || note.author_id !== userId) return { error: "You can only edit your own notes." }
+
+  // If reassigning the student, ensure the new student is assigned to this mentor.
+  const { data: link } = await admin
+    .from("mentor_student_assignments")
+    .select("student_id")
+    .eq("mentor_id", userId)
+    .eq("student_id", input.studentId)
+    .eq("status", "active")
+    .maybeSingle()
+  if (!link) return { error: "This student is not assigned to you." }
+
+  const { error } = await admin
+    .from("notes")
+    .update({
+      student_id: input.studentId,
+      title: input.title.trim(),
+      content: input.content.trim() || null,
+      category: input.category,
+      status: "pending",
     })
     .eq("id", id)
   if (error) return { error: error.message }
