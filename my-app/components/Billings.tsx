@@ -1,74 +1,71 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { getBillingData } from "@/lib/data/billing";
+import type { BillingData, InvoiceStatus, UIInvoice } from "@/lib/data/billing.types";
 
 type BillingTab = "Overview" | "Invoices" | "Plans & Pricing";
-type InvoiceStatus = "Paid" | "Pending" | "Overdue";
 
-const BILLING_STATS = [
-  {
-    id: "total-revenue",
+const STAT_STYLES = {
+  totalRevenue: {
     label: "Total Revenue",
-    value: "$3,798",
-    subtext: "+12% from last month",
     icon: "/images/admin-billing-revenue.svg",
     cardClass: "border-[#f4eadc] bg-[#fbf7ef]",
     valueClass: "text-[#f9a313]",
     subtextClass: "text-[#00a63e]",
   },
-  {
-    id: "pending",
+  pending: {
     label: "Pending",
-    value: "$1,799",
-    subtext: "1 invoice",
     icon: "/images/admin-billing-pending.svg",
     cardClass: "border-[#f6e6c8] bg-[#fff3de]",
     valueClass: "text-[#ff4f00]",
     subtextClass: "text-[#666666]",
   },
-  {
-    id: "overdue",
+  overdue: {
     label: "Overdue",
-    value: "$899",
-    subtext: "1 invoice",
     icon: "/images/admin-billing-overdue.svg",
     cardClass: "border-[#f8dbe2] bg-[#ffe7eb]",
     valueClass: "text-[#ff0000]",
     subtextClass: "text-[#666666]",
   },
-  {
-    id: "total-invoices",
+  totalInvoices: {
     label: "Total Invoices",
-    value: "4",
-    subtext: "This month",
     icon: "/images/admin-billing-card.svg",
     cardClass: "border-[#e3e3e3] bg-white",
     valueClass: "text-[#f9a313]",
     subtextClass: "text-[#666666]",
   },
-];
+};
 
-const INVOICES: Array<{
-  id: string;
-  organization: string;
-  amount: number;
-  dueDate: string;
-  paidDate: string;
-  status: InvoiceStatus;
-}> = [
-  { id: "INV-2025-001", organization: "Tech University", amount: 2499, dueDate: "2025-11-15", paidDate: "2025-11-10", status: "Paid" },
-  { id: "INV-2025-002", organization: "Innovation Corp", amount: 1299, dueDate: "2025-11-20", paidDate: "2025-11-18", status: "Paid" },
-  { id: "INV-2025-003", organization: "Future Leaders Foundation", amount: 1799, dueDate: "2025-12-05", paidDate: "-", status: "Pending" },
-  { id: "INV-2025-004", organization: "State Education Department", amount: 899, dueDate: "2025-11-25", paidDate: "-", status: "Overdue" },
-];
+const money = (n: number) => `$${n.toLocaleString("en-US")}`;
+const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
+
+const EMPTY_BILLING: BillingData = {
+  totalRevenue: 0,
+  pendingAmount: 0,
+  pendingCount: 0,
+  overdueAmount: 0,
+  overdueCount: 0,
+  totalInvoices: 0,
+  invoices: [],
+  plans: [],
+  currentPlan: null,
+};
 
 export default function BillingSection() {
   const [activeTab, setActiveTab] = useState<BillingTab>("Overview");
   const [isMounted, setIsMounted] = useState(false);
+  const [data, setData] = useState<BillingData | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
     setIsMounted(true);
+    getBillingData()
+      .then(setData)
+      .catch((e) => setNotice((e as Error).message));
   }, []);
+
+  const billing = data ?? EMPTY_BILLING;
 
   const handleExport = async () => {
     if (typeof window === "undefined") return;
@@ -85,7 +82,7 @@ export default function BillingSection() {
       autoTable(doc, {
         startY: 35,
         head: [["Invoice #", "Organization", "Amount", "Status", "Due Date"]],
-        body: INVOICES.map((invoice) => [invoice.id, invoice.organization, `$${invoice.amount.toFixed(2)}`, invoice.status, invoice.dueDate]),
+        body: billing.invoices.map((invoice) => [invoice.id, invoice.organization, `$${invoice.amount.toFixed(2)}`, invoice.status, invoice.dueDate]),
         headStyles: { fillColor: [249, 166, 24] },
         theme: "striped",
       });
@@ -120,6 +117,12 @@ export default function BillingSection() {
         </button>
       </div>
 
+      {notice && (
+        <div className="mb-4 rounded-[8px] border border-red-200 bg-red-50 px-4 py-3 text-[14px] font-semibold text-red-700">
+          {notice}
+        </div>
+      )}
+
       <div className="overflow-hidden rounded-[8px] border border-[#d9d9d9] bg-white shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
         <div className="flex h-[48px] items-end gap-[20px] border-b border-[#d9d9d9] px-[22px]">
           {(["Overview", "Invoices", "Plans & Pricing"] as BillingTab[]).map((tab) => (
@@ -137,48 +140,65 @@ export default function BillingSection() {
         </div>
 
         <div className="p-[24px]">
-          {activeTab === "Overview" && <Overview />}
-          {activeTab === "Invoices" && <InvoicesTable onDownload={handleExport} />}
-          {activeTab === "Plans & Pricing" && <Plans />}
+          {activeTab === "Overview" && <Overview data={billing} />}
+          {activeTab === "Invoices" && <InvoicesTable data={billing} loading={!data} onDownload={handleExport} />}
+          {activeTab === "Plans & Pricing" && <Plans data={billing} />}
         </div>
       </div>
     </section>
   );
 }
 
-const Overview = () => (
-  <div className="space-y-[22px]">
-    <div className="grid grid-cols-1 gap-[18px] md:grid-cols-2 xl:grid-cols-4">
-      {BILLING_STATS.map((stat) => (
-        <article key={stat.id} className={`flex h-[110px] flex-col justify-between rounded-[8px] border px-[22px] py-[18px] ${stat.cardClass}`}>
-          <div className="flex items-center justify-between">
-            <span className="text-[15px] text-[#666666]">{stat.label}</span>
-            <img src={stat.icon} alt="" aria-hidden="true" className="h-[20px] w-[20px]" />
-          </div>
-          <div>
-            <p className={`text-[24px] leading-none ${stat.valueClass}`}>{stat.value}</p>
-            <p className={`mt-[8px] text-[12px] ${stat.subtextClass}`}>{stat.subtext}</p>
-          </div>
-        </article>
-      ))}
-    </div>
+const Overview = ({ data }: { data: BillingData }) => {
+  const cards = [
+    { ...STAT_STYLES.totalRevenue, value: money(data.totalRevenue), subtext: "paid invoices" },
+    { ...STAT_STYLES.pending, value: money(data.pendingAmount), subtext: plural(data.pendingCount, "invoice") },
+    { ...STAT_STYLES.overdue, value: money(data.overdueAmount), subtext: plural(data.overdueCount, "invoice") },
+    { ...STAT_STYLES.totalInvoices, value: String(data.totalInvoices), subtext: "all time" },
+  ];
+  return (
+    <div className="space-y-[22px]">
+      <div className="grid grid-cols-1 gap-[18px] md:grid-cols-2 xl:grid-cols-4">
+        {cards.map((stat) => (
+          <article key={stat.label} className={`flex h-[110px] flex-col justify-between rounded-[8px] border px-[22px] py-[18px] ${stat.cardClass}`}>
+            <div className="flex items-center justify-between">
+              <span className="text-[15px] text-[#666666]">{stat.label}</span>
+              <img src={stat.icon} alt="" aria-hidden="true" className="h-[20px] w-[20px]" />
+            </div>
+            <div>
+              <p className={`text-[24px] leading-none ${stat.valueClass}`}>{stat.value}</p>
+              <p className={`mt-[8px] text-[12px] ${stat.subtextClass}`}>{stat.subtext}</p>
+            </div>
+          </article>
+        ))}
+      </div>
 
-    <div className="rounded-[8px] border border-[#d9d9d9] bg-white p-[24px]">
-      <p className="text-[14px] font-semibold uppercase tracking-wide text-[#777777]">Current Plan</p>
-      <div className="mt-[12px] flex items-center justify-between gap-[18px]">
-        <div>
-          <h2 className="text-[22px] font-semibold text-[#f9a313]">Professional Plan</h2>
-          <p className="mt-[6px] text-[14px] text-[#666666]">$99/month · Renews on Dec 15, 2025</p>
+      <div className="rounded-[8px] border border-[#d9d9d9] bg-white p-[24px]">
+        <p className="text-[14px] font-semibold uppercase tracking-wide text-[#777777]">Current Plan</p>
+        <div className="mt-[12px] flex items-center justify-between gap-[18px]">
+          {data.currentPlan ? (
+            <div>
+              <h2 className="text-[22px] font-semibold text-[#f9a313]">{data.currentPlan.name} Plan</h2>
+              <p className="mt-[6px] text-[14px] text-[#666666]">
+                {money(data.currentPlan.price)}/month{data.currentPlan.renews ? ` · Renews on ${data.currentPlan.renews}` : ""}
+              </p>
+            </div>
+          ) : (
+            <div>
+              <h2 className="text-[22px] font-semibold text-[#666666]">No active plan</h2>
+              <p className="mt-[6px] text-[14px] text-[#666666]">Choose a plan below to get started.</p>
+            </div>
+          )}
+          <button className="h-[42px] rounded-[8px] border border-[#f9a313] px-[22px] text-[15px] font-medium text-[#f9a313] hover:bg-[#fff7e8]">
+            {data.currentPlan ? "Upgrade Plan" : "Choose Plan"}
+          </button>
         </div>
-        <button className="h-[42px] rounded-[8px] border border-[#f9a313] px-[22px] text-[15px] font-medium text-[#f9a313] hover:bg-[#fff7e8]">
-          Upgrade Plan
-        </button>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
-const InvoicesTable = ({ onDownload }: { onDownload: () => void }) => (
+const InvoicesTable = ({ data, loading, onDownload }: { data: BillingData; loading: boolean; onDownload: () => void }) => (
   <div className="overflow-x-auto">
     <table className="w-full min-w-[920px] border-collapse">
       <thead>
@@ -193,7 +213,13 @@ const InvoicesTable = ({ onDownload }: { onDownload: () => void }) => (
         </tr>
       </thead>
       <tbody>
-        {INVOICES.map((invoice) => (
+        {loading && (
+          <tr><td colSpan={7} className="px-[24px] py-[40px] text-center text-[#777777]">Loading invoices...</td></tr>
+        )}
+        {!loading && data.invoices.length === 0 && (
+          <tr><td colSpan={7} className="px-[24px] py-[40px] text-center text-[#777777]">No invoices yet.</td></tr>
+        )}
+        {data.invoices.map((invoice) => (
           <tr key={invoice.id} className="h-[66px] border-b border-[#e0e0e0] text-[15px]">
             <td className="px-[24px] text-[#111111]">{invoice.id}</td>
             <td className="px-[24px] text-[#666666]">{invoice.organization}</td>
@@ -217,20 +243,39 @@ const InvoicesTable = ({ onDownload }: { onDownload: () => void }) => (
   </div>
 );
 
-const Plans = () => (
-  <div className="grid grid-cols-1 gap-[18px] lg:grid-cols-3">
-    {["Basic", "Professional", "Enterprise"].map((plan, index) => (
-      <article key={plan} className={`rounded-[8px] border p-[24px] ${index === 1 ? "border-[#f9a313] bg-[#fffaf1]" : "border-[#d9d9d9] bg-white"}`}>
-        <h2 className="text-[20px] font-semibold">{plan}</h2>
-        <p className="mt-[12px] text-[30px] font-semibold text-[#f9a313]">{index === 0 ? "$49" : index === 1 ? "$99" : "$199"}</p>
-        <p className="mt-[4px] text-[14px] text-[#666666]">per month</p>
-        <button className={`mt-[22px] h-[42px] w-full rounded-[8px] text-[15px] font-medium ${index === 1 ? "bg-[#f9a313] text-white" : "border border-[#d9d9d9] text-[#666666]"}`}>
-          {index === 1 ? "Current Plan" : "Choose Plan"}
-        </button>
-      </article>
-    ))}
-  </div>
-);
+const Plans = ({ data }: { data: BillingData }) => {
+  const plans = data.plans.length
+    ? data.plans
+    : [
+        { name: "Basic", price: 49, features: [] },
+        { name: "Professional", price: 99, features: [] },
+        { name: "Enterprise", price: 199, features: [] },
+      ];
+  return (
+    <div className="grid grid-cols-1 gap-[18px] lg:grid-cols-3">
+      {plans.map((plan) => {
+        const isCurrent = data.currentPlan?.name === plan.name;
+        return (
+          <article key={plan.name} className={`rounded-[8px] border p-[24px] ${isCurrent ? "border-[#f9a313] bg-[#fffaf1]" : "border-[#d9d9d9] bg-white"}`}>
+            <h2 className="text-[20px] font-semibold">{plan.name}</h2>
+            <p className="mt-[12px] text-[30px] font-semibold text-[#f9a313]">{money(plan.price)}</p>
+            <p className="mt-[4px] text-[14px] text-[#666666]">per month</p>
+            {plan.features.length > 0 && (
+              <ul className="mt-[14px] space-y-[6px] text-[13px] text-[#666666]">
+                {plan.features.map((f) => (
+                  <li key={f}>• {f}</li>
+                ))}
+              </ul>
+            )}
+            <button className={`mt-[22px] h-[42px] w-full rounded-[8px] text-[15px] font-medium ${isCurrent ? "bg-[#f9a313] text-white" : "border border-[#d9d9d9] text-[#666666]"}`}>
+              {isCurrent ? "Current Plan" : "Choose Plan"}
+            </button>
+          </article>
+        );
+      })}
+    </div>
+  );
+};
 
 const StatusBadge = ({ status }: { status: InvoiceStatus }) => {
   const styles: Record<InvoiceStatus, string> = {
@@ -242,19 +287,7 @@ const StatusBadge = ({ status }: { status: InvoiceStatus }) => {
   return <span className={`inline-flex h-[24px] items-center rounded-full px-[12px] text-[13px] font-normal ${styles[status]}`}>{status}</span>;
 };
 
-const Amount = ({ value }: { value: number }) => {
-  if (value === 2499 || value === 1299 || value === 899) {
-    const whole = Math.trunc(value);
-    return (
-      <span className="inline-flex flex-col leading-[18px]">
-        <span>${whole}</span>
-        <span>.00</span>
-      </span>
-    );
-  }
-
-  return <span>${value.toFixed(2)}</span>;
-};
+const Amount = ({ value }: { value: number }) => <span>${value.toFixed(2)}</span>;
 
 const DownloadWhiteGlyph = () => (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">

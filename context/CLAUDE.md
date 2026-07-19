@@ -559,6 +559,17 @@ flagged), `setNoteStatus(id, status)` (approve/reject/flag transitions). **`comp
 2 sample notes. Notes are created by mentors/students elsewhere (not yet wired) — this is the admin
 moderation view.
 
+**Admin → Billing** (13th slice, verified live): **`lib/data/billing.types.ts`** /
+**`lib/data/billing.ts`** (`"use server"`, gated by **`assertPermission("billing.manage")`** —
+super_admin/admin only). `getBillingData()` reads `invoices` (org label via `org:organizations(name)`
++ `sponsor:sponsors(company_name)` embeds, fallback description), `billing_plans` (the 3 seeded
+plans), and the active `subscriptions` row (current plan); computes revenue/pending/overdue totals
++ counts. Read-only + client-side PDF export (jspdf). **`components/Billings.tsx`** — mock removed;
+Overview/Invoices/Plans tabs render real data (stat cards, invoice table, plan cards with current-
+plan detection), loading/empty/notice; simplified the legacy `Amount` special-casing. Seeded 3
+sample invoices. No subscription seeded → shows "No active plan". No invoice create/edit UI in the
+mock (view-only); payments gateway still record-keeping (per §9 open item).
+
 **Pattern for the next modules:** `lib/data/<module>.ts` (`"use server"` + `assertAdmin()` from
 `lib/data/guards.ts` + service role for privileged ops, or the RLS server client for user-scoped
 reads) → wire the existing `components/*.tsx` (load on mount, mutate + refetch, notice/loading
