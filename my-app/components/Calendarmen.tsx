@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Calendar as CalendarIcon,
   ChevronDown,
@@ -13,17 +13,10 @@ import {
   User,
   X,
 } from "lucide-react";
+import { getMentorCalendar, createMentorSession } from "@/lib/data/mentor";
+import type { MentorSession, MentorClassOption } from "@/lib/data/mentor.types";
 
-const INITIAL_SESSIONS = [
-  { id: 1, student: "Marcus Johnson", type: "Math Tutoring", date: "2024-11-27", time: "10:00 AM", location: "Library Room 301", notes: "Focus on quadratic equations" },
-  { id: 2, student: "David Williams", type: "Career Discussion", date: "2024-11-27", time: "02:00 PM", location: "Virtual Meeting", notes: "Discussing engineering pathways" },
-  { id: 3, student: "James Brown", type: "Study Skills", date: "2024-11-28", time: "11:30 AM", location: "Room 204", notes: "Organization techniques" },
-  { id: 4, student: "Michael Davis", type: "Check-in", date: "2024-11-29", time: "09:00 AM", location: "Cafe", notes: "Weekly progress review" },
-  { id: 5, student: "Robert Miller", type: "Math Tutoring", date: "2024-12-02", time: "01:00 PM", location: "Library", notes: "Calculus basics" },
-];
-
-const STUDENTS = ["Marcus Johnson", "David Williams", "James Brown", "Michael Davis", "Robert Miller"];
-const SESSION_TYPES = ["Math Tutoring", "Career Discussion", "Study Skills", "Check-in"];
+const SESSION_TYPES = ["Tutoring", "Career Discussion", "Study Skills", "Check-in", "Workshop"];
 
 const formatLocalDate = (date: Date) => {
   const year = date.getFullYear();
@@ -52,14 +45,27 @@ const Modal = ({ isOpen, onClose, title, children }: { isOpen: boolean; onClose:
 };
 
 export default function CalendarSection() {
-  const [sessions, setSessions] = useState(INITIAL_SESSIONS);
-  const [currentDate, setCurrentDate] = useState(new Date(2024, 10, 1));
+  const [sessions, setSessions] = useState<MentorSession[]>([]);
+  const [classes, setClasses] = useState<MentorClassOption[]>([]);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [currentDate, setCurrentDate] = useState(() => { const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), 1); });
   const [isNewSessionOpen, setIsNewSessionOpen] = useState(false);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
-  const [selectedSession, setSelectedSession] = useState<any>(null);
+  const [selectedSession, setSelectedSession] = useState<MentorSession | null>(null);
   const [calendarView, setCalendarView] = useState("Month");
   const [weekView, setWeekView] = useState("Week");
-  const [formData, setFormData] = useState({ student: "", type: "", date: "", time: "", location: "", notes: "" });
+  const [formData, setFormData] = useState({ classId: "", type: "", date: "", time: "", location: "", notes: "" });
+
+  const todayStr = formatLocalDate(new Date());
+
+  const loadCalendar = () => {
+    getMentorCalendar()
+      .then(({ sessions, classes }) => { setSessions(sessions); setClasses(classes); })
+      .catch((e) => setNotice((e as Error).message));
+  };
+
+  useEffect(loadCalendar, []);
 
   const daysInMonth = useMemo(() => {
     const year = currentDate.getFullYear();
@@ -87,12 +93,25 @@ export default function CalendarSection() {
   const handleNextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
   const handleExport = () => window.print();
 
-  const handleCreateSession = (e: React.FormEvent) => {
+  const handleCreateSession = async (e: React.FormEvent) => {
     e.preventDefault();
-    const newSession = { ...formData, id: Date.now() };
-    setSessions([...sessions, newSession]);
+    if (saving) return;
+    setSaving(true);
+    const res = await createMentorSession({
+      classId: formData.classId,
+      title: formData.type,
+      date: formData.date,
+      time: formData.time,
+      location: formData.location,
+    });
+    setSaving(false);
+    if (res.error) {
+      setNotice(res.error);
+      return;
+    }
     setIsNewSessionOpen(false);
-    setFormData({ student: "", type: "", date: "", time: "", location: "", notes: "" });
+    setFormData({ classId: "", type: "", date: "", time: "", location: "", notes: "" });
+    loadCalendar();
   };
 
   return (
@@ -121,6 +140,12 @@ export default function CalendarSection() {
             </button>
           </div>
         </div>
+
+        {notice && (
+          <div className="mb-[16px] rounded-[8px] border border-red-200 bg-red-50 px-4 py-3 text-[14px] font-semibold text-red-700 no-print">
+            {notice}
+          </div>
+        )}
 
         <div className="mb-[25px] flex min-h-[73px] flex-col gap-4 rounded-[8px] border border-[#dddddd] bg-white px-[24px] py-[16px] lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-[21px]">
@@ -162,7 +187,7 @@ export default function CalendarSection() {
             {daysInMonth.map((date, idx) => {
               const dateStr = date ? formatLocalDate(date) : "";
               const daySessions = sessions.filter((session) => session.date === dateStr);
-              const isHighlighted = dateStr === "2024-11-27";
+              const isHighlighted = dateStr === todayStr;
 
               return (
                 <div key={`${dateStr || "empty"}-${idx}`} className={`min-h-[121px] rounded-[8px] border border-[#dddddd] px-[10px] py-[12px] ${date ? "bg-white" : "bg-[#f6f7f8]"}`}>
@@ -174,7 +199,7 @@ export default function CalendarSection() {
                       <div className="space-y-[4px]">
                         {daySessions.map((session) => (
                           <div key={session.id} className="flex h-[48px] items-center truncate rounded-[4px] bg-[#ffa313] px-[8px] text-[12px] font-normal text-white">
-                            {session.student}
+                            {session.title}
                           </div>
                         ))}
                       </div>
@@ -189,15 +214,18 @@ export default function CalendarSection() {
         <div className="rounded-[8px] border border-[#dddddd] bg-white px-[24px] pb-[23px] pt-[27px]">
           <h3 className="mb-[19px] text-[22px] font-semibold leading-none text-[#111111]">Upcoming Sessions</h3>
           <div className="space-y-[12px]">
+            {sortedSessions.length === 0 && (
+              <p className="py-[16px] text-[14px] text-[#666666]">No sessions scheduled yet.</p>
+            )}
             {sortedSessions.map((session) => (
               <div key={session.id} className="flex min-h-[80px] items-center justify-between rounded-[8px] border border-[#dddddd] bg-white px-[16px] py-[10px]">
                 <div className="flex items-center gap-[16px]">
                   <div className="flex h-[50px] w-[48px] shrink-0 items-center justify-center rounded-[9px] bg-[#ffa313] text-[16px] font-normal text-white">
-                    {Number(session.date.split("-")[2])}
+                    {session.date ? Number(session.date.split("-")[2]) : "–"}
                   </div>
                   <div>
-                    <h4 className="text-[15px] font-semibold leading-none text-[#111111]">{session.student}</h4>
-                    <p className="mt-[7px] text-[12px] font-normal leading-[1.2] text-[#666666]">{session.type} &bull;<br />{session.date}</p>
+                    <h4 className="text-[15px] font-semibold leading-none text-[#111111]">{session.title}</h4>
+                    <p className="mt-[7px] text-[12px] font-normal leading-[1.2] text-[#666666]">{session.className || session.status} &bull;<br />{session.date} {session.time}</p>
                   </div>
                 </div>
                 <button onClick={() => { setSelectedSession(session); setIsDetailsOpen(true); }} className="h-[39px] rounded-[8px] border border-[#dddddd] bg-white px-[18px] text-[14px] font-normal text-[#666666] transition hover:bg-[#f7f7f7] no-print">
@@ -213,23 +241,22 @@ export default function CalendarSection() {
         <form onSubmit={handleCreateSession}>
           <div className="px-[24px] pb-[30px] pt-[28px]">
             <div className="mb-[16px]">
-              <label className="mb-[10px] block text-[16px] font-normal leading-none text-[#657183]">Student<span className="text-[#ff4d4f]">*</span></label>
+              <label className="mb-[10px] block text-[16px] font-normal leading-none text-[#657183]">Class<span className="text-[#ff4d4f]">*</span></label>
               <div className="relative">
-                <select required value={formData.student} onChange={(e) => setFormData({ ...formData, student: e.target.value })} className="h-[43px] w-full appearance-none rounded-[8px] border border-[#d6dce3] bg-white px-[10px] pr-[42px] text-[16px] font-normal text-[#666666] outline-none focus:border-[#ffa313]">
-                  <option value="">Select a student...</option>
-                  {STUDENTS.map((student) => <option key={student} value={student}>{student}</option>)}
+                <select required value={formData.classId} onChange={(e) => setFormData({ ...formData, classId: e.target.value })} className="h-[43px] w-full appearance-none rounded-[8px] border border-[#d6dce3] bg-white px-[10px] pr-[42px] text-[16px] font-normal text-[#666666] outline-none focus:border-[#ffa313]">
+                  <option value="">Select a class...</option>
+                  {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
                 <ChevronDown className="pointer-events-none absolute right-[13px] top-1/2 -translate-y-1/2 text-[#657183]" size={20} strokeWidth={1.8} />
               </div>
             </div>
             <div className="mb-[16px]">
-              <label className="mb-[10px] block text-[16px] font-normal leading-none text-[#657183]">Session Type<span className="text-[#ff4d4f]">*</span></label>
+              <label className="mb-[10px] block text-[16px] font-normal leading-none text-[#657183]">Session Title<span className="text-[#ff4d4f]">*</span></label>
               <div className="relative">
-                <select required value={formData.type} onChange={(e) => setFormData({ ...formData, type: e.target.value })} className="h-[43px] w-full appearance-none rounded-[8px] border border-[#d6dce3] bg-white px-[10px] pr-[42px] text-[16px] font-normal text-[#666666] outline-none focus:border-[#ffa313]">
-                  <option value="">Select session type...</option>
-                  {SESSION_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
-                </select>
-                <ChevronDown className="pointer-events-none absolute right-[13px] top-1/2 -translate-y-1/2 text-[#657183]" size={20} strokeWidth={1.8} />
+                <input required list="mentor-session-types" value={formData.type} onChange={(e) => setFormData({ ...formData, type: e.target.value })} placeholder="e.g., Career Discussion" className="h-[43px] w-full rounded-[8px] border border-[#d6dce3] bg-white px-[13px] text-[16px] font-normal text-[#2d3b4f] outline-none placeholder:text-[#9aa3af] focus:border-[#ffa313]" />
+                <datalist id="mentor-session-types">
+                  {SESSION_TYPES.map((type) => <option key={type} value={type} />)}
+                </datalist>
               </div>
             </div>
             <div className="mb-[17px] grid grid-cols-1 gap-[16px] sm:grid-cols-2">
@@ -256,8 +283,8 @@ export default function CalendarSection() {
           </div>
           <div className="flex h-[88px] items-center justify-end gap-[12px] border-t border-[#dddddd] px-[24px]">
             <button type="button" onClick={() => setIsNewSessionOpen(false)} className="h-[38px] rounded-[8px] border border-[#d6dce3] bg-white px-[21px] text-[14px] font-semibold text-[#2d3b4f] transition hover:bg-[#f7f8fa]">Cancel</button>
-            <button type="submit" className="flex h-[38px] items-center justify-center gap-[7px] rounded-[8px] bg-[#ffa313] px-[23px] text-[14px] font-semibold text-white transition hover:bg-[#f59a0d]">
-              <CalendarIcon size={16} strokeWidth={1.8} /> Create Session
+            <button type="submit" disabled={saving} className="flex h-[38px] items-center justify-center gap-[7px] rounded-[8px] bg-[#ffa313] px-[23px] text-[14px] font-semibold text-white transition hover:bg-[#f59a0d] disabled:opacity-60">
+              <CalendarIcon size={16} strokeWidth={1.8} /> {saving ? "Creating…" : "Create Session"}
             </button>
           </div>
         </form>
@@ -271,15 +298,15 @@ export default function CalendarSection() {
                 <div className="flex items-start gap-[13px]">
                   <User size={21} strokeWidth={1.8} className="mt-[2px] shrink-0 text-[#657183]" />
                   <div>
-                    <p className="text-[13px] font-normal leading-none text-[#657183]">Student</p>
-                    <p className="mt-[7px] text-[15px] font-normal leading-none text-[#2d3b4f]">{selectedSession.student}</p>
+                    <p className="text-[13px] font-normal leading-none text-[#657183]">Session</p>
+                    <p className="mt-[7px] text-[15px] font-normal leading-none text-[#2d3b4f]">{selectedSession.title}</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-[13px]">
                   <Clock size={21} strokeWidth={1.8} className="mt-[1px] shrink-0 text-[#657183]" />
                   <div>
                     <p className="text-[13px] font-normal leading-none text-[#657183]">Date &amp; Time</p>
-                    <p className="mt-[7px] text-[15px] font-normal leading-[1.25] text-[#2d3b4f]">{selectedSession.date} at {selectedSession.time}</p>
+                    <p className="mt-[7px] text-[15px] font-normal leading-[1.25] text-[#2d3b4f]">{selectedSession.date}{selectedSession.time ? ` at ${selectedSession.time}` : ""}</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-[13px]">
@@ -291,12 +318,12 @@ export default function CalendarSection() {
                 </div>
               </div>
               <div className="border-y border-[#dddddd] py-[19px]">
-                <p className="mb-[10px] text-[13px] font-normal leading-none text-[#657183]">Session Type</p>
-                <span className="inline-flex h-[28px] items-center rounded-full bg-[#ffa313] px-[12px] text-[16px] font-normal leading-none text-white">{selectedSession.type}</span>
+                <p className="mb-[10px] text-[13px] font-normal leading-none text-[#657183]">Class</p>
+                <span className="inline-flex h-[28px] items-center rounded-full bg-[#ffa313] px-[12px] text-[16px] font-normal leading-none text-white">{selectedSession.className || "—"}</span>
               </div>
               <div className="pt-[20px]">
-                <p className="mb-[13px] text-[13px] font-normal leading-none text-[#657183]">Notes</p>
-                <p className="text-[15px] font-normal leading-none text-[#2d3b4f]">{selectedSession.notes || "No notes available."}</p>
+                <p className="mb-[13px] text-[13px] font-normal leading-none text-[#657183]">Status</p>
+                <p className="text-[15px] font-normal leading-none text-[#2d3b4f]">{selectedSession.status}</p>
               </div>
             </div>
             <div className="flex h-[87px] items-center justify-end gap-[12px] border-t border-[#dddddd] px-[24px]">
