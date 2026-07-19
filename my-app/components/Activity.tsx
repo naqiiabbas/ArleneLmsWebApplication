@@ -1,120 +1,12 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { listActivityLogs } from "@/lib/data/activity";
+import type { UIActivityLog, ActivityStatus } from "@/lib/data/activity.types";
 
-type ActivityStatus = "Success" | "Failed";
+type ActivityLog = UIActivityLog;
 
-type ActivityLog = {
-  id: number;
-  time: string;
-  user: string;
-  role: string;
-  action: string;
-  actionIcon: string;
-  target: string;
-  ip: string;
-  status: ActivityStatus;
-};
-
-const LOG_STATS = [
-  { id: "total", label: "Total Activities", value: "8", color: "#0f65d8" },
-  { id: "success", label: "Successful", value: "7", color: "#00a64f" },
-  { id: "failed", label: "Failed", value: "1", color: "#f00012" },
-  { id: "active", label: "Active Users", value: "7", color: "#0f65d8" },
-];
-
-const ACTIVITY_LOGS: ActivityLog[] = [
-  {
-    id: 1,
-    time: "2025-11-28 10:30:15",
-    user: "John Admin",
-    role: "Admin",
-    action: "Logged in to system",
-    actionIcon: "/images/activity-icon-login.svg",
-    target: "System",
-    ip: "192.168.1.100",
-    status: "Success",
-  },
-  {
-    id: 2,
-    time: "2025-11-28 10:25:42",
-    user: "Dr. Sarah Johnson",
-    role: "Mentor",
-    action: "Created new student record",
-    actionIcon: "/images/activity-icon-create.svg",
-    target: "Student: Alex Martinez",
-    ip: "192.168.1.101",
-    status: "Success",
-  },
-  {
-    id: 3,
-    time: "2025-11-28 10:15:30",
-    user: "Maria Garcia",
-    role: "Manager",
-    action: "Updated attendance record",
-    actionIcon: "/images/activity-icon-update.svg",
-    target: "Attendance: Session #1234",
-    ip: "192.168.1.102",
-    status: "Success",
-  },
-  {
-    id: 4,
-    time: "2025-11-28 10:05:18",
-    user: "Alex Martinez",
-    role: "Student",
-    action: "Downloaded document",
-    actionIcon: "/images/activity-icon-download.svg",
-    target: "Document: Python Assignment 5",
-    ip: "192.168.1.103",
-    status: "Success",
-  },
-  {
-    id: 5,
-    time: "2025-11-28 09:55:22",
-    user: "Robert Smith",
-    role: "Student",
-    action: "Failed login attempt",
-    actionIcon: "/images/activity-icon-failed-login.svg",
-    target: "System",
-    ip: "192.168.1.104",
-    status: "Failed",
-  },
-  {
-    id: 6,
-    time: "2025-11-28 09:45:10",
-    user: "Prof. Michael Chen",
-    role: "Mentor",
-    action: "Deleted student note",
-    actionIcon: "/images/activity-icon-delete.svg",
-    target: "Note #567",
-    ip: "192.168.1.105",
-    status: "Success",
-  },
-  {
-    id: 7,
-    time: "2025-11-28 09:30:05",
-    user: "John Admin",
-    role: "Admin",
-    action: "Viewed user management",
-    actionIcon: "/images/activity-icon-view-user.svg",
-    target: "User Management",
-    ip: "192.168.1.100",
-    status: "Success",
-  },
-  {
-    id: 8,
-    time: "2025-11-28 09:15:40",
-    user: "Emma Williams",
-    role: "Student",
-    action: "Logged out from system",
-    actionIcon: "/images/activity-icon-login.svg",
-    target: "System",
-    ip: "192.168.1.106",
-    status: "Success",
-  },
-];
-
-function StatCard({ stat }: { stat: (typeof LOG_STATS)[number] }) {
+function StatCard({ stat }: { stat: { id: string; label: string; value: string; color: string } }) {
   return (
     <div className="h-[108px] rounded-[8px] border border-[#d9d9d9] bg-white px-[24px] py-[25px]">
       <p className="text-[15px] font-normal leading-none text-[#666666]">{stat.label}</p>
@@ -177,18 +69,40 @@ function SearchGlyph() {
 }
 
 export default function ActivityLogs() {
+  const [logs, setLogs] = useState<ActivityLog[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [notice, setNotice] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedAction, setSelectedAction] = useState("");
   const [selectedRole, setSelectedRole] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("");
 
-  const actionOptions = useMemo(() => Array.from(new Set(ACTIVITY_LOGS.map((log) => log.action))), []);
-  const roleOptions = useMemo(() => Array.from(new Set(ACTIVITY_LOGS.map((log) => log.role))), []);
+  useEffect(() => {
+    listActivityLogs()
+      .then(setLogs)
+      .catch((e) => setNotice((e as Error).message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const actionOptions = useMemo(() => Array.from(new Set(logs.map((log) => log.action))), [logs]);
+  const roleOptions = useMemo(() => Array.from(new Set(logs.map((log) => log.role).filter(Boolean))), [logs]);
   const statusOptions = ["Success", "Failed"];
+
+  const stats = useMemo(() => {
+    const success = logs.filter((l) => l.status === "Success").length;
+    const failed = logs.filter((l) => l.status === "Failed").length;
+    const activeUsers = new Set(logs.map((l) => l.user)).size;
+    return [
+      { id: "total", label: "Total Activities", value: String(logs.length), color: "#0f65d8" },
+      { id: "success", label: "Successful", value: String(success), color: "#00a64f" },
+      { id: "failed", label: "Failed", value: String(failed), color: "#f00012" },
+      { id: "active", label: "Active Users", value: String(activeUsers), color: "#0f65d8" },
+    ];
+  }, [logs]);
 
   const filteredLogs = useMemo(() => {
     const query = searchQuery.toLowerCase();
-    return ACTIVITY_LOGS.filter((log) => {
+    return logs.filter((log) => {
       const matchesSearch =
         log.user.toLowerCase().includes(query) ||
         log.action.toLowerCase().includes(query) ||
@@ -202,7 +116,7 @@ export default function ActivityLogs() {
         (selectedStatus === "" || log.status === selectedStatus)
       );
     });
-  }, [searchQuery, selectedAction, selectedRole, selectedStatus]);
+  }, [logs, searchQuery, selectedAction, selectedRole, selectedStatus]);
 
   const handleExport = async () => {
     if (typeof window === "undefined") return;
@@ -255,8 +169,14 @@ export default function ActivityLogs() {
         </button>
       </div>
 
+      {notice && (
+        <div className="mb-[24px] rounded-[8px] border border-red-200 bg-red-50 px-4 py-3 text-[14px] font-semibold text-red-700">
+          {notice}
+        </div>
+      )}
+
       <div className="mb-[24px] grid grid-cols-1 gap-[24px] md:grid-cols-2 xl:grid-cols-4">
-        {LOG_STATS.map((stat) => (
+        {stats.map((stat) => (
           <StatCard key={stat.id} stat={stat} />
         ))}
       </div>
@@ -293,7 +213,13 @@ export default function ActivityLogs() {
               </tr>
             </thead>
             <tbody className="divide-y divide-[#e5e5e5] bg-white">
-              {filteredLogs.length > 0 ? (
+              {loading ? (
+                <tr>
+                  <td colSpan={6} className="px-[24px] py-12 text-center text-[15px] text-[#777777]">
+                    Loading activity logs...
+                  </td>
+                </tr>
+              ) : filteredLogs.length > 0 ? (
                 filteredLogs.map((log) => (
                   <tr key={log.id} className="h-[70px] text-[15px] transition hover:bg-[#fafafa]">
                     <td className="px-[24px] py-[14px] font-normal text-[#666666]">{log.time}</td>

@@ -599,6 +599,17 @@ separately), notice banner (replaces the old alert). **Schema:** added `profiles
 init.sql + regenerated types). Note: 2FA + session-timeout are stored settings, **not yet enforced**
 (2FA would need Supabase MFA).
 
+**Admin → Activity Logs** (16th slice, verified live) — read-only audit:
+**`lib/data/activity.types.ts`** / **`lib/data/activity.ts`** (`"use server"`, gated by
+**`assertPermission("activity.view")`** — super_admin/admin only). `listActivityLogs()` reads
+`activity_logs` (embeds `actor:profiles(full_name)` — only FK to profiles is actor_id; target =
+description ?? target_type; actionIcon derived from the action keyword; status success/failed →
+Success/Failed; limit 200, newest first). **`components/Activity.tsx`** — mock removed; loads real
+logs, stats computed live (total/success/failed/active users), filters (search/action/role/status),
+loading/notice, jspdf export of filtered rows. Seeded 5 sample logs. **NOTE:** no code writes to
+`activity_logs` yet — like `createNotification`, actually recording actions from the data modules is
+a follow-up (add an `logActivity()` helper called on create/update/delete/login).
+
 **Pattern for the next modules:** `lib/data/<module>.ts` (`"use server"` + `assertAdmin()` from
 `lib/data/guards.ts` + service role for privileged ops, or the RLS server client for user-scoped
 reads) → wire the existing `components/*.tsx` (load on mount, mutate + refetch, notice/loading
