@@ -156,11 +156,18 @@ mentor's `mentor_student_assignments`.
   `student_attendance_summary` + risk derived from attendance; `getStudentDetail(studentId)` =
   attendance history + notes for one assigned student, ownership-checked). Profile view loads
   detail on open. `academicProgress` empty (no grades-over-time source).
-- **Still to wire:** mentor Dashboard (`Mentorshippanel.tsx`), Attendance marking
-  (`Attendancemen.tsx` — mark Present/Absent/Late per session → `attendance_records`), Notes &
-  Reports (`Notesreport.tsx` — create `notes`), Messaging (`Messagesmen` → reuse `messaging.ts`),
-  Documents/Calendar/Notifications/Resources/Blog/Settings (reuse existing data layers, scoped).
-  Also the **iPad attendance check-in** kiosk.
+- **Dashboard** (`Mentorshippanel.tsx`) — WIRED & verified: `getMentorDashboard()` — welcome name,
+  stats (activeStudents = assignment count, sessionsToday = `class_sessions` for mentor+today,
+  pendingNotes = mentor's pending `notes`, alerts = assigned students <70% attendance), today's
+  sessions, Mon–Fri weekly attendance (present+late vs absent), recent activity (recent attendance +
+  notes, nested `student→profiles`/`class` embeds). Trends dropped (no historical source).
+- **Attendance marking** (`Attendancemen.tsx`) — WIRED & verified: `getMentorAttendance()` lists the
+  mentor's assigned-students' `attendance_records` (session = `class_sessions.title` ?? `classes.name`);
+  `updateMentorAttendance(id, status, notes)` — ownership-checked, writes status/notes/method='manual'/
+  marked_by/marked_at. UI edit modal (Present/Absent/Late/Pending) + inline notes persist on blur.
+- **Still to wire:** Notes & Reports (`Notesreport.tsx` — create `notes`), Messaging (`Messagesmen`
+  → reuse `messaging.ts`), Documents/Calendar/Notifications/Resources/Blog/Settings (reuse existing
+  data layers, scoped). Also the **iPad attendance check-in** kiosk.
 
 ## 6. Frontend — Tech Stack & Structure
 

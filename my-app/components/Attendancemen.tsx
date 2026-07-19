@@ -1,12 +1,12 @@
 "use client";
 
-import React, { useState, useMemo, useRef } from "react";
-import { 
-  Calendar, 
-  Download, 
-  Eye, 
-  MessageSquare, 
-  X, 
+import React, { useState, useMemo, useRef, useEffect } from "react";
+import {
+  Calendar,
+  Download,
+  Eye,
+  MessageSquare,
+  X,
   ChevronDown,
   Send,
   Check,
@@ -15,20 +15,8 @@ import {
   User
 } from "lucide-react";
 import html2canvas from "html2canvas";
-
-/**
- * DATA STRUCTURES
- */
-const ATTENDANCE_DATA = [
-  { id: 1, date: "2024-11-27", name: "Marcus Johnson", avatar: "/images/avatar1.png", session: "Math Tutoring", status: "Present", notes: "" },
-  { id: 2, date: "2024-11-27", name: "David Williams", avatar: "/images/avatar2.png", session: "Career Discussion", status: "Present", notes: "" },
-  { id: 3, date: "2024-11-27", name: "James Brown", avatar: "/images/avatar3.png", session: "Study Skills", status: "Absent", notes: "" },
-  { id: 4, date: "2024-11-27", name: "Michael Davis", avatar: "/images/avatar.png", session: "Check-in", status: "Pending", notes: "" },
-  { id: 5, date: "2024-11-26", name: "Robert Miller", avatar: "/images/mentor1.png", session: "Math Tutoring", status: "Present", notes: "" },
-  { id: 6, date: "2024-11-26", name: "William Wilson", avatar: "/images/avatar1.png", session: "Career Discussion", status: "Present", notes: "" },
-  { id: 7, date: "2024-11-26", name: "Joseph Moore", avatar: "/images/avatar2.png", session: "Study Skills", status: "Present", notes: "" },
-  { id: 8, date: "2024-11-26", name: "Charles Taylor", avatar: "/images/avatar3.png", session: "Check-in", status: "Absent", notes: "" },
-];
+import { getMentorAttendance, updateMentorAttendance } from "@/lib/data/mentor";
+import type { MentorAttendanceRow } from "@/lib/data/mentor.types";
 
 /**
  * MODAL COMPONENT (Exact Design from Screenshots)
@@ -58,16 +46,26 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }) => {
 };
 
 export default function AttendanceManagement() {
-  const [attendance, setAttendance] = useState(ATTENDANCE_DATA);
+  const [attendance, setAttendance] = useState<MentorAttendanceRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [notice, setNotice] = useState<string | null>(null);
   const [filterDate, setFilterDate] = useState("");
-  const tableContainerRef = useRef<HTMLDivElement>(null); 
-  
+  const tableContainerRef = useRef<HTMLDivElement>(null);
+
   const [activeModal, setActiveModal] = useState<"edit" | "view" | "message" | null>(null);
-  const [selectedRecord, setSelectedRecord] = useState<typeof ATTENDANCE_DATA[0] | null>(null);
-  
-  const [editStatus, setEditStatus] = useState("");
+  const [selectedRecord, setSelectedRecord] = useState<MentorAttendanceRow | null>(null);
+
+  const [editStatus, setEditStatus] = useState<MentorAttendanceRow["status"]>("Present");
   const [editNotes, setEditNotes] = useState("");
+  const [saving, setSaving] = useState(false);
   const [messageText, setMessageText] = useState("");
+
+  useEffect(() => {
+    getMentorAttendance()
+      .then(setAttendance)
+      .catch((e) => setNotice((e as Error).message))
+      .finally(() => setLoading(false));
+  }, []);
 
   const filteredData = useMemo(() => {
     if (!filterDate) return attendance;
@@ -101,16 +99,29 @@ export default function AttendanceManagement() {
     }
   };
 
-  const handleUpdateAttendance = () => {
-    if (!selectedRecord) return;
-    setAttendance(prev => prev.map(item => 
+  const handleUpdateAttendance = async () => {
+    if (!selectedRecord || saving) return;
+    setSaving(true);
+    const res = await updateMentorAttendance(selectedRecord.id, editStatus, editNotes);
+    setSaving(false);
+    if (res.error) {
+      setNotice(res.error);
+      return;
+    }
+    setAttendance(prev => prev.map(item =>
       item.id === selectedRecord.id ? { ...item, status: editStatus, notes: editNotes } : item
     ));
     setActiveModal(null);
   };
 
-  const handleInlineNotes = (id: number, notes: string) => {
+  // Local edit of the inline notes field (persisted on blur).
+  const handleInlineNotes = (id: string, notes: string) => {
     setAttendance(prev => prev.map(item => item.id === id ? { ...item, notes } : item));
+  };
+
+  const handleInlineNotesSave = async (row: MentorAttendanceRow) => {
+    const res = await updateMentorAttendance(row.id, row.status, row.notes);
+    if (res.error) setNotice(res.error);
   };
 
   const handleSendMessage = () => {
@@ -167,6 +178,12 @@ export default function AttendanceManagement() {
         </div>
       </div>
 
+      {notice && (
+        <div className="mb-[20px] rounded-[8px] border border-red-200 bg-red-50 px-4 py-3 text-[14px] font-semibold text-red-700">
+          {notice}
+        </div>
+      )}
+
       {/* Table Section */}
       <div ref={tableContainerRef} className="mb-[25px] overflow-hidden rounded-[8px] border border-[#dddddd] bg-white">
         <div className="overflow-x-auto">
@@ -182,6 +199,12 @@ export default function AttendanceManagement() {
             </tr>
           </thead>
           <tbody>
+            {loading && (
+              <tr><td colSpan={6} className="py-[28px] text-center text-[15px] text-[#666666]">Loading attendance…</td></tr>
+            )}
+            {!loading && filteredData.length === 0 && (
+              <tr><td colSpan={6} className="py-[28px] text-center text-[15px] text-[#666666]">No attendance records for your students yet.</td></tr>
+            )}
             {filteredData.map((row) => (
               <tr key={row.id} className="border-b border-[#e5e5e5] last:border-b-0">
                 <td className="px-[70px] py-[16px] text-[16px] font-normal leading-none text-[#111111]">{row.date}</td>
@@ -195,7 +218,8 @@ export default function AttendanceManagement() {
                 <td className="px-[20px] py-[16px]">
                   <span className={`inline-flex h-[29px] items-center rounded-full px-[13px] text-[16px] font-normal leading-none ${
                     row.status === "Present" ? "bg-[#dff9ea] text-[#009d4c]" :
-                    row.status === "Absent" ? "bg-[#ffe3e6] text-[#ff001a]" : "bg-[#fff4c6] text-[#c98600]"
+                    row.status === "Absent" ? "bg-[#ffe3e6] text-[#ff001a]" :
+                    row.status === "Late" ? "bg-[#e7f0ff] text-[#0054ff]" : "bg-[#fff4c6] text-[#c98600]"
                   }`}>
                     {row.status}
                   </span>
@@ -204,6 +228,7 @@ export default function AttendanceManagement() {
                   <input
                     value={row.notes}
                     onChange={(e) => handleInlineNotes(row.id, e.target.value)}
+                    onBlur={() => handleInlineNotesSave(row)}
                     placeholder="Add notes..."
                     className="h-[35px] w-[200px] rounded-[8px] border border-[#dddddd] bg-white px-[12px] text-[15px] font-normal text-[#111111] outline-none placeholder:text-[#9aa3af] focus:border-[#ffa313]"
                   />
@@ -259,13 +284,14 @@ export default function AttendanceManagement() {
             <div className="mb-[20px]">
               <label className="mb-[9px] block text-[14px] font-normal leading-none text-[#657183]">Status <span className="text-[#ff4d4f]">*</span></label>
               <div className="relative">
-                <select 
+                <select
                   className="h-[48px] w-full appearance-none rounded-[8px] border border-[#d6d6d6] bg-white px-[13px] pr-[42px] text-[16px] font-normal text-[#2d3b4f] outline-none focus:border-[#ffa313]"
                   value={editStatus}
-                  onChange={(e) => setEditStatus(e.target.value)}
+                  onChange={(e) => setEditStatus(e.target.value as MentorAttendanceRow["status"])}
                 >
                   <option value="Present">Present</option>
                   <option value="Absent">Absent</option>
+                  <option value="Late">Late</option>
                   <option value="Pending">Pending</option>
                 </select>
                 <ChevronDown className="pointer-events-none absolute right-[13px] top-1/2 -translate-y-1/2 text-[#657183]" size={20} strokeWidth={1.8} />
@@ -284,8 +310,8 @@ export default function AttendanceManagement() {
           </div>
           <div className="flex h-[92px] items-center justify-end gap-[10px] border-t border-[#dddddd] px-[24px]">
             <button onClick={() => setActiveModal(null)} className="h-[42px] w-[99px] rounded-[8px] border border-[#d6d6d6] bg-white text-[14px] font-semibold text-[#2d3b4f] transition hover:bg-[#f7f7f7]">Cancel</button>
-            <button onClick={handleUpdateAttendance} className="flex h-[42px] w-[177px] items-center justify-center gap-[8px] rounded-[8px] bg-[#ffa313] text-[14px] font-semibold text-white transition hover:bg-[#f59a0d]">
-              <Check size={17} strokeWidth={2} /> Save Changes
+            <button onClick={handleUpdateAttendance} disabled={saving} className="flex h-[42px] w-[177px] items-center justify-center gap-[8px] rounded-[8px] bg-[#ffa313] text-[14px] font-semibold text-white transition hover:bg-[#f59a0d] disabled:opacity-60">
+              <Check size={17} strokeWidth={2} /> {saving ? "Saving…" : "Save Changes"}
             </button>
           </div>
           </>
@@ -375,7 +401,8 @@ export default function AttendanceManagement() {
                 <p className="mb-[12px] text-[13px] font-normal leading-none text-[#657183]">Status</p>
                 <span className={`inline-flex h-[28px] items-center rounded-full px-[13px] text-[17px] font-normal leading-none ${
                   selectedRecord.status === "Present" ? "bg-[#dff9ea] text-[#009d4c]" :
-                  selectedRecord.status === "Absent" ? "bg-[#ffe3e6] text-[#ff001a]" : "bg-[#fff4c6] text-[#c98600]"
+                  selectedRecord.status === "Absent" ? "bg-[#ffe3e6] text-[#ff001a]" :
+                  selectedRecord.status === "Late" ? "bg-[#e7f0ff] text-[#0054ff]" : "bg-[#fff4c6] text-[#c98600]"
                 }`}>
                   {selectedRecord.status}
                 </span>
