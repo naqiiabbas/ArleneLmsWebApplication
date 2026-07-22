@@ -149,6 +149,7 @@ const Footer = () => {
           <div className="mt-4 flex gap-[34px] md:mt-0">
             <Link href="/about" className="hover:underline">Terms & Conditions</Link>
             <Link href="/about" className="hover:underline">Privacy Policy</Link>
+            <Link href="/studentpanel/attendancewrk" className="hover:underline">Kiosk</Link>
           </div>
         </div>
       </div>
