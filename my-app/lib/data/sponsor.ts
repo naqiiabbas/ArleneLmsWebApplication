@@ -12,6 +12,10 @@ import type {
   SponsorProgram,
   SponsorProgramDetail,
   SponsorPrograms,
+  SponsorRequest,
+  SponsorRequestInput,
+  SponsorRequestStatus,
+  SponsorRequestsData,
   SponsorStats,
   SponsorStatus,
   SponsorTier,
@@ -29,6 +33,8 @@ const METHOD_UI: Record<string, string> = {
 }
 
 const TIER_UI: Record<string, SponsorTier> = { platinum: "Platinum", gold: "Gold", silver: "Silver", bronze: "Bronze" }
+const TIER_DB: Record<SponsorTier, "platinum" | "gold" | "silver" | "bronze"> = { Platinum: "platinum", Gold: "gold", Silver: "silver", Bronze: "bronze" }
+const REQ_STATUS_UI: Record<string, SponsorRequestStatus> = { approved: "Approved", under_review: "Under review", rejected: "Rejected", pending: "Pending" }
 const STATUS_UI: Record<string, SponsorStatus> = { active: "Active", pending: "Pending", completed: "Completed", archived: "Completed" }
 const money = (v: number | string | null) => `$${Number(v ?? 0).toLocaleString("en-US")}`
 
@@ -177,6 +183,100 @@ export async function getSponsorPrograms(): Promise<SponsorPrograms> {
     end: p.end_date ?? "—",
   }))
   return { stats, programs }
+}
+
+/** The sponsor's sponsorship requests + status counts (Request Donate). */
+export async function getSponsorRequests(): Promise<SponsorRequestsData> {
+  const { userId } = await assertSponsor()
+  const admin = createAdminClient()
+  const sponsor = await resolveSponsor(admin, userId)
+  const empty: SponsorRequestsData = { stats: { total: 0, approved: 0, underReview: 0, pending: 0 }, requests: [] }
+  if (!sponsor) return empty
+
+  const { data, error } = await admin
+    .from("sponsorship_requests")
+    .select("id, program_name, tier, amount, status, submitted_at, company_name, contact_name, email, phone, duration_months, start_date, benefits")
+    .eq("sponsor_id", sponsor.id)
+    .order("submitted_at", { ascending: false })
+  if (error) throw new Error(error.message)
+
+  const requests: SponsorRequest[] = ((data ?? []) as unknown as {
+    id: string
+    program_name: string | null
+    tier: string | null
+    amount: number | string | null
+    status: string
+    submitted_at: string | null
+    company_name: string | null
+    contact_name: string | null
+    email: string | null
+    phone: string | null
+    duration_months: number | null
+    start_date: string | null
+    benefits: string[] | null
+  }[]).map((r) => ({
+    id: r.id,
+    ref: `REQ-${r.id.slice(0, 6).toUpperCase()}`,
+    programName: r.program_name ?? "—",
+    tier: TIER_UI[r.tier ?? ""] ?? "Bronze",
+    amount: Number(r.amount ?? 0),
+    status: REQ_STATUS_UI[r.status] ?? "Pending",
+    submitted: r.submitted_at ? new Date(r.submitted_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—",
+    companyName: r.company_name ?? "—",
+    contactName: r.contact_name ?? "—",
+    email: r.email ?? "—",
+    phone: r.phone ?? "—",
+    durationMonths: Number(r.duration_months ?? 0),
+    startDate: r.start_date ?? "Not specified",
+    benefits: r.benefits ?? [],
+  }))
+
+  const stats = {
+    total: requests.length,
+    approved: requests.filter((r) => r.status === "Approved").length,
+    underReview: requests.filter((r) => r.status === "Under review").length,
+    pending: requests.filter((r) => r.status === "Pending").length,
+  }
+  return { stats, requests }
+}
+
+/** Submit a new sponsorship request (status pending → admin review). */
+export async function submitSponsorRequest(
+  input: SponsorRequestInput,
+): Promise<{ error?: string; id?: string }> {
+  const { userId } = await assertSponsor()
+  const admin = createAdminClient()
+  const sponsor = await resolveSponsor(admin, userId)
+  if (!sponsor) return { error: "No sponsor profile is linked to your account." }
+  if (!input.programName.trim()) return { error: "Please enter a program name." }
+
+  const amount = Number(String(input.amount).replace(/[^0-9.]/g, ""))
+  const duration = parseInt(String(input.durationMonths).replace(/[^0-9]/g, ""), 10)
+  const parsedDate = new Date(input.startDate)
+  const startDate = input.startDate.trim() && !isNaN(parsedDate.getTime())
+    ? `${parsedDate.getFullYear()}-${String(parsedDate.getMonth() + 1).padStart(2, "0")}-${String(parsedDate.getDate()).padStart(2, "0")}`
+    : null
+
+  const { data, error } = await admin
+    .from("sponsorship_requests")
+    .insert({
+      sponsor_id: sponsor.id,
+      program_name: input.programName.trim(),
+      tier: TIER_DB[input.tier],
+      amount: isNaN(amount) ? null : amount,
+      duration_months: isNaN(duration) ? null : duration,
+      start_date: startDate,
+      company_name: input.companyName.trim() || null,
+      contact_name: input.contactName.trim() || null,
+      email: input.email.trim() || null,
+      phone: input.phone.trim() || null,
+      benefits: input.benefits,
+      status: "pending",
+    })
+    .select("id")
+    .single()
+  if (error) return { error: error.message }
+  return { id: data.id }
 }
 
 /** The sponsor's invoices + payment history (Payments & Invoices). */

@@ -1,25 +1,12 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
-
-type ReqStatus = "Approved" | "Under review" | "Pending";
-type Tier = "Platinum" | "Gold" | "Silver" | "Bronze";
-
-type RequestItem = {
-  id: string;
-  programName: string;
-  tier: Tier;
-  amount: number;
-  status: ReqStatus;
-  submitted: string;
-  companyName: string;
-  contactName: string;
-  email: string;
-  phone: string;
-  durationMonths: number;
-  startDate: string;
-  benefits: string[];
-};
+import React, { useEffect, useMemo, useState } from "react";
+import { getSponsorRequests, submitSponsorRequest } from "@/lib/data/sponsor";
+import type {
+  SponsorRequest as RequestItem,
+  SponsorRequestStatus as ReqStatus,
+  SponsorTier as Tier,
+} from "@/lib/data/sponsor.types";
 
 type View = "list" | "form" | "detail" | "success";
 
@@ -30,39 +17,6 @@ const benefitOptions = [
   "Quarterly impact reports",
   "Annual gala recognition",
   "Press release mentions",
-];
-
-const initialRequests: RequestItem[] = [
-  {
-    id: "REQ-001",
-    programName: "AI Development Program",
-    tier: "Gold",
-    amount: 35000,
-    status: "Approved",
-    submitted: "Jan 15, 2025",
-    companyName: "TechCorp Inc.",
-    contactName: "John Doe",
-    email: "john@techcorp.com",
-    phone: "+1 (555) 123-4567",
-    durationMonths: 12,
-    startDate: "2025-02-01",
-    benefits: ["Logo on website", "Social media recognition", "Newsletter mention"],
-  },
-  {
-    id: "REQ-002",
-    programName: "Data Science Mentorship",
-    tier: "Platinum",
-    amount: 55000,
-    status: "Under review",
-    submitted: "Jan 20, 2025",
-    companyName: "DataNova",
-    contactName: "Sarah Khan",
-    email: "hello@datanova.com",
-    phone: "+1 (555) 222-8899",
-    durationMonths: 6,
-    startDate: "2025-03-01",
-    benefits: ["Event sponsorship opportunities", "Quarterly impact reports"],
-  },
 ];
 
 const tierPrice: Record<Tier, string> = {
@@ -84,6 +38,7 @@ const money = (v: number) => `$${v.toLocaleString()}`;
 const statusBadge = (status: ReqStatus) => {
   if (status === "Approved") return "border-[#6ee7b7] bg-[#dcfce7] text-[#00a63e]";
   if (status === "Under review") return "border-[#fcd34d] bg-[#fef3c7] text-[#ff9f0f]";
+  if (status === "Rejected") return "border-[#fca5a5] bg-[#fee2e2] text-[#e0342b]";
   return "border-[#93c5fd] bg-[#dbeafe] text-[#2f80ff]";
 };
 
@@ -102,8 +57,12 @@ const statCards = [
 
 export default function Request() {
   const [view, setView] = useState<View>("list");
-  const [requests, setRequests] = useState<RequestItem[]>(initialRequests);
-  const [selectedId, setSelectedId] = useState<string>(initialRequests[0].id);
+  const [requests, setRequests] = useState<RequestItem[]>([]);
+  const [stats, setStats] = useState({ total: 0, approved: 0, underReview: 0, pending: 0 });
+  const [loading, setLoading] = useState(true);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [selectedId, setSelectedId] = useState<string>("");
   const [search] = useState("");
   const [step, setStep] = useState(1);
   const [form, setForm] = useState({
@@ -120,26 +79,27 @@ export default function Request() {
   });
   const [validationError, setValidationError] = useState("");
 
-  const selected = requests.find((r) => r.id === selectedId) || requests[0];
+  const loadRequests = () => {
+    getSponsorRequests()
+      .then(({ stats, requests }) => { setStats(stats); setRequests(requests); })
+      .catch((e) => setNotice((e as Error).message))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(loadRequests, []);
+
+  const selected = requests.find((r) => r.id === selectedId) ?? null;
 
   const filteredRequests = useMemo(() => {
     if (!search.trim()) return requests;
     const q = search.toLowerCase();
     return requests.filter(
       (r) =>
-        r.id.toLowerCase().includes(q) ||
+        r.ref.toLowerCase().includes(q) ||
         r.programName.toLowerCase().includes(q) ||
         r.companyName.toLowerCase().includes(q)
     );
   }, [requests, search]);
-
-  const stats = useMemo(() => {
-    const total = requests.length;
-    const approved = requests.filter((r) => r.status === "Approved").length;
-    const underReview = requests.filter((r) => r.status === "Under review").length;
-    const pending = requests.filter((r) => r.status === "Pending").length;
-    return { total, approved, underReview, pending };
-  }, [requests]);
 
   const goStep = (next: number) => {
     setValidationError("");
@@ -166,26 +126,17 @@ export default function Request() {
     goStep(step + 1);
   };
 
-  const submitRequest = () => {
-    const newId = `REQ-${String(requests.length + 1).padStart(3, "0")}`;
-    const req: RequestItem = {
-      id: newId,
-      programName: form.programName || "Community Growth",
-      tier: form.tier,
-      amount: Number(form.amount || 30000),
-      status: "Pending",
-      submitted: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-      companyName: form.companyName || "New Company",
-      contactName: form.contactName || "Primary Contact",
-      email: form.email || "new@gmail.com",
-      phone: form.phone || "+1 234 654 343",
-      durationMonths: Number(form.durationMonths || 3),
-      startDate: form.startDate || "Not specified",
-      benefits: form.benefits.length ? form.benefits : benefitOptions,
-    };
-    setRequests((prev) => [req, ...prev]);
-    setSelectedId(req.id);
+  const submitRequest = async () => {
+    if (submitting) return;
+    setSubmitting(true);
+    const res = await submitSponsorRequest(form);
+    setSubmitting(false);
+    if (res.error) {
+      setValidationError(res.error);
+      return;
+    }
     setView("success");
+    loadRequests();
   };
 
   const resetForm = () => {
@@ -218,6 +169,7 @@ export default function Request() {
             <div>
               <h1 className="text-[28px] font-semibold leading-none text-[#1f2937]">Request Donate</h1>
               <p className="mt-[16px] text-[15px] font-normal leading-none text-[#667085]">View your submitted sponsorship requests and create new ones.</p>
+              {notice && <p className="mt-[12px] text-[13px] font-semibold text-red-500">{notice}</p>}
             </div>
             <button onClick={startNew} className="flex h-[44px] items-center gap-[10px] rounded-[8px] bg-[#F9A618] px-[24px] text-[15px] font-normal text-white">
               <span className="text-[24px] leading-none">+</span>
@@ -249,9 +201,15 @@ export default function Request() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#d9d9d9]">
+                  {loading && (
+                    <tr><td colSpan={7} className="py-[24px] text-center text-[14px] text-[#667085]">Loading requests…</td></tr>
+                  )}
+                  {!loading && filteredRequests.length === 0 && (
+                    <tr><td colSpan={7} className="py-[24px] text-center text-[14px] text-[#667085]">No requests yet. Click “Add Donations” to submit one.</td></tr>
+                  )}
                   {filteredRequests.map((r) => (
                     <tr key={r.id} className="h-[58px]">
-                      <td className="pr-[32px] text-[14px] font-normal text-[#1f2937]">{r.id}</td>
+                      <td className="pr-[32px] text-[14px] font-normal text-[#1f2937]">{r.ref}</td>
                       <td className="pr-[32px] text-[14px] font-semibold text-[#1f2937]">{r.programName}</td>
                       <td className="pr-[32px] text-[14px] font-normal text-[#1f2937]">
                         <span className="inline-flex items-center gap-[8px]">
@@ -317,8 +275,8 @@ export default function Request() {
                   Next
                 </button>
               ) : (
-                <button onClick={submitRequest} className="h-[56px] w-[152px] rounded-[8px] bg-[#F9A618] text-[14px] font-semibold text-white">
-                  Next
+                <button onClick={submitRequest} disabled={submitting} className="h-[56px] w-[152px] rounded-[8px] bg-[#F9A618] text-[14px] font-semibold text-white disabled:opacity-60">
+                  {submitting ? "Submitting…" : "Submit"}
                 </button>
               )}
             </div>
@@ -548,7 +506,7 @@ function DetailView({ selected, setView }: { selected: RequestItem; setView: (vi
             <p className="mt-[6px] text-[14px] font-normal leading-none text-[#667085]">Your sponsorship request has been approved. You will receive a confirmation email shortly.</p>
           </div>
         </div>
-        <span className="rounded-[10px] border border-[#86efac] px-[12px] py-[7px] text-[13px] font-semibold text-[#00a63e]">{selected.id}</span>
+        <span className="rounded-[10px] border border-[#86efac] px-[12px] py-[7px] text-[13px] font-semibold text-[#00a63e]">{selected.ref}</span>
       </div>
 
       <div className="mt-[16px] grid grid-cols-1 gap-[16px] md:grid-cols-2">
@@ -560,7 +518,7 @@ function DetailView({ selected, setView }: { selected: RequestItem; setView: (vi
         <DetailCard title="Financial Details">
           <Info label="Sponsorship Amount" value={money(selected.amount)} icon="/images/request-icon-8.svg" valueClass="text-[#00a63e]" />
           <Info label="Duration" value={`${selected.durationMonths} months`} />
-          <Info label="Start Date" value="February 1, 2025" />
+          <Info label="Start Date" value={selected.startDate} />
         </DetailCard>
       </div>
 

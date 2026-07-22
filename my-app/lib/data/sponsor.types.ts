@@ -85,3 +85,40 @@ export interface SponsorPaymentsData {
   invoices: SponsorInvoice[]
   history: SponsorPaymentRecord[]
 }
+
+export type SponsorRequestStatus = "Approved" | "Under review" | "Pending" | "Rejected"
+
+export interface SponsorRequest {
+  id: string // uuid (key/selection)
+  ref: string // display ref, e.g. REQ-AB12CD
+  programName: string
+  tier: SponsorTier
+  amount: number
+  status: SponsorRequestStatus
+  submitted: string
+  companyName: string
+  contactName: string
+  email: string
+  phone: string
+  durationMonths: number
+  startDate: string
+  benefits: string[]
+}
+
+export interface SponsorRequestsData {
+  stats: { total: number; approved: number; underReview: number; pending: number }
+  requests: SponsorRequest[]
+}
+
+export interface SponsorRequestInput {
+  tier: SponsorTier
+  programName: string
+  companyName: string
+  contactName: string
+  email: string
+  phone: string
+  amount: string
+  durationMonths: string
+  startDate: string
+  benefits: string[]
+}
