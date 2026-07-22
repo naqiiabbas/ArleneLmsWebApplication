@@ -252,8 +252,10 @@ Schema: `sponsors`, `sponsorship_programs` (amount/status), `sponsorship_timelin
 - **Sponsor Profile / Sponsorships** (`Sponpro.tsx`) — WIRED & verified: `getSponsorPrograms()`
   (shared `sponsorStats` + programs) + `getSponsorProgramDetail(id)` (ownership-checked; deliverables
   + `sponsorship_timeline` + `sponsorship_impact`). List↔detail toggle.
-- **Still to wire:** Payment (`Payment`), Reports (`Reportsspon`), Request (`Request` →
-  `sponsorship_requests`), Blogs/Messages/Notifications/Settings (reuse layers).
+- **Payments & Invoices** (`Payment.tsx`) — WIRED & verified: `getSponsorPayments()` — summary +
+  `invoices` (paid/outstanding) + `payments` history (method enum→display). PDF export client-side.
+- **Still to wire:** Reports (`Reportsspon`), Request (`Request` → `sponsorship_requests`),
+  Blogs/Messages/Notifications/Settings (reuse layers).
 
 ## 6. Frontend — Tech Stack & Structure
 

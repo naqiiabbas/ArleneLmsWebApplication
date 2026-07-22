@@ -60,3 +60,28 @@ export interface SponsorPrograms {
   stats: SponsorStats
   programs: SponsorProgram[]
 }
+
+export type SponsorInvoiceStatus = "Paid" | "Outstanding"
+
+export interface SponsorInvoice {
+  id: string
+  program: string
+  amount: number
+  dateIssued: string
+  dueDate: string
+  status: SponsorInvoiceStatus
+}
+
+export interface SponsorPaymentRecord {
+  date: string
+  amount: number
+  method: string
+  program: string
+  status: string
+}
+
+export interface SponsorPaymentsData {
+  summary: { totalPaid: number; outstanding: number; totalInvoices: number }
+  invoices: SponsorInvoice[]
+  history: SponsorPaymentRecord[]
+}

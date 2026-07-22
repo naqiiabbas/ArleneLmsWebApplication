@@ -6,6 +6,9 @@ import type {
   SponsorActivity,
   SponsorDashboard,
   SponsorEvent,
+  SponsorInvoice,
+  SponsorPaymentRecord,
+  SponsorPaymentsData,
   SponsorProgram,
   SponsorProgramDetail,
   SponsorPrograms,
@@ -15,6 +18,15 @@ import type {
 } from "@/lib/data/sponsor.types"
 
 type Admin = ReturnType<typeof createAdminClient>
+
+const METHOD_UI: Record<string, string> = {
+  wire_transfer: "Wire Transfer",
+  ach: "ACH",
+  check: "Check",
+  card: "Card",
+  cash: "Cash",
+  other: "Other",
+}
 
 const TIER_UI: Record<string, SponsorTier> = { platinum: "Platinum", gold: "Gold", silver: "Silver", bronze: "Bronze" }
 const STATUS_UI: Record<string, SponsorStatus> = { active: "Active", pending: "Pending", completed: "Completed", archived: "Completed" }
@@ -165,6 +177,63 @@ export async function getSponsorPrograms(): Promise<SponsorPrograms> {
     end: p.end_date ?? "—",
   }))
   return { stats, programs }
+}
+
+/** The sponsor's invoices + payment history (Payments & Invoices). */
+export async function getSponsorPayments(): Promise<SponsorPaymentsData> {
+  const { userId } = await assertSponsor()
+  const admin = createAdminClient()
+  const sponsor = await resolveSponsor(admin, userId)
+  const empty: SponsorPaymentsData = { summary: { totalPaid: 0, outstanding: 0, totalInvoices: 0 }, invoices: [], history: [] }
+  if (!sponsor) return empty
+
+  const [{ data: invData }, { data: payData }] = await Promise.all([
+    admin
+      .from("invoices")
+      .select("invoice_number, amount, issued_date, due_date, status, program:sponsorship_programs ( name )")
+      .eq("sponsor_id", sponsor.id)
+      .order("issued_date", { ascending: false }),
+    admin
+      .from("payments")
+      .select("amount, method, status, paid_at, program:sponsorship_programs ( name )")
+      .eq("sponsor_id", sponsor.id)
+      .order("paid_at", { ascending: false }),
+  ])
+
+  const invoices: SponsorInvoice[] = ((invData ?? []) as unknown as {
+    invoice_number: string | null
+    amount: number | string
+    issued_date: string | null
+    due_date: string | null
+    status: string
+    program: { name: string | null } | null
+  }[]).map((i) => ({
+    id: i.invoice_number ?? "—",
+    program: i.program?.name ?? "—",
+    amount: Number(i.amount ?? 0),
+    dateIssued: i.issued_date ?? "—",
+    dueDate: i.due_date ?? "—",
+    status: i.status === "paid" ? "Paid" : "Outstanding",
+  }))
+
+  const history: SponsorPaymentRecord[] = ((payData ?? []) as unknown as {
+    amount: number | string
+    method: string
+    status: string
+    paid_at: string | null
+    program: { name: string | null } | null
+  }[]).map((p) => ({
+    date: p.paid_at ? p.paid_at.slice(0, 10) : "—",
+    amount: Number(p.amount ?? 0),
+    method: METHOD_UI[p.method] ?? p.method,
+    program: p.program?.name ?? "—",
+    status: p.status.charAt(0).toUpperCase() + p.status.slice(1),
+  }))
+
+  const totalPaid = invoices.filter((i) => i.status === "Paid").reduce((s, i) => s + i.amount, 0)
+  const outstanding = invoices.filter((i) => i.status === "Outstanding").reduce((s, i) => s + i.amount, 0)
+
+  return { summary: { totalPaid, outstanding, totalInvoices: invoices.length }, invoices, history }
 }
 
 /** One program's full detail (summary + deliverables + timeline + impact), ownership-checked. */

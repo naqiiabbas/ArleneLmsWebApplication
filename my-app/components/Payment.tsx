@@ -1,60 +1,33 @@
 "use client";
 
-import React, { useMemo } from "react";
-
-type InvoiceStatus = "Paid" | "Outstanding";
-
-type Invoice = {
-  id: string;
-  program: string;
-  amount: number;
-  dateIssued: string;
-  dueDate: string;
-  status: InvoiceStatus;
-};
-
-type PaymentRecord = {
-  date: string;
-  amount: number;
-  method: string;
-  program: string;
-  status: "Completed";
-};
-
-const invoices: Invoice[] = [
-  { id: "INV-2025-001", program: "STEM Mentorship Program", amount: 50000, dateIssued: "2025-01-15", dueDate: "2025-01-30", status: "Paid" },
-  { id: "INV-2025-002", program: "Leadership Development", amount: 30000, dateIssued: "2025-02-10", dueDate: "2025-02-25", status: "Paid" },
-  { id: "INV-2025-003", program: "Women in Tech Initiative", amount: 15000, dateIssued: "2025-03-05", dueDate: "2025-03-20", status: "Outstanding" },
-  { id: "INV-2025-004", program: "Tech Bootcamp Sponsorship", amount: 45000, dateIssued: "2025-03-15", dueDate: "2025-03-30", status: "Outstanding" },
-  { id: "INV-2025-005", program: "Career Readiness Program", amount: 10000, dateIssued: "2025-01-20", dueDate: "2025-02-05", status: "Paid" },
-  { id: "INV-2024-012", program: "Youth Entrepreneurship", amount: 35000, dateIssued: "2024-12-10", dueDate: "2024-12-25", status: "Paid" },
-  { id: "INV-2025-006", program: "Data Science Academy", amount: 20000, dateIssued: "2025-02-15", dueDate: "2025-03-01", status: "Paid" },
-  { id: "INV-2025-007", program: "Green Tech Innovation", amount: 40000, dateIssued: "2025-03-10", dueDate: "2025-03-25", status: "Outstanding" },
-];
-
-const paymentHistory: PaymentRecord[] = [
-  { date: "2025-03-01", amount: 50000, method: "Wire Transfer", program: "STEM Mentorship Program", status: "Completed" },
-  { date: "2025-02-28", amount: 30000, method: "ACH", program: "Leadership Development", status: "Completed" },
-  { date: "2025-02-15", amount: 20000, method: "Check", program: "Data Science Academy", status: "Completed" },
-  { date: "2025-01-25", amount: 10000, method: "Wire Transfer", program: "Career Readiness Program", status: "Completed" },
-  { date: "2024-12-20", amount: 35000, method: "ACH", program: "Youth Entrepreneurship", status: "Completed" },
-];
+import React, { useEffect, useState } from "react";
+import { getSponsorPayments } from "@/lib/data/sponsor";
+import type { SponsorInvoice as Invoice, SponsorPaymentsData } from "@/lib/data/sponsor.types";
 
 const money = (value: number) => `$${value.toLocaleString()}`;
 
-const statusBadge = (status: InvoiceStatus | "Completed") => {
+const statusBadge = (status: string) => {
   if (status === "Paid" || status === "Completed") {
     return "bg-[#dcfce7] text-[#008236]";
   }
   return "bg-[#ffedd4] text-[#fb2c36]";
 };
 
+const EMPTY: SponsorPaymentsData = { summary: { totalPaid: 0, outstanding: 0, totalInvoices: 0 }, invoices: [], history: [] };
+
 export default function Payment() {
-  const totals = useMemo(() => {
-    const totalPaid = invoices.filter((i) => i.status === "Paid").reduce((sum, i) => sum + i.amount, 0);
-    const outstanding = invoices.filter((i) => i.status === "Outstanding").reduce((sum, i) => sum + i.amount, 0);
-    return { totalPaid, outstanding, totalInvoices: invoices.length };
+  const [data, setData] = useState<SponsorPaymentsData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    getSponsorPayments()
+      .then(setData)
+      .catch((e) => setNotice((e as Error).message))
+      .finally(() => setLoading(false));
   }, []);
+
+  const { summary: totals, invoices, history: paymentHistory } = data ?? EMPTY;
 
   const downloadInvoicePdf = async (invoice: Invoice) => {
     if (typeof window === "undefined") return;
@@ -78,9 +51,13 @@ export default function Payment() {
     <div className="min-h-screen bg-[#F4F4F5] px-[24px] pb-[40px] pt-[28px] font-['Poppins',_sans-serif] text-[#1f2937]">
       <div className="w-full space-y-[16px]">
         <div>
-          <h1 className="text-[28px] font-semibold leading-none text-[#1f2937]">Payments & Invoices</h1>
+          <h1 className="text-[28px] font-semibold leading-none text-[#1f2937]">Payments &amp; Invoices</h1>
           <p className="mt-[16px] text-[15px] font-normal leading-none text-[#667085]">View and manage your payment history and invoices.</p>
         </div>
+
+        {notice && (
+          <div className="rounded-[8px] border border-red-200 bg-red-50 px-4 py-3 text-[14px] font-semibold text-red-700">{notice}</div>
+        )}
 
         <div className="grid grid-cols-1 gap-[16px] md:grid-cols-3">
           <SummaryCard title="Total Paid" value={money(totals.totalPaid)} valueClass="text-green-600" />
@@ -103,6 +80,12 @@ export default function Payment() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#d9d9d9]">
+                {loading && (
+                  <tr><td colSpan={7} className="px-[24px] py-[28px] text-center text-[14px] text-[#667085]">Loading invoices…</td></tr>
+                )}
+                {!loading && invoices.length === 0 && (
+                  <tr><td colSpan={7} className="px-[24px] py-[28px] text-center text-[14px] text-[#667085]">No invoices yet.</td></tr>
+                )}
                 {invoices.map((invoice) => (
                   <tr key={invoice.id} className="h-[88px]">
                     <td className="px-[24px] py-[22px] text-[14px] font-normal text-[#1f2937]">{invoice.id}</td>
@@ -144,6 +127,9 @@ export default function Payment() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#d9d9d9]">
+                {!loading && paymentHistory.length === 0 && (
+                  <tr><td colSpan={5} className="px-[24px] py-[28px] text-center text-[14px] text-[#667085]">No payments recorded yet.</td></tr>
+                )}
                 {paymentHistory.map((item, idx) => (
                   <tr key={`${item.date}-${idx}`} className="h-[88px]">
                     <td className="px-[24px] py-[22px] text-[14px] font-normal text-[#1f2937]">{item.date}</td>
