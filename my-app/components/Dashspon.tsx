@@ -1,50 +1,65 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
+import { getSponsorDashboard } from "@/lib/data/sponsor";
+import type { SponsorDashboard } from "@/lib/data/sponsor.types";
 
-type Stat = { id: number; label: string; value: string; icon: string };
-type Activity = { id: number; title: string; subtitle: string; time: string; color: string };
-type Event = { id: number; title: string; date: string; attendees: string };
-
-const stats: Stat[] = [
-  { id: 1, label: "Active Sponsorships", value: "12", icon: "/images/sponsor-dashboard-active.svg" },
-  { id: 2, label: "Total Sponsored Amount", value: "$245,000", icon: "/images/sponsor-dashboard-dollar.svg" },
-  { id: 3, label: "Payments Status", value: "8/12 Paid", icon: "/images/sponsor-dashboard-trend.svg" },
-  { id: 4, label: "Upcoming Events", value: "5", icon: "/images/sponsor-dashboard-calendar.png" },
+const STAT_META: { key: string; label: string; icon: string }[] = [
+  { key: "activeSponsorships", label: "Active Sponsorships", icon: "/images/sponsor-dashboard-active.svg" },
+  { key: "totalAmount", label: "Total Sponsored Amount", icon: "/images/sponsor-dashboard-dollar.svg" },
+  { key: "payments", label: "Payments Status", icon: "/images/sponsor-dashboard-trend.svg" },
+  { key: "upcomingEvents", label: "Upcoming Events", icon: "/images/sponsor-dashboard-calendar.png" },
 ];
 
-const activities: Activity[] = [
-  { id: 1, title: "Payment received", subtitle: "STEM Mentorship Program", time: "2 hours ago", color: "bg-[#00C853]" },
-  { id: 2, title: "New sponsorship request", subtitle: "Leadership Development", time: "5 hours ago", color: "bg-[#F5B400]" },
-  { id: 3, title: "Report generated", subtitle: "Q4 Impact Report", time: "1 day ago", color: "bg-[#2F80FF]" },
-  { id: 4, title: "Invoice sent", subtitle: "Tech Bootcamp Sponsorship", time: "2 days ago", color: "bg-[#FF5A1F]" },
-  { id: 5, title: "Sponsorship approved", subtitle: "Women in Tech Initiative", time: "3 days ago", color: "bg-[#00C853]" },
-];
-
-const events: Event[] = [
-  { id: 1, title: "Annual Gala & Awards Ceremony", date: "Dec 15, 2025", attendees: "250 attendees" },
-  { id: 2, title: "Q1 Mentorship Kickoff", date: "Jan 10, 2026", attendees: "120 attendees" },
-  { id: 3, title: "Tech Career Fair", date: "Feb 5, 2026", attendees: "300 attendees" },
-  { id: 4, title: "Leadership Summit", date: "Mar 20, 2026", attendees: "180 attendees" },
-];
+const EMPTY: SponsorDashboard = {
+  companyName: "",
+  stats: { activeSponsorships: 0, totalAmount: 0, paidPrograms: 0, totalPrograms: 0, upcomingEvents: 0 },
+  activities: [],
+  events: [],
+};
 
 export default function Dashspon() {
+  const [data, setData] = useState<SponsorDashboard | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    getSponsorDashboard()
+      .then(setData)
+      .catch((e) => setNotice((e as Error).message));
+  }, []);
+
+  const d = data ?? EMPTY;
+  const statValue: Record<string, string> = {
+    activeSponsorships: String(d.stats.activeSponsorships),
+    totalAmount: `$${d.stats.totalAmount.toLocaleString("en-US")}`,
+    payments: `${d.stats.paidPrograms}/${d.stats.totalPrograms} Paid`,
+    upcomingEvents: String(d.stats.upcomingEvents),
+  };
+
   return (
     <div className="px-[24px] pb-[40px] pt-[28px] font-['Poppins',_sans-serif] text-[#1f2937]">
       <div className="w-full">
         <div>
-          <h1 className="text-[24px] font-semibold leading-none text-[#111111]">My Profile</h1>
-          <p className="mt-[16px] text-[16px] font-normal leading-none text-[#666666]">Manage your personal information and track your progress</p>
+          <h1 className="text-[24px] font-semibold leading-none text-[#111111]">Dashboard</h1>
+          <p className="mt-[16px] text-[16px] font-normal leading-none text-[#666666]">
+            Welcome back{d.companyName ? `, ${d.companyName}` : ""}. An overview of your sponsorships and impact.
+          </p>
         </div>
 
+        {notice && (
+          <div className="mt-[20px] rounded-[8px] border border-red-200 bg-red-50 px-4 py-3 text-[14px] font-semibold text-red-700">
+            {notice}
+          </div>
+        )}
+
         <div className="mt-[20px] grid grid-cols-1 gap-[16px] sm:grid-cols-2 xl:grid-cols-4">
-          {stats.map((s) => (
+          {STAT_META.map((s) => (
             <div
-              key={s.id}
+              key={s.key}
               className="flex h-[136px] flex-col items-start rounded-[8px] border border-[#d9d9d9] bg-white px-[24px] py-[24px] shadow-[0_2px_2px_rgba(0,0,0,0.12)]"
             >
               <img src={s.icon} alt="" aria-hidden="true" className="h-[20px] w-[20px] object-contain" />
-              <p className="mt-[18px] text-[20px] font-semibold leading-none text-[#1f2937]">{s.value}</p>
+              <p className="mt-[18px] text-[20px] font-semibold leading-none text-[#1f2937]">{statValue[s.key]}</p>
               <p className="mt-[20px] text-[14px] font-normal leading-none text-[#667085]">{s.label}</p>
             </div>
           ))}
@@ -54,7 +69,10 @@ export default function Dashspon() {
           <div className="min-h-[520px] rounded-[8px] border border-[#d9d9d9] bg-white px-[24px] pb-[24px] pt-[28px] shadow-[0_2px_2px_rgba(0,0,0,0.12)]">
             <h3 className="text-[20px] font-semibold leading-none text-[#1f2937]">Recent Activity</h3>
             <div className="mt-[22px]">
-              {activities.map((a) => (
+              {d.activities.length === 0 && (
+                <p className="text-[14px] text-[#667085]">No recent activity.</p>
+              )}
+              {d.activities.map((a) => (
                 <div key={a.id} className="flex gap-[16px] border-b border-[#d9d9d9] py-[12px] first:pt-0 last:border-b-0">
                   <span className={`mt-[3px] h-[8px] w-[8px] shrink-0 rounded-full ${a.color}`} />
                   <div className="min-w-0 flex-1">
@@ -68,9 +86,12 @@ export default function Dashspon() {
           </div>
 
           <div className="min-h-[520px] rounded-[8px] border border-[#d9d9d9] bg-white px-[24px] pb-[24px] pt-[28px] shadow-[0_2px_2px_rgba(0,0,0,0.12)]">
-            <h3 className="text-[20px] font-semibold leading-none text-[#1f2937]">Upcoming Events & Campaigns</h3>
+            <h3 className="text-[20px] font-semibold leading-none text-[#1f2937]">Upcoming Events &amp; Campaigns</h3>
             <div className="mt-[22px] space-y-[16px]">
-              {events.map((ev) => (
+              {d.events.length === 0 && (
+                <p className="text-[14px] text-[#667085]">No upcoming events.</p>
+              )}
+              {d.events.map((ev) => (
                 <div key={ev.id} className="flex min-h-[84px] items-center justify-between gap-[18px] rounded-[8px] border border-[#d9d9d9] bg-[#f9fafb] px-[20px] py-[16px]">
                   <div className="min-w-0">
                     <p className="text-[15px] font-normal leading-none text-[#1f2937]">{ev.title}</p>

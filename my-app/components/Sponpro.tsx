@@ -1,76 +1,21 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { getSponsorPrograms, getSponsorProgramDetail } from "@/lib/data/sponsor";
+import type { SponsorProgram, SponsorProgramDetail, SponsorStats, SponsorStatus } from "@/lib/data/sponsor.types";
 
-type Status = "Active" | "Pending" | "Completed";
+type Status = SponsorStatus;
+type Program = SponsorProgram;
+type Detail = SponsorProgramDetail;
 
-type Program = {
-  id: string;
-  name: string;
-  tier: "Platinum" | "Gold" | "Silver" | "Bronze";
-  amount: string;
-  status: Status;
-  start: string;
-  end: string;
-};
-
-type Detail = {
-  id: string;
-  title: string;
-  tier: Program["tier"];
-  amount: string;
-  start: string;
-  end: string;
-  status: Status;
-  deliverables: string[];
-  timeline: { label: string; date: string; state: "done" | "in-progress" | "pending" }[];
-  impact: { label: string; value: string }[];
-};
-
-const stats = [
-  { label: "Active Sponsorships", value: "12", icon: "/images/sponsor-dashboard-active.svg" },
-  { label: "Total Sponsored Amount", value: "$245,000", icon: "/images/sponsor-dashboard-dollar.svg" },
-  { label: "Payments Status", value: "8/12 Paid", icon: "/images/sponsor-dashboard-trend.svg" },
-  { label: "Upcoming Events", value: "5", icon: "/images/sponsor-dashboard-calendar.png" },
+const STAT_META: { key: keyof SponsorStats | "payments"; label: string; icon: string }[] = [
+  { key: "activeSponsorships", label: "Active Sponsorships", icon: "/images/sponsor-dashboard-active.svg" },
+  { key: "totalAmount", label: "Total Sponsored Amount", icon: "/images/sponsor-dashboard-dollar.svg" },
+  { key: "payments", label: "Payments Status", icon: "/images/sponsor-dashboard-trend.svg" },
+  { key: "upcomingEvents", label: "Upcoming Events", icon: "/images/sponsor-dashboard-calendar.png" },
 ];
 
-const programs: Program[] = [
-  { id: "p1", name: "Passport to the Future Program", tier: "Platinum", amount: "$50,000", status: "Active", start: "2025-01-01", end: "2025-12-31" },
-  { id: "p2", name: "Passport to the Future Program", tier: "Gold", amount: "$30,000", status: "Active", start: "2025-02-15", end: "2025-11-15" },
-  { id: "p3", name: "Passport to the Future Program", tier: "Silver", amount: "$15,000", status: "Active", start: "2025-03-01", end: "2025-10-01" },
-  { id: "p4", name: "Passport to the Future Program", tier: "Platinum", amount: "$45,000", status: "Pending", start: "2025-04-01", end: "2025-12-31" },
-  { id: "p5", name: "Passport to the Future Program", tier: "Bronze", amount: "$10,000", status: "Active", start: "2025-01-15", end: "2025-08-15" },
-  { id: "p6", name: "Passport to the Future Program", tier: "Gold", amount: "$35,000", status: "Completed", start: "2024-05-01", end: "2024-12-31" },
-  { id: "p7", name: "Passport to the Future Program", tier: "Silver", amount: "$20,000", status: "Active", start: "2025-02-01", end: "2025-11-01" },
-  { id: "p8", name: "Passport to the Future Program", tier: "Platinum", amount: "$40,000", status: "Active", start: "2025-01-10", end: "2025-12-10" },
-];
-
-const detail: Detail = {
-  id: "p1",
-  title: "STEM Mentorship Program",
-  tier: "Platinum",
-  amount: "$50,000",
-  start: "2025-01-01",
-  end: "2025-12-31",
-  status: "Active",
-  deliverables: [
-    "Logo placement on website and marketing materials",
-    "Recognition at annual gala event",
-    "Quarterly impact reports",
-    "Social media shoutouts (4 per year)",
-  ],
-  timeline: [
-    { label: "Contract Signed", date: "2025-01-01", state: "done" },
-    { label: "Initial Payment", date: "Completed", state: "done" },
-    { label: "Ongoing Activities", date: "In Progress", state: "in-progress" },
-    { label: "Final Report", date: "2025-12-31", state: "pending" },
-  ],
-  impact: [
-    { label: "Students Reached", value: "324" },
-    { label: "Sessions Completed", value: "48" },
-    { label: "Satisfaction Rate", value: "96%" },
-  ],
-};
+const EMPTY_STATS: SponsorStats = { activeSponsorships: 0, totalAmount: 0, paidPrograms: 0, totalPrograms: 0, upcomingEvents: 0 };
 
 const tierColor = (tier: Program["tier"]) => {
   switch (tier) {
@@ -106,10 +51,29 @@ const SearchGlyph = () => (
 
 export default function Sponpro() {
   const [view, setView] = useState<"list" | "detail">("list");
-  const [selectedId, setSelectedId] = useState<string>("p1");
+  const [programs, setPrograms] = useState<Program[]>([]);
+  const [stats, setStats] = useState<SponsorStats>(EMPTY_STATS);
+  const [loading, setLoading] = useState(true);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [detailView, setDetailView] = useState<Detail | null>(null);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<"All Status" | Status>("All Status");
   const [timeFilter, setTimeFilter] = useState<string>("All Times");
+
+  useEffect(() => {
+    getSponsorPrograms()
+      .then(({ stats, programs }) => { setStats(stats); setPrograms(programs); })
+      .catch((e) => setNotice((e as Error).message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const openDetail = async (id: string) => {
+    setNotice(null);
+    const d = await getSponsorProgramDetail(id);
+    if (!d) { setNotice("Could not load that program."); return; }
+    setDetailView(d);
+    setView("detail");
+  };
 
   const filtered = useMemo(() => {
     return programs.filter((p) => {
@@ -117,34 +81,34 @@ export default function Sponpro() {
       const matchStatus = status === "All Status" || p.status === status;
       return matchSearch && matchStatus;
     });
-  }, [search, status]);
+  }, [programs, search, status]);
 
-  const selected = programs.find((p) => p.id === selectedId) || programs[0];
-  const detailView: Detail = {
-    ...detail,
-    title: selected.name.replace("Passport to the Future Program", "STEM Mentorship Program"),
-    tier: selected.tier,
-    amount: selected.amount,
-    start: selected.start,
-    end: selected.end,
-    status: selected.status as Status,
+  const statValue: Record<string, string> = {
+    activeSponsorships: String(stats.activeSponsorships),
+    totalAmount: `$${stats.totalAmount.toLocaleString("en-US")}`,
+    payments: `${stats.paidPrograms}/${stats.totalPrograms} Paid`,
+    upcomingEvents: String(stats.upcomingEvents),
   };
 
   return (
     <div className="min-h-screen bg-[#F4F4F5] px-[24px] pb-[40px] pt-[28px] font-['Poppins',_sans-serif] text-[#1f2937]">
       <div className="w-full">
-        {view === "list" ? (
+        {view === "list" || !detailView ? (
           <>
             <div>
               <h1 className="text-[28px] font-semibold leading-none text-[#1f2937]">Sponsorships</h1>
               <p className="mt-[20px] text-[15px] font-normal leading-none text-[#667085]">Manage and view all your sponsorship programs.</p>
             </div>
 
+            {notice && (
+              <div className="mt-[20px] rounded-[8px] border border-red-200 bg-red-50 px-4 py-3 text-[14px] font-semibold text-red-700">{notice}</div>
+            )}
+
             <div className="mt-[20px] grid grid-cols-1 gap-[16px] sm:grid-cols-2 xl:grid-cols-4">
-              {stats.map((s, i) => (
-                <div key={i} className="flex h-[136px] flex-col items-start rounded-[8px] border border-[#d9d9d9] bg-white px-[24px] py-[24px] shadow-[0_2px_2px_rgba(0,0,0,0.12)]">
+              {STAT_META.map((s) => (
+                <div key={s.key} className="flex h-[136px] flex-col items-start rounded-[8px] border border-[#d9d9d9] bg-white px-[24px] py-[24px] shadow-[0_2px_2px_rgba(0,0,0,0.12)]">
                   <img src={s.icon} alt="" aria-hidden="true" className="h-[20px] w-[20px] object-contain" />
-                  <p className="mt-[18px] text-[20px] font-semibold leading-none text-[#1f2937]">{s.value}</p>
+                  <p className="mt-[18px] text-[20px] font-semibold leading-none text-[#1f2937]">{statValue[s.key]}</p>
                   <p className="mt-[20px] text-[14px] font-normal leading-none text-[#667085]">{s.label}</p>
                 </div>
               ))}
@@ -181,6 +145,12 @@ export default function Sponpro() {
                   </tr>
                 </thead>
                   <tbody className="divide-y divide-[#d9d9d9]">
+                  {loading && (
+                    <tr><td colSpan={7} className="px-[24px] py-[28px] text-center text-[14px] text-[#667085]">Loading sponsorships…</td></tr>
+                  )}
+                  {!loading && filtered.length === 0 && (
+                    <tr><td colSpan={7} className="px-[24px] py-[28px] text-center text-[14px] text-[#667085]">No sponsorship programs found.</td></tr>
+                  )}
                   {filtered.map((p) => (
                       <tr key={p.id} className="h-[88px]">
                         <td className="px-[24px] py-[22px] text-[14px] font-normal text-[#1f2937]">{p.name}</td>
@@ -195,10 +165,7 @@ export default function Sponpro() {
                         <td className="px-[24px] py-[22px] text-[14px] font-normal text-[#1f2937]">{p.end}</td>
                         <td className="px-[24px] py-[22px]">
                         <button
-                          onClick={() => {
-                            setSelectedId(p.id);
-                            setView("detail");
-                          }}
+                          onClick={() => openDetail(p.id)}
                             className="flex items-center gap-[4px] text-[14px] font-normal leading-none text-[#ff9f0f]"
                         >
                             <img src="/images/sponsor-view-eye.svg" alt="" aria-hidden="true" className="h-[16px] w-[16px] object-contain" />
@@ -224,7 +191,7 @@ export default function Sponpro() {
               </button>
 
               <div className="mt-[20px] flex items-start justify-between gap-[16px]">
-                <h2 className="text-[28px] font-semibold leading-none text-[#1f2937]">STEM Mentorship Program</h2>
+                <h2 className="text-[28px] font-semibold leading-none text-[#1f2937]">{detailView.title}</h2>
                 <span className={`inline-flex h-[24px] shrink-0 items-center rounded-full px-[12px] text-[13px] font-normal ${statusColor(detailView.status)}`}>
                   {detailView.status}
                 </span>

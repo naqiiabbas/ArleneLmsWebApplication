@@ -60,3 +60,23 @@ export async function assertStudent(): Promise<{ userId: string }> {
   }
   return { userId: user.id }
 }
+
+/** Ensure the caller is a sponsor. Returns their user id (= sponsors.profile_id). */
+export async function assertSponsor(): Promise<{ userId: string }> {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) throw new Error("Not authenticated.")
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single()
+
+  if (!profile || profile.role !== "sponsor") {
+    throw new Error("You are not authorized to perform this action.")
+  }
+  return { userId: user.id }
+}

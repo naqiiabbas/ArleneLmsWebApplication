@@ -238,6 +238,23 @@ enrolled in "Computer Science").
   Supabase Reset-Password email template to include `{{ .Token }}` so the code is emailed.
 - **Student panel COMPLETE** — every screen + kiosk + auth flow wired.
 
+## 5d. Sponsor Panel (in progress)
+
+The last role panel. Guard: **`assertSponsor()`** (`lib/data/guards.ts`, role='sponsor'; middleware
+restricts `/sponsorshippanel`). Data scoped via **`sponsors.profile_id = userId`** (resolve the
+sponsor row, then everything hangs off `sponsor_id`). Seeded login: **sponsor@arlene.com /
+Sponsor@123** ("TechCorp Foundation"; 3 programs, 2 payments, 1 request, 1 event).
+Schema: `sponsors`, `sponsorship_programs` (amount/status), `sponsorship_timeline`,
+`sponsorship_impact`, `sponsorship_requests`, `payments` (method wire_transfer/ach/check/card/cash/other).
+- **Dashboard** (`Dashspon.tsx`) — WIRED & verified: **`lib/data/sponsor.ts`** —
+  `getSponsorDashboard()` (active programs, Σ amount, paid/total programs via completed `payments`,
+  upcoming `events`; recent activity from payments+requests).
+- **Sponsor Profile / Sponsorships** (`Sponpro.tsx`) — WIRED & verified: `getSponsorPrograms()`
+  (shared `sponsorStats` + programs) + `getSponsorProgramDetail(id)` (ownership-checked; deliverables
+  + `sponsorship_timeline` + `sponsorship_impact`). List↔detail toggle.
+- **Still to wire:** Payment (`Payment`), Reports (`Reportsspon`), Request (`Request` →
+  `sponsorship_requests`), Blogs/Messages/Notifications/Settings (reuse layers).
+
 ## 6. Frontend — Tech Stack & Structure
 
 **The frontend is complete but entirely static/mock.** No backend wiring exists: no `app/api`,
