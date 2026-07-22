@@ -12,7 +12,13 @@ import type {
   SponsorProgram,
   SponsorProgramDetail,
   SponsorPrograms,
+  SponsorCompanyProfile,
+  SponsorReportRow,
+  SponsorReports,
   SponsorRequest,
+  SponsorSettings,
+  SponsorTeamMember,
+  SponsorTeamMemberInput,
   SponsorRequestInput,
   SponsorRequestStatus,
   SponsorRequestsData,
@@ -20,6 +26,8 @@ import type {
   SponsorStatus,
   SponsorTier,
 } from "@/lib/data/sponsor.types"
+
+const PIE_COLORS = ["#F59E0B", "#3B82F6", "#10B981", "#F97316", "#EF4444", "#8B5CF6"]
 
 type Admin = ReturnType<typeof createAdminClient>
 
@@ -183,6 +191,230 @@ export async function getSponsorPrograms(): Promise<SponsorPrograms> {
     end: p.end_date ?? "—",
   }))
   return { stats, programs }
+}
+
+/** Company profile + team members (Settings). */
+export async function getSponsorSettings(): Promise<SponsorSettings> {
+  const { userId } = await assertSponsor()
+  const admin = createAdminClient()
+
+  const { data: s } = await admin
+    .from("sponsors")
+    .select("id, company_name, website, industry, company_size, address, city, state, zip_code, phone, contact_name, email")
+    .eq("profile_id", userId)
+    .maybeSingle()
+
+  const empty: SponsorCompanyProfile = {
+    companyName: "", website: "", industry: "", companySize: "", address: "",
+    city: "", state: "", zipCode: "", phone: "", primaryContactName: "", primaryContactEmail: "",
+  }
+  if (!s) return { profile: empty, members: [] }
+
+  const row = s as {
+    id: string; company_name: string | null; website: string | null; industry: string | null
+    company_size: string | null; address: string | null; city: string | null; state: string | null
+    zip_code: string | null; phone: string | null; contact_name: string | null; email: string | null
+  }
+
+  const { data: mem } = await admin
+    .from("sponsor_team_members")
+    .select("id, name, email, role, access_level, can_remove")
+    .eq("sponsor_id", row.id)
+    .order("created_at", { ascending: true })
+
+  const members: SponsorTeamMember[] = ((mem ?? []) as {
+    id: string; name: string; email: string | null; role: string | null; access_level: string; can_remove: boolean
+  }[]).map((m) => ({
+    id: m.id,
+    name: m.name,
+    email: m.email ?? "",
+    role: m.role ?? "",
+    accessLevel: m.access_level,
+    canRemove: m.can_remove,
+  }))
+
+  return {
+    profile: {
+      companyName: row.company_name ?? "",
+      website: row.website ?? "",
+      industry: row.industry ?? "",
+      companySize: row.company_size ?? "",
+      address: row.address ?? "",
+      city: row.city ?? "",
+      state: row.state ?? "",
+      zipCode: row.zip_code ?? "",
+      phone: row.phone ?? "",
+      primaryContactName: row.contact_name ?? "",
+      primaryContactEmail: row.email ?? "",
+    },
+    members,
+  }
+}
+
+/** Save the sponsor's company profile fields. */
+export async function updateSponsorCompanyProfile(
+  input: SponsorCompanyProfile,
+): Promise<{ error?: string }> {
+  const { userId } = await assertSponsor()
+  const admin = createAdminClient()
+  const t = (v: string) => v.trim() || null
+  const { error } = await admin
+    .from("sponsors")
+    .update({
+      company_name: input.companyName.trim() || "Company",
+      website: t(input.website),
+      industry: t(input.industry),
+      company_size: t(input.companySize),
+      address: t(input.address),
+      city: t(input.city),
+      state: t(input.state),
+      zip_code: t(input.zipCode),
+      phone: t(input.phone),
+      contact_name: t(input.primaryContactName),
+      email: t(input.primaryContactEmail),
+    })
+    .eq("profile_id", userId)
+  if (error) return { error: error.message }
+  return {}
+}
+
+/** Add a team member to the sponsor portal. */
+export async function addSponsorTeamMember(
+  input: SponsorTeamMemberInput,
+): Promise<{ error?: string; id?: string }> {
+  const { userId } = await assertSponsor()
+  const admin = createAdminClient()
+  const sponsor = await resolveSponsor(admin, userId)
+  if (!sponsor) return { error: "No sponsor profile is linked to your account." }
+  if (!input.name.trim() || !input.email.trim()) return { error: "Name and email are required." }
+
+  const { data, error } = await admin
+    .from("sponsor_team_members")
+    .insert({
+      sponsor_id: sponsor.id,
+      name: input.name.trim(),
+      email: input.email.trim(),
+      role: input.role.trim() || null,
+      access_level: input.accessLevel || "Full Access",
+      can_remove: true,
+    })
+    .select("id")
+    .single()
+  if (error) return { error: error.message }
+  return { id: data.id }
+}
+
+/** Remove a team member (only removable ones, scoped to the sponsor). */
+export async function removeSponsorTeamMember(id: string): Promise<{ error?: string }> {
+  const { userId } = await assertSponsor()
+  const admin = createAdminClient()
+  const sponsor = await resolveSponsor(admin, userId)
+  if (!sponsor) return { error: "No sponsor profile is linked to your account." }
+
+  const { error } = await admin
+    .from("sponsor_team_members")
+    .delete()
+    .eq("id", id)
+    .eq("sponsor_id", sponsor.id)
+    .eq("can_remove", true)
+  if (error) return { error: error.message }
+  return {}
+}
+
+function quarterLabel(iso: string): string {
+  const d = new Date(iso)
+  return `Q${Math.floor(d.getMonth() / 3) + 1} ${d.getFullYear()}`
+}
+
+/** Reports & analytics over the sponsor's programs, impact, payments and invoices. */
+export async function getSponsorReports(): Promise<SponsorReports> {
+  const { userId } = await assertSponsor()
+  const admin = createAdminClient()
+  const sponsor = await resolveSponsor(admin, userId)
+  const empty: SponsorReports = { metrics: { students: 0, sessions: 0, investment: 0, avgSatisfaction: 0, programs: 0 }, performance: [], distribution: [], financial: [], impact: [] }
+  if (!sponsor) return empty
+
+  const { data: progData } = await admin
+    .from("sponsorship_programs")
+    .select("id, name, amount")
+    .eq("sponsor_id", sponsor.id)
+  const programs = (progData ?? []) as { id: string; name: string; amount: number | string | null }[]
+  const programIds = programs.map((p) => p.id)
+
+  const [{ data: impactData }, { data: payData }, { data: invData }] = await Promise.all([
+    programIds.length ? admin.from("sponsorship_impact").select("program_id, label, value").in("program_id", programIds) : Promise.resolve({ data: [] as unknown[] }),
+    admin.from("payments").select("amount, status, paid_at").eq("sponsor_id", sponsor.id).eq("status", "completed"),
+    admin.from("invoices").select("amount, issued_date").eq("sponsor_id", sponsor.id),
+  ])
+  const impacts = (impactData ?? []) as { program_id: string; label: string; value: string }[]
+
+  const num = (s: string | undefined) => (s ? parseFloat(s.replace(/[^0-9.]/g, "")) || 0 : 0)
+  const findImpact = (pid: string, needle: string) => impacts.find((i) => i.program_id === pid && i.label.toLowerCase().includes(needle))?.value
+
+  const performance: SponsorReportRow[] = programs.map((p) => {
+    const students = num(findImpact(p.id, "student"))
+    const sessions = num(findImpact(p.id, "session"))
+    const satRaw = findImpact(p.id, "satisf")
+    const sat = num(satRaw)
+    const roi: SponsorReportRow["roi"] = sat >= 95 ? "High" : sat >= 90 ? "Medium" : sat > 0 ? "Low" : "Medium"
+    return { program: p.name, students, sessions, investment: Number(p.amount ?? 0), satisfaction: satRaw ?? "—", roi }
+  })
+
+  const totalStudents = performance.reduce((s, r) => s + r.students, 0)
+  const totalSessions = performance.reduce((s, r) => s + r.sessions, 0)
+  const totalInvestment = performance.reduce((s, r) => s + r.investment, 0)
+  const sats = performance.map((r) => num(r.satisfaction)).filter((v) => v > 0)
+  const avgSatisfaction = sats.length ? Math.round(sats.reduce((a, b) => a + b, 0) / sats.length) : 0
+
+  const distribution = programs
+    .filter((p) => Number(p.amount ?? 0) > 0)
+    .map((p, i) => ({
+      name: p.name,
+      value: totalInvestment ? Math.round((Number(p.amount ?? 0) / totalInvestment) * 100) : 0,
+      color: PIE_COLORS[i % PIE_COLORS.length],
+    }))
+
+  // Financial by quarter: amountSpent = completed payments, sponsoredAmount = invoices issued.
+  const finMap = new Map<string, { amountSpent: number; sponsoredAmount: number; ts: number }>()
+  for (const p of (payData ?? []) as { amount: number | string; paid_at: string | null }[]) {
+    if (!p.paid_at) continue
+    const q = quarterLabel(p.paid_at)
+    const e = finMap.get(q) ?? { amountSpent: 0, sponsoredAmount: 0, ts: new Date(p.paid_at).getTime() }
+    e.amountSpent += Number(p.amount ?? 0)
+    finMap.set(q, e)
+  }
+  for (const iv of (invData ?? []) as { amount: number | string; issued_date: string | null }[]) {
+    if (!iv.issued_date) continue
+    const q = quarterLabel(iv.issued_date)
+    const e = finMap.get(q) ?? { amountSpent: 0, sponsoredAmount: 0, ts: new Date(iv.issued_date).getTime() }
+    e.sponsoredAmount += Number(iv.amount ?? 0)
+    finMap.set(q, e)
+  }
+  const financial = [...finMap.entries()]
+    .sort((a, b) => a[1].ts - b[1].ts)
+    .map(([quarter, v]) => ({ quarter, amountSpent: v.amountSpent, sponsoredAmount: v.sponsoredAmount }))
+
+  // Impact over time: sponsored $ per month (from completed payments).
+  const monthMap = new Map<string, { amount: number; ts: number }>()
+  for (const p of (payData ?? []) as { amount: number | string; paid_at: string | null }[]) {
+    if (!p.paid_at) continue
+    const d = new Date(p.paid_at)
+    const key = d.toLocaleDateString("en-US", { month: "short", year: "2-digit" })
+    const e = monthMap.get(key) ?? { amount: 0, ts: new Date(d.getFullYear(), d.getMonth(), 1).getTime() }
+    e.amount += Number(p.amount ?? 0)
+    monthMap.set(key, e)
+  }
+  const impact = [...monthMap.entries()]
+    .sort((a, b) => a[1].ts - b[1].ts)
+    .map(([month, v]) => ({ month, amount: v.amount }))
+
+  return {
+    metrics: { students: totalStudents, sessions: totalSessions, investment: totalInvestment, avgSatisfaction, programs: programs.length },
+    performance,
+    distribution,
+    financial,
+    impact,
+  }
 }
 
 /** The sponsor's sponsorship requests + status counts (Request Donate). */

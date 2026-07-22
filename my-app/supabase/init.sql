@@ -906,11 +906,30 @@ create table if not exists public.sponsors (
   media_links  text[] not null default '{}',
   status       sponsor_status not null default 'pending',
   is_public    boolean not null default false,   -- show on public listing
+  industry     text,
+  company_size text,
+  address      text,
+  city         text,
+  state        text,
+  zip_code     text,
   approved_by  uuid references public.profiles(id) on delete set null,
   approved_at  timestamptz,
   created_at   timestamptz not null default now(),
   updated_at   timestamptz not null default now()
 );
+
+-- Sponsor portal team members (Settings → Team Members).
+create table if not exists public.sponsor_team_members (
+  id           uuid primary key default gen_random_uuid(),
+  sponsor_id   uuid not null references public.sponsors(id) on delete cascade,
+  name         text not null,
+  email        citext,
+  role         text,
+  access_level text not null default 'Full Access',
+  can_remove   boolean not null default true,
+  created_at   timestamptz not null default now()
+);
+create index if not exists idx_sponsor_team_sponsor on public.sponsor_team_members(sponsor_id);
 create trigger trg_sponsors_updated before update on public.sponsors
   for each row execute function public.set_updated_at();
 
@@ -1177,6 +1196,7 @@ alter table public.blog_posts                enable row level security;
 alter table public.gallery_albums            enable row level security;
 alter table public.gallery_items             enable row level security;
 alter table public.sponsors                  enable row level security;
+alter table public.sponsor_team_members      enable row level security;
 alter table public.sponsorship_programs      enable row level security;
 alter table public.sponsorship_timeline      enable row level security;
 alter table public.sponsorship_impact        enable row level security;
@@ -1534,6 +1554,11 @@ create policy sponsors_self on public.sponsors for update
 drop policy if exists sponsors_admin on public.sponsors;
 create policy sponsors_admin on public.sponsors for all
   using (public.is_admin()) with check (public.is_admin());
+
+drop policy if exists sponsor_team_access on public.sponsor_team_members;
+create policy sponsor_team_access on public.sponsor_team_members for all
+  using (exists (select 1 from public.sponsors s where s.id = sponsor_id and s.profile_id = auth.uid()) or public.is_admin())
+  with check (exists (select 1 from public.sponsors s where s.id = sponsor_id and s.profile_id = auth.uid()) or public.is_admin());
 
 drop policy if exists sponpro_access on public.sponsorship_programs;
 create policy sponpro_access on public.sponsorship_programs for select

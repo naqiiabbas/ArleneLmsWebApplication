@@ -122,3 +122,55 @@ export interface SponsorRequestInput {
   startDate: string
   benefits: string[]
 }
+
+export interface SponsorReportRow {
+  program: string
+  students: number
+  sessions: number
+  investment: number
+  satisfaction: string
+  roi: "High" | "Medium" | "Low"
+}
+
+export interface SponsorReports {
+  metrics: { students: number; sessions: number; investment: number; avgSatisfaction: number; programs: number }
+  performance: SponsorReportRow[]
+  distribution: { name: string; value: number; color: string }[]
+  financial: { quarter: string; amountSpent: number; sponsoredAmount: number }[]
+  impact: { month: string; amount: number }[]
+}
+
+export interface SponsorCompanyProfile {
+  companyName: string
+  website: string
+  industry: string
+  companySize: string
+  address: string
+  city: string
+  state: string
+  zipCode: string
+  phone: string
+  primaryContactName: string
+  primaryContactEmail: string
+}
+
+export interface SponsorTeamMember {
+  id: string
+  name: string
+  email: string
+  role: string
+  accessLevel: string
+  canRemove: boolean
+}
+
+export interface SponsorSettings {
+  profile: SponsorCompanyProfile
+  members: SponsorTeamMember[]
+}
+
+export interface SponsorTeamMemberInput {
+  name: string
+  email: string
+  role: string
+  accessLevel: string
+}

@@ -2131,63 +2131,122 @@ export type Database = {
           },
         ]
       }
+      sponsor_team_members: {
+        Row: {
+          access_level: string
+          can_remove: boolean
+          created_at: string
+          email: string | null
+          id: string
+          name: string
+          role: string | null
+          sponsor_id: string
+        }
+        Insert: {
+          access_level?: string
+          can_remove?: boolean
+          created_at?: string
+          email?: string | null
+          id?: string
+          name: string
+          role?: string | null
+          sponsor_id: string
+        }
+        Update: {
+          access_level?: string
+          can_remove?: boolean
+          created_at?: string
+          email?: string | null
+          id?: string
+          name?: string
+          role?: string | null
+          sponsor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sponsor_team_members_sponsor_id_fkey"
+            columns: ["sponsor_id"]
+            isOneToOne: false
+            referencedRelation: "sponsors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sponsors: {
         Row: {
+          address: string | null
           approved_at: string | null
           approved_by: string | null
+          city: string | null
           company_name: string
+          company_size: string | null
           contact_name: string | null
           created_at: string
           email: string | null
           id: string
+          industry: string | null
           is_public: boolean
           logo_url: string | null
           media_links: string[]
           message: string | null
           phone: string | null
           profile_id: string | null
+          state: string | null
           status: Database["public"]["Enums"]["sponsor_status"]
           tier: Database["public"]["Enums"]["sponsorship_tier"] | null
           updated_at: string
           website: string | null
+          zip_code: string | null
         }
         Insert: {
+          address?: string | null
           approved_at?: string | null
           approved_by?: string | null
+          city?: string | null
           company_name: string
+          company_size?: string | null
           contact_name?: string | null
           created_at?: string
           email?: string | null
           id?: string
+          industry?: string | null
           is_public?: boolean
           logo_url?: string | null
           media_links?: string[]
           message?: string | null
           phone?: string | null
           profile_id?: string | null
+          state?: string | null
           status?: Database["public"]["Enums"]["sponsor_status"]
           tier?: Database["public"]["Enums"]["sponsorship_tier"] | null
           updated_at?: string
           website?: string | null
+          zip_code?: string | null
         }
         Update: {
+          address?: string | null
           approved_at?: string | null
           approved_by?: string | null
+          city?: string | null
           company_name?: string
+          company_size?: string | null
           contact_name?: string | null
           created_at?: string
           email?: string | null
           id?: string
+          industry?: string | null
           is_public?: boolean
           logo_url?: string | null
           media_links?: string[]
           message?: string | null
           phone?: string | null
           profile_id?: string | null
+          state?: string | null
           status?: Database["public"]["Enums"]["sponsor_status"]
           tier?: Database["public"]["Enums"]["sponsorship_tier"] | null
           updated_at?: string
           website?: string | null
+          zip_code?: string | null
         }
         Relationships: [
           {

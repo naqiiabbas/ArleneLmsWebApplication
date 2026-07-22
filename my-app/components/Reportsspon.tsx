@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useEffect, useState } from "react";
 import {
   ResponsiveContainer,
   LineChart,
@@ -16,61 +16,26 @@ import {
   Pie,
   Cell,
 } from "recharts";
-
-type PerfRow = {
-  program: string;
-  students: number;
-  sessions: number;
-  investment: number;
-  satisfaction: string;
-  roi: "High" | "Medium" | "Low";
-};
-
-const impactData = [
-  { month: "Jan", sponsorships: 22, students: 310 },
-  { month: "Feb", sponsorships: 24, students: 360 },
-  { month: "Mar", sponsorships: 26, students: 390 },
-  { month: "Apr", sponsorships: 25, students: 370 },
-  { month: "May", sponsorships: 28, students: 450 },
-  { month: "Jun", sponsorships: 29, students: 500 },
-];
-
-const financialData = [
-  { quarter: "Q1", amountSpent: 85000, sponsoredAmount: 90000 },
-  { quarter: "Q2", amountSpent: 105000, sponsoredAmount: 95000 },
-  { quarter: "Q3", amountSpent: 120000, sponsoredAmount: 115000 },
-  { quarter: "Q4", amountSpent: 110000, sponsoredAmount: 100000 },
-];
-
-const pieData = [
-  { name: "STEM Programs", value: 35, color: "#F59E0B" },
-  { name: "Leadership", value: 25, color: "#3B82F6" },
-  { name: "Tech Skills", value: 20, color: "#10B981" },
-  { name: "Career Dev", value: 15, color: "#F97316" },
-  { name: "Other", value: 5, color: "#EF4444" },
-];
-
-const performanceRows: PerfRow[] = [
-  { program: "STEM Mentorship Program", students: 324, sessions: 48, investment: 50000, satisfaction: "96%", roi: "High" },
-  { program: "Leadership Development", students: 280, sessions: 42, investment: 30000, satisfaction: "94%", roi: "High" },
-  { program: "Women in Tech Initiative", students: 195, sessions: 36, investment: 15000, satisfaction: "97%", roi: "High" },
-  { program: "Tech Bootcamp Sponsorship", students: 420, sessions: 52, investment: 45000, satisfaction: "93%", roi: "Medium" },
-  { program: "Career Readiness Program", students: 156, sessions: 28, investment: 10000, satisfaction: "91%", roi: "Medium" },
-];
+import { getSponsorReports } from "@/lib/data/sponsor";
+import type { SponsorReports } from "@/lib/data/sponsor.types";
 
 const money = (v: number) => `$${(v / 1000).toFixed(0)}K`;
 const fullMoney = (v: number) => `$${v.toLocaleString()}`;
 
+const EMPTY: SponsorReports = { metrics: { students: 0, sessions: 0, investment: 0, avgSatisfaction: 0, programs: 0 }, performance: [], distribution: [], financial: [], impact: [] };
+
 export default function Reportsspon() {
-  const totals = useMemo(() => {
-    const totalStudents = performanceRows.reduce((sum, p) => sum + p.students, 0);
-    const totalSponsored = performanceRows.reduce((sum, p) => sum + p.investment, 0);
-    return {
-      students: totalStudents,
-      sponsored: totalSponsored,
-      avgSat: "94%",
-    };
+  const [data, setData] = useState<SponsorReports | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    getSponsorReports()
+      .then(setData)
+      .catch((e) => setNotice((e as Error).message));
   }, []);
+
+  const { metrics, performance: performanceRows, distribution: pieData, financial: financialData, impact: impactData } = data ?? EMPTY;
+  const totals = { students: metrics.students, sponsored: metrics.investment, avgSat: `${metrics.avgSatisfaction}%` };
 
   const exportCsv = () => {
     const header = "Program,Students,Sessions,Investment,Satisfaction,ROI\n";
@@ -143,48 +108,62 @@ export default function Reportsspon() {
           </div>
         </div>
 
+        {notice && (
+          <div className="rounded-[8px] border border-red-200 bg-red-50 px-4 py-3 text-[14px] font-semibold text-red-700">{notice}</div>
+        )}
+
         <div className="grid grid-cols-1 gap-[24px] sm:grid-cols-2 xl:grid-cols-4">
-          <MetricCard title="Total Students Reached" value="2,475" sub="↑ 18% from last year" subClass="text-[#00a63e]" />
-          <MetricCard title="Sessions Sponsored" value="339" sub="↑ 24% from last year" subClass="text-[#00a63e]" />
-          <MetricCard title="Total Investment" value="$445K" sub="Across 12 programs" subClass="text-[#155dfc]" />
-          <MetricCard title="Avg Satisfaction" value="94%" sub="↑ 3% from last quarter" subClass="text-[#00a63e]" />
+          <MetricCard title="Total Students Reached" value={metrics.students.toLocaleString()} sub={`Across ${metrics.programs} programs`} subClass="text-[#00a63e]" />
+          <MetricCard title="Sessions Sponsored" value={String(metrics.sessions)} sub="Completed sessions" subClass="text-[#00a63e]" />
+          <MetricCard title="Total Investment" value={money(metrics.investment)} sub={`Across ${metrics.programs} programs`} subClass="text-[#155dfc]" />
+          <MetricCard title="Avg Satisfaction" value={`${metrics.avgSatisfaction}%`} sub="Program average" subClass="text-[#00a63e]" />
         </div>
 
-        <Card title="Impact Over Time">
+        <Card title="Investment Over Time">
           <div className="h-[320px]">
+            {impactData.length === 0 ? (
+              <div className="flex h-full items-center justify-center text-[14px] text-[#667085]">No payment activity yet.</div>
+            ) : (
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={impactData} margin={{ top: 8, right: 22, left: 0, bottom: 8 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#dddddd" />
                 <XAxis dataKey="month" tick={{ fill: "#667085", fontSize: 12 }} axisLine={{ stroke: "#9ca3af" }} tickLine={false} />
-                <YAxis domain={[0, 600]} ticks={[0, 150, 300, 450, 600]} tick={{ fill: "#667085", fontSize: 12 }} axisLine={{ stroke: "#9ca3af" }} tickLine={false} />
-                <Tooltip />
+                <YAxis tick={{ fill: "#667085", fontSize: 12 }} axisLine={{ stroke: "#9ca3af" }} tickLine={false} tickFormatter={(v: number) => money(v)} />
+                <Tooltip formatter={(v: number) => fullMoney(v)} />
                 <Legend iconType="plainline" wrapperStyle={{ fontSize: 14, color: "#667085" }} />
-                <Line type="monotone" dataKey="sponsorships" stroke="#2F80FF" strokeWidth={2} dot={{ r: 3, strokeWidth: 2, fill: "#fff" }} name="Sessions" />
-                <Line type="monotone" dataKey="students" stroke="#ff9f0f" strokeWidth={2} dot={{ r: 3, strokeWidth: 2, fill: "#fff" }} name="Students Reached" />
+                <Line type="monotone" dataKey="amount" stroke="#ff9f0f" strokeWidth={2} dot={{ r: 3, strokeWidth: 2, fill: "#fff" }} name="Sponsored ($)" />
               </LineChart>
             </ResponsiveContainer>
+            )}
           </div>
         </Card>
 
         <div className="grid grid-cols-1 gap-[16px] lg:grid-cols-2">
           <Card title="Financial Summary">
             <div className="h-[300px]">
+              {financialData.length === 0 ? (
+                <div className="flex h-full items-center justify-center text-[14px] text-[#667085]">No financial activity yet.</div>
+              ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={financialData} margin={{ top: 8, right: 12, left: 0, bottom: 8 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#dddddd" />
                   <XAxis dataKey="quarter" tick={{ fill: "#667085", fontSize: 12 }} tickLine={false} axisLine={{ stroke: "#9ca3af" }} />
-                  <YAxis ticks={[0, 35000, 70000, 105000, 140000]} tick={{ fill: "#667085", fontSize: 12 }} tickLine={false} axisLine={{ stroke: "#9ca3af" }} />
+                  <YAxis tick={{ fill: "#667085", fontSize: 12 }} tickLine={false} axisLine={{ stroke: "#9ca3af" }} tickFormatter={(v: number) => money(v)} />
                   <Tooltip formatter={(v: number) => fullMoney(v)} />
                   <Legend iconType="square" wrapperStyle={{ fontSize: 14 }} />
                   <Bar dataKey="amountSpent" fill="#3B82F6" name="Amount Spent" barSize={42} />
                   <Bar dataKey="sponsoredAmount" fill="#F9A618" name="Sponsored Amount" barSize={42} />
                 </BarChart>
               </ResponsiveContainer>
+              )}
             </div>
           </Card>
 
           <Card title="Program Distribution">
             <div className="h-[300px]">
+              {pieData.length === 0 ? (
+                <div className="flex h-full items-center justify-center text-[14px] text-[#667085]">No programs yet.</div>
+              ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
@@ -204,6 +183,7 @@ export default function Reportsspon() {
                   <Tooltip formatter={(value: number) => `${value}%`} />
                 </PieChart>
               </ResponsiveContainer>
+              )}
             </div>
           </Card>
         </div>
@@ -222,6 +202,9 @@ export default function Reportsspon() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#d9d9d9]">
+                {performanceRows.length === 0 && (
+                  <tr><td colSpan={6} className="px-[24px] py-[28px] text-center text-[14px] text-[#667085]">No program data yet.</td></tr>
+                )}
                 {performanceRows.map((row) => (
                   <tr key={row.program} className="h-[72px]">
                     <td className="px-[24px] py-[22px] text-[14px] font-normal text-[#1f2937]">{row.program}</td>

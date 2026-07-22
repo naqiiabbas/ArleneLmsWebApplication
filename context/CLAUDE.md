@@ -238,7 +238,7 @@ enrolled in "Computer Science").
   Supabase Reset-Password email template to include `{{ .Token }}` so the code is emailed.
 - **Student panel COMPLETE** — every screen + kiosk + auth flow wired.
 
-## 5d. Sponsor Panel (in progress)
+## 5d. Sponsor Panel (COMPLETE)
 
 The last role panel. Guard: **`assertSponsor()`** (`lib/data/guards.ts`, role='sponsor'; middleware
 restricts `/sponsorshippanel`). Data scoped via **`sponsors.profile_id = userId`** (resolve the
@@ -259,7 +259,15 @@ Schema: `sponsors`, `sponsorship_programs` (amount/status), `sponsorship_timelin
 - **Notifications/Blog/Messages** (`Notifispon`/`Blogsspon`/`Messagespon`) — WIRED & verified: reuse
   `notifications.ts`, `listPublishedBlogPosts` (read-only reader), and `messaging.ts` (new-chat by
   free-text contact name — sponsors have no assigned list).
-- **Still to wire:** Reports (`Reportsspon`), Settings (`Settingsspon`).
+- **Reports** (`Reportsspon.tsx`) — WIRED & verified: `getSponsorReports()` — metrics + performance
+  table (programs + `sponsorship_impact`) + distribution pie + financial-by-quarter (payments/invoices)
+  + monthly investment line. CSV/PDF client-side.
+- **Settings** (`Settingsspon.tsx`) — WIRED & verified: `getSponsorSettings`/`updateSponsorCompanyProfile`
+  (company profile ↔ `sponsors`) + `addSponsorTeamMember`/`removeSponsorTeamMember`. **Migration
+  `sponsor_settings_profile_and_team`**: added `sponsors` cols (industry/company_size/address/city/
+  state/zip_code) + new `sponsor_team_members` table (RLS: sponsor-owner or admin); init.sql synced,
+  types regenerated.
+- **Sponsor panel COMPLETE** — every screen wired. **All four panels (admin/mentor/student/sponsor) done.**
 
 ## 6. Frontend — Tech Stack & Structure
 

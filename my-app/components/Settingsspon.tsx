@@ -1,72 +1,23 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import {
+  getSponsorSettings,
+  updateSponsorCompanyProfile,
+  addSponsorTeamMember,
+  removeSponsorTeamMember,
+} from "@/lib/data/sponsor";
+import type {
+  SponsorCompanyProfile as CompanyProfile,
+  SponsorTeamMember as TeamMember,
+} from "@/lib/data/sponsor.types";
 
 type AccessLevel = "Full Access" | "Payments Only" | "Reports & Resources";
 
-type TeamMember = {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-  accessLevel: AccessLevel;
-  canRemove: boolean;
+const emptyProfile: CompanyProfile = {
+  companyName: "", website: "", industry: "", companySize: "", address: "",
+  city: "", state: "", zipCode: "", phone: "", primaryContactName: "", primaryContactEmail: "",
 };
-
-type CompanyProfile = {
-  companyName: string;
-  website: string;
-  industry: string;
-  companySize: string;
-  address: string;
-  city: string;
-  state: string;
-  zipCode: string;
-  phone: string;
-  primaryContactName: string;
-  primaryContactEmail: string;
-};
-
-const initialProfile: CompanyProfile = {
-  companyName: "TechCorp Industries",
-  website: "https://techcorp.com",
-  industry: "Technology",
-  companySize: "1-50 employees",
-  address: "123 Tech Street",
-  city: "San Francisco",
-  state: "CA",
-  zipCode: "94105",
-  phone: "(555) 123-4567",
-  primaryContactName: "John Smith",
-  primaryContactEmail: "john.smith@techcorp.com",
-};
-
-const initialMembers: TeamMember[] = [
-  {
-    id: "m1",
-    name: "John Smith",
-    email: "john.smith@techcorp.com",
-    role: "Primary Contact",
-    accessLevel: "Full Access",
-    canRemove: false,
-  },
-  {
-    id: "m2",
-    name: "Sarah Johnson",
-    email: "sarah.j@techcorp.com",
-    role: "Finance Manager",
-    accessLevel: "Payments Only",
-    canRemove: true,
-  },
-  {
-    id: "m3",
-    name: "Mike Chen",
-    email: "mike.chen@techcorp.com",
-    role: "Marketing Lead",
-    accessLevel: "Reports & Resources",
-    canRemove: true,
-  },
-];
 
 const accessPill = () => "bg-[#dbeafe] text-[#155dfc]";
 
@@ -94,18 +45,28 @@ const MaskIcon = ({
 );
 
 export default function Settingsspon() {
-  const [profile, setProfile] = useState<CompanyProfile>(initialProfile);
-  const [members, setMembers] = useState<TeamMember[]>(initialMembers);
+  const [profile, setProfile] = useState<CompanyProfile>(emptyProfile);
+  const [members, setMembers] = useState<TeamMember[]>([]);
   const [showAdd, setShowAdd] = useState(false);
   const [showRemoveModal, setShowRemoveModal] = useState(false);
   const [selectedMember, setSelectedMember] = useState<TeamMember | null>(null);
   const [notice, setNotice] = useState("");
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
   const [newMember, setNewMember] = useState({
     name: "",
     email: "",
     role: "",
     accessLevel: "Full Access" as AccessLevel,
   });
+
+  const loadSettings = () => {
+    getSponsorSettings()
+      .then(({ profile, members }) => { setProfile(profile); setMembers(members); })
+      .catch((e) => setError((e as Error).message));
+  };
+
+  useEffect(loadSettings, []);
 
   useEffect(() => {
     if (!showRemoveModal) return;
@@ -118,24 +79,30 @@ export default function Settingsspon() {
 
   const canAdd = useMemo(() => newMember.name && newMember.email && newMember.role, [newMember]);
 
-  const onSaveProfile = () => {
+  const onSaveProfile = async () => {
+    if (saving) return;
+    setSaving(true);
+    setError("");
+    const res = await updateSponsorCompanyProfile(profile);
+    setSaving(false);
+    if (res.error) {
+      setError(res.error);
+      return;
+    }
     setNotice("Profile saved successfully.");
     setTimeout(() => setNotice(""), 1800);
   };
 
-  const onAddMember = () => {
+  const onAddMember = async () => {
     if (!canAdd) return;
-    const member: TeamMember = {
-      id: `m-${Date.now()}`,
-      name: newMember.name,
-      email: newMember.email,
-      role: newMember.role,
-      accessLevel: newMember.accessLevel,
-      canRemove: true,
-    };
-    setMembers((prev) => [...prev, member]);
+    const res = await addSponsorTeamMember(newMember);
+    if (res.error) {
+      setError(res.error);
+      return;
+    }
     setNewMember({ name: "", email: "", role: "", accessLevel: "Full Access" });
     setShowAdd(false);
+    loadSettings();
   };
 
   const askRemove = (member: TeamMember) => {
@@ -144,11 +111,14 @@ export default function Settingsspon() {
     setShowRemoveModal(true);
   };
 
-  const confirmRemove = () => {
+  const confirmRemove = async () => {
     if (!selectedMember) return;
-    setMembers((prev) => prev.filter((m) => m.id !== selectedMember.id));
+    const id = selectedMember.id;
+    setMembers((prev) => prev.filter((m) => m.id !== id));
     setShowRemoveModal(false);
     setSelectedMember(null);
+    const res = await removeSponsorTeamMember(id);
+    if (res.error) { setError(res.error); loadSettings(); }
   };
 
   return (
@@ -166,6 +136,12 @@ export default function Settingsspon() {
             {notice}
           </div>
         )}
+        {error && (
+          <div className="flex items-start justify-between gap-4 rounded-[8px] border border-red-200 bg-red-50 px-[16px] py-[10px] text-[14px] font-medium text-red-700">
+            <span className="break-all">{error}</span>
+            <button type="button" onClick={() => setError("")} className="shrink-0 text-[13px] underline">Dismiss</button>
+          </div>
+        )}
 
         <section className="overflow-hidden rounded-[8px] border border-[#d9d9d9] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.12)]">
           <div className="flex min-h-[88px] items-center justify-between border-b border-[#d9d9d9] px-[24px] py-[16px]">
@@ -177,10 +153,11 @@ export default function Settingsspon() {
             </div>
             <button
               onClick={onSaveProfile}
-              className="flex h-[56px] w-[192px] items-center justify-center gap-[10px] rounded-[8px] bg-[#f9a618] text-[15px] font-semibold text-white transition-colors hover:bg-[#e99a10]"
+              disabled={saving}
+              className="flex h-[56px] w-[192px] items-center justify-center gap-[10px] rounded-[8px] bg-[#f9a618] text-[15px] font-semibold text-white transition-colors hover:bg-[#e99a10] disabled:opacity-60"
             >
               <img src="/images/settings-save-icon.svg" alt="" aria-hidden="true" className="h-[16px] w-[16px]" />
-              Save Changes
+              {saving ? "Saving…" : "Save Changes"}
             </button>
           </div>
 
@@ -300,6 +277,9 @@ export default function Settingsspon() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#e5e7eb] text-[15px] font-normal text-[#1f2937]">
+                {members.length === 0 && (
+                  <tr><td colSpan={5} className="px-[24px] py-[28px] text-center text-[14px] text-[#667085]">No team members yet. Add one to grant portal access.</td></tr>
+                )}
                 {members.map((member) => (
                   <tr key={member.id} className="h-[88px]">
                     <td className="px-[24px] py-[20px]">{member.name}</td>
