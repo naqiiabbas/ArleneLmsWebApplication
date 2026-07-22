@@ -45,6 +45,14 @@ export default function Navbar() {
     { label: 'ENROLL', href: '/enroll' },
   ];
 
+  // Sign-in dropdown: one entry per portal login.
+  const portalLinks = [
+    { label: 'Student', href: '/studentpanel/loginform' },
+    { label: 'Mentor', href: '/mentorshippanel/loginform' },
+    { label: 'Sponsor', href: '/sponsorshippanel/loginform' },
+    { label: 'Admin', href: '/adminpanel/loginform' },
+  ];
+
   const toggleDropdown = (label: string) => {
     setActiveDropdown(activeDropdown === label ? null : label);
   };
@@ -148,9 +156,12 @@ export default function Navbar() {
               {activeDropdown === 'signin' && (
                 <>
                   <div className="fixed inset-0 z-10" onClick={() => setActiveDropdown(null)} />
-                  <div className="absolute right-0 mt-4 w-40 bg-[#1a1a1a] border border-gray-800 rounded shadow-xl z-20">
-                    <Link href="/studentpanel/loginform" className="block px-4 py-3 text-sm text-white hover:bg-gray-800" onClick={() => setActiveDropdown(null)}>Login</Link>
-                    <Link href="/studentpanel/loginform" className="block px-4 py-3 text-sm text-white hover:bg-gray-800" onClick={() => setActiveDropdown(null)}>Register</Link>
+                  <div className="absolute right-0 mt-4 w-44 bg-[#1a1a1a] border border-gray-800 rounded shadow-xl z-20">
+                    {portalLinks.map((portal) => (
+                      <Link key={portal.label} href={portal.href} className="block px-4 py-3 text-sm text-white hover:bg-gray-800" onClick={() => setActiveDropdown(null)}>
+                        {portal.label}
+                      </Link>
+                    ))}
                   </div>
                 </>
               )}
@@ -213,8 +224,12 @@ export default function Navbar() {
             
             {/* Mobile Auth Links */}
             <div className="flex flex-col gap-4 mt-4 pt-4 border-t border-gray-800">
-               <Link href="/studentpanel/loginform" className="text-white font-bold text-[16px] uppercase py-2" onClick={closeMobileMenu}>Login</Link>
-               <Link href="/studentpanel/loginform" className="text-white font-bold text-[16px] uppercase py-2" onClick={closeMobileMenu}>Register</Link>
+               <p className="text-[12px] font-bold uppercase tracking-wide text-gray-500">Sign In As</p>
+               {portalLinks.map((portal) => (
+                 <Link key={portal.label} href={portal.href} className="text-white font-bold text-[16px] uppercase py-2" onClick={closeMobileMenu}>
+                   {portal.label}
+                 </Link>
+               ))}
             </div>
           </nav>
         </div>
