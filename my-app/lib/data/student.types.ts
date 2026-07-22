@@ -165,6 +165,7 @@ export interface StudentNote {
   description: string
   content: string
   attachments: number
+  attachmentList: { id: string; name: string }[]
   category: string
   avatar: string
   isNew: boolean

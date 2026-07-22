@@ -18,6 +18,7 @@ import {
   getMentorNotes,
   createMentorNote,
   updateMentorNote,
+  attachNoteFile,
 } from "@/lib/data/mentor";
 import type { MentorNote, MentorStudentOption } from "@/lib/data/mentor.types";
 
@@ -156,15 +157,22 @@ const NotesAndReports = () => {
   const handleSave = async () => {
     if (saving) return;
     setSaving(true);
-    const res = editingNote
+    const res: { error?: string; id?: string } = editingNote
       ? await updateMentorNote(editingNote.id, formData)
       : await createMentorNote(formData);
+    // Persist the attachment (if any) against the newly-created note.
+    if (!res.error && !editingNote && res.id && attachedFile) {
+      const fd = new FormData();
+      fd.append("file", attachedFile);
+      const up = await attachNoteFile(res.id, fd);
+      if (up.error) setNotice(`Note saved, but the attachment failed: ${up.error}`);
+    }
     setSaving(false);
     if (res.error) {
       setNotice(res.error);
       return;
     }
-    setNotice(null);
+    setAttachedFile(null);
     setIsModalOpen(false);
     loadNotes();
   };

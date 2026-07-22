@@ -13,7 +13,12 @@ import {
   User,
   X,
 } from "lucide-react";
-import { getStudentNotes } from "@/lib/data/student";
+import { getStudentNotes, getStudentNoteAttachmentUrl } from "@/lib/data/student";
+
+const openAttachment = async (id: string) => {
+  const res = await getStudentNoteAttachmentUrl(id);
+  if (res.url) window.open(res.url, "_blank", "noopener,noreferrer");
+};
 import type { StudentNote as MentorNote } from "@/lib/data/student.types";
 
 const poppins = Poppins({
@@ -64,6 +69,24 @@ const NoteViewModal = ({
           <div className="mt-[20px] whitespace-pre-wrap text-[16px] font-normal leading-[1.6] text-[#111111]">
             {note.content}
           </div>
+          {note.attachmentList.length > 0 && (
+            <div className="mt-[22px]">
+              <p className="mb-[10px] text-[13px] font-semibold text-[#666666]">Attachments</p>
+              <div className="flex flex-wrap gap-[10px]">
+                {note.attachmentList.map((a) => (
+                  <button
+                    key={a.id}
+                    type="button"
+                    onClick={() => openAttachment(a.id)}
+                    className="inline-flex h-[36px] items-center gap-[9px] rounded-[8px] border border-[#dddddd] bg-[#f4f4f4] px-[12px] text-[14px] font-normal text-[#0078d4] transition hover:bg-[#e9f3fb]"
+                  >
+                    <Paperclip size={16} strokeWidth={1.8} />
+                    {a.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="shrink-0 border-t border-[#dddddd] bg-[#f4f4f4] px-[24px] py-[24px]">

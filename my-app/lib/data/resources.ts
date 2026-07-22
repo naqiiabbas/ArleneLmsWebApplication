@@ -2,6 +2,7 @@
 
 import { createAdminClient } from "@/lib/supabase/admin"
 import { assertAdmin } from "@/lib/data/guards"
+import { logActivity, notifyUsers } from "@/lib/data/audit"
 import type { ResourceStatus, UIResource } from "@/lib/data/resources.types"
 
 function formatSize(bytes: number | null): string {
@@ -105,13 +106,20 @@ export async function setResourceStatus(
   id: string,
   status: ResourceStatus,
 ): Promise<{ error?: string }> {
+  let me
   try {
-    await assertAdmin()
+    me = await assertAdmin()
   } catch (e) {
     return { error: (e as Error).message }
   }
   const admin = createAdminClient()
   const { error } = await admin.from("resources").update({ status }).eq("id", id)
   if (error) return { error: error.message }
+
+  const { data: res } = await admin.from("resources").select("uploaded_by, title").eq("id", id).single()
+  if (res?.uploaded_by) {
+    await notifyUsers([res.uploaded_by], { type: "system", title: `Resource ${status}`, body: `Your resource "${res.title}" was ${status}.`, senderId: me.userId, entityType: "resource", entityId: id }, admin)
+  }
+  await logActivity({ actorId: me.userId, action: `${status.charAt(0).toUpperCase() + status.slice(1)} resource`, targetType: "resource", targetId: id, description: res?.title ?? undefined }, admin)
   return {}
 }

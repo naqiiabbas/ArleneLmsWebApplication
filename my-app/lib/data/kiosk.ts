@@ -83,6 +83,24 @@ export async function markKioskAttendance(
     return { error: "No class session is scheduled for you today." }
   }
 
+  // Schedule-window enforcement — if the class defines active weekly windows,
+  // check-in is only open during one of them. (No windows defined → allowed.)
+  if (session.class_id) {
+    const { data: schedules } = await admin
+      .from("class_schedules")
+      .select("day_of_week, start_time, end_time")
+      .eq("class_id", session.class_id)
+      .eq("active", true)
+    if (schedules && schedules.length) {
+      const n = new Date()
+      const hhmm = `${String(n.getHours()).padStart(2, "0")}:${String(n.getMinutes()).padStart(2, "0")}:00`
+      const open = schedules.some((s) => s.day_of_week === n.getDay() && String(s.start_time) <= hhmm && hhmm <= String(s.end_time))
+      if (!open) {
+        return { error: "Attendance isn't open right now. Please check in during your scheduled class time." }
+      }
+    }
+  }
+
   // Upload the selfie proof to the private attendance bucket (best-effort).
   let photoPath: string | null = null
   if (photoDataUrl.startsWith("data:")) {

@@ -20,6 +20,7 @@ import {
 import {
   getMentorResources,
   createMentorResource,
+  uploadMentorResource,
   updateMentorResource,
   deleteMentorResource,
 } from "@/lib/data/mentor";
@@ -181,6 +182,7 @@ export default function LearningResourcesSection() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editFileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [editFileName, setEditFileName] = useState<string | null>(null);
 
   const loadResources = () => {
@@ -213,24 +215,38 @@ export default function LearningResourcesSection() {
   }, [resources, searchQuery, filterCategory, filterStatus]);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>, mode: "add" | "edit") => {
-    if (!event.target.files?.[0]) return;
-    if (mode === "add") setSelectedFileName(event.target.files[0].name);
-    else setEditFileName(event.target.files[0].name);
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (mode === "add") { setSelectedFileName(file.name); setSelectedFile(file); }
+    else setEditFileName(file.name);
   };
 
   const handleAddSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (saving) return;
     const formData = new FormData(event.currentTarget);
+    const title = (formData.get("title") as string) ?? "";
+    const description = (formData.get("description") as string) ?? "";
+    const category = (formData.get("category") as string) ?? "";
+    const type = (formData.get("type") as string) ?? "";
     setSaving(true);
-    const res = await createMentorResource({
-      title: (formData.get("title") as string) ?? "",
-      description: (formData.get("description") as string) ?? "",
-      category: (formData.get("category") as string) ?? "",
-      type: (formData.get("type") as string) ?? "",
-      link: (formData.get("link") as string) ?? "",
-      featured: formData.get("featured") === "on",
-    });
+    // If a file was chosen, upload it; otherwise create a link-based resource.
+    let res: { error?: string };
+    if (selectedFile) {
+      const fd = new FormData();
+      fd.append("file", selectedFile);
+      fd.append("title", title);
+      fd.append("description", description);
+      fd.append("category", category);
+      fd.append("type", type);
+      res = await uploadMentorResource(fd);
+    } else {
+      res = await createMentorResource({
+        title, description, category, type,
+        link: (formData.get("link") as string) ?? "",
+        featured: formData.get("featured") === "on",
+      });
+    }
     setSaving(false);
     if (res.error) {
       setNotice(res.error);
@@ -238,6 +254,7 @@ export default function LearningResourcesSection() {
     }
     setIsAddModalOpen(false);
     setSelectedFileName(null);
+    setSelectedFile(null);
     loadResources();
   };
 

@@ -3,6 +3,7 @@
 import { randomUUID } from "node:crypto"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { assertMentor } from "@/lib/data/guards"
+import { logActivity, notifyAdmins } from "@/lib/data/audit"
 import type {
   MentorAttendanceRow,
   MentorAttendanceStatus,
@@ -25,6 +26,8 @@ import type { BlogStatus, UIBlogPost } from "@/lib/data/blog.types"
 
 const DOCUMENTS_BUCKET = "documents"
 const BLOG_BUCKET = "blog"
+const RESOURCES_BUCKET = "resources"
+const ATTACHMENTS_BUCKET = "attachments"
 
 function slugify(title: string): string {
   return (
@@ -556,7 +559,45 @@ export async function createMentorNote(
     .select("id")
     .single()
   if (error) return { error: error.message }
+
+  await notifyAdmins({ type: "alert", title: "New note awaiting moderation", body: `A mentor submitted "${input.title.trim()}" for review.`, senderId: userId, entityType: "note", entityId: data.id }, admin)
+  await logActivity({ actorId: userId, actorRole: "mentor", action: "Created note", targetType: "note", targetId: data.id, description: input.title.trim() }, admin)
   return { id: data.id }
+}
+
+/** Upload a file attachment for one of the mentor's own notes. */
+export async function attachNoteFile(
+  noteId: string,
+  formData: FormData,
+): Promise<{ error?: string }> {
+  let userId: string
+  try {
+    ;({ userId } = await assertMentor())
+  } catch (e) {
+    return { error: (e as Error).message }
+  }
+  const admin = createAdminClient()
+
+  const { data: note } = await admin.from("notes").select("author_id").eq("id", noteId).maybeSingle()
+  if (!note || note.author_id !== userId) return { error: "You can only attach files to your own notes." }
+
+  const file = formData.get("file")
+  if (!(file instanceof File) || file.size === 0) return { error: "No file to attach." }
+
+  const ext = file.name.includes(".") ? file.name.split(".").pop()! : ""
+  const path = `notes/${noteId}/${randomUUID()}${ext ? "." + ext : ""}`
+  const bytes = new Uint8Array(await file.arrayBuffer())
+  const { error: upErr } = await admin.storage
+    .from(ATTACHMENTS_BUCKET)
+    .upload(path, bytes, { contentType: file.type || "application/octet-stream", upsert: false })
+  if (upErr) return { error: upErr.message }
+
+  const { error } = await admin.from("note_attachments").insert({ note_id: noteId, file_url: path, name: file.name })
+  if (error) {
+    await admin.storage.from(ATTACHMENTS_BUCKET).remove([path])
+    return { error: error.message }
+  }
+  return {}
 }
 
 /** Edit one of the mentor's own notes (re-enters moderation as 'pending'). */
@@ -769,6 +810,9 @@ export async function uploadMentorDocument(
     await admin.storage.from(DOCUMENTS_BUCKET).remove([path])
     return { error: error.message }
   }
+
+  await notifyAdmins({ type: "document", title: "New document uploaded", body: `A mentor uploaded "${name || file.name}" for review.`, senderId: userId, entityType: "document", entityId: data.id }, admin)
+  await logActivity({ actorId: userId, actorRole: "mentor", action: "Uploaded document", targetType: "document", targetId: data.id, description: name || file.name }, admin)
   return { id: data.id }
 }
 
@@ -896,6 +940,66 @@ export async function createMentorResource(
     .select("id")
     .single()
   if (error) return { error: error.message }
+
+  await notifyAdmins({ type: "system", title: "New resource awaiting review", body: `A mentor submitted the resource "${input.title.trim()}".`, senderId: userId, entityType: "resource", entityId: data.id }, admin)
+  await logActivity({ actorId: userId, actorRole: "mentor", action: "Created resource", targetType: "resource", targetId: data.id, description: input.title.trim() }, admin)
+  return { id: data.id }
+}
+
+/** Submit a new file-based learning resource (uploads to the public resources bucket). */
+export async function uploadMentorResource(
+  formData: FormData,
+): Promise<{ error?: string; id?: string }> {
+  let userId: string
+  try {
+    ;({ userId } = await assertMentor())
+  } catch (e) {
+    return { error: (e as Error).message }
+  }
+  const admin = createAdminClient()
+
+  const file = formData.get("file")
+  const title = ((formData.get("title") as string) || "").trim()
+  const description = ((formData.get("description") as string) || "").trim()
+  const category = ((formData.get("category") as string) || "").trim()
+  const type = ((formData.get("type") as string) || "").trim()
+  if (!title) return { error: "Please enter a resource title." }
+  if (!(file instanceof File) || file.size === 0) return { error: "Please choose a file to upload." }
+
+  const ext = file.name.includes(".") ? file.name.split(".").pop()! : ""
+  const path = `${userId}/${randomUUID()}${ext ? "." + ext : ""}`
+  const bytes = new Uint8Array(await file.arrayBuffer())
+  const { error: upErr } = await admin.storage
+    .from(RESOURCES_BUCKET)
+    .upload(path, bytes, { contentType: file.type || "application/octet-stream", upsert: false })
+  if (upErr) return { error: upErr.message }
+
+  const publicUrl = admin.storage.from(RESOURCES_BUCKET).getPublicUrl(path).data.publicUrl
+
+  const { data, error } = await admin
+    .from("resources")
+    .insert({
+      title,
+      description: description || null,
+      category: category || null,
+      tags: type ? [type] : [],
+      kind: "file",
+      file_url: path,
+      link_url: publicUrl,
+      size_bytes: file.size,
+      uploaded_by: userId,
+      uploader_role: "mentor",
+      status: "pending",
+    })
+    .select("id")
+    .single()
+  if (error) {
+    await admin.storage.from(RESOURCES_BUCKET).remove([path])
+    return { error: error.message }
+  }
+
+  await notifyAdmins({ type: "system", title: "New resource awaiting review", body: `A mentor uploaded the file resource "${title}".`, senderId: userId, entityType: "resource", entityId: data.id }, admin)
+  await logActivity({ actorId: userId, actorRole: "mentor", action: "Uploaded resource", targetType: "resource", targetId: data.id, description: title }, admin)
   return { id: data.id }
 }
 

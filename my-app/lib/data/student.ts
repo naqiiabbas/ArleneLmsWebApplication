@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { assertStudent } from "@/lib/data/guards"
 import { listConversations } from "@/lib/data/messaging"
 import { createNotification } from "@/lib/data/notifications"
+import { logActivity, notifyAdmins } from "@/lib/data/audit"
 import type {
   AbsenceReportInput,
   StudentAttendance,
@@ -28,6 +29,7 @@ import type {
 
 const DEFAULT_AVATAR = "/images/avatar1.png"
 const DOCUMENTS_BUCKET = "documents"
+const ATTACHMENTS_BUCKET = "attachments"
 
 function formatSize(bytes: number | null): string {
   if (bytes == null) return "—"
@@ -548,6 +550,9 @@ export async function uploadStudentDocument(
     await admin.storage.from(DOCUMENTS_BUCKET).remove([path])
     return { error: error.message }
   }
+
+  await notifyAdmins({ type: "document", title: "New document uploaded", body: `A student uploaded "${name || file.name}" for review.`, senderId: userId, entityType: "document", entityId: data.id }, admin)
+  await logActivity({ actorId: userId, actorRole: "student", action: "Uploaded document", targetType: "document", targetId: data.id, description: name || file.name }, admin)
   return { id: data.id }
 }
 
@@ -665,7 +670,7 @@ export async function getStudentNotes(): Promise<StudentNote[]> {
   const { data, error } = await admin
     .from("notes")
     .select(
-      "id, title, content, category, created_at, author_role, author:profiles ( full_name, avatar_url ), note_attachments ( id )",
+      "id, title, content, category, created_at, author_role, author:profiles ( full_name, avatar_url ), note_attachments ( id, name )",
     )
     .eq("student_id", userId)
     .eq("status", "approved")
@@ -685,20 +690,45 @@ export async function getStudentNotes(): Promise<StudentNote[]> {
     created_at: string | null
     author_role: string | null
     author: { full_name: string | null; avatar_url: string | null } | null
-    note_attachments: { id: string }[] | null
-  }[]).map((n) => ({
-    id: n.id,
-    title: n.title,
-    mentor: n.author?.full_name ?? "Your mentor",
-    role: formatRole(n.author_role) || "Mentor",
-    date: n.created_at ? new Date(n.created_at).toLocaleDateString("en-US") : "",
-    description: snippet(n.content),
-    content: n.content ?? "",
-    attachments: (n.note_attachments ?? []).length,
-    category: n.category ?? "Note",
-    avatar: n.author?.avatar_url || DEFAULT_AVATAR,
-    isNew: !!n.created_at && new Date(n.created_at) >= weekAgo,
-  }))
+    note_attachments: { id: string; name: string | null }[] | null
+  }[]).map((n) => {
+    const atts = (n.note_attachments ?? []).map((a) => ({ id: a.id, name: a.name ?? "Attachment" }))
+    return {
+      id: n.id,
+      title: n.title,
+      mentor: n.author?.full_name ?? "Your mentor",
+      role: formatRole(n.author_role) || "Mentor",
+      date: n.created_at ? new Date(n.created_at).toLocaleDateString("en-US") : "",
+      description: snippet(n.content),
+      content: n.content ?? "",
+      attachments: atts.length,
+      attachmentList: atts,
+      category: n.category ?? "Note",
+      avatar: n.author?.avatar_url || DEFAULT_AVATAR,
+      isNew: !!n.created_at && new Date(n.created_at) >= weekAgo,
+    }
+  })
+}
+
+/** Signed URL for a note attachment on a note shared with the student. */
+export async function getStudentNoteAttachmentUrl(
+  attachmentId: string,
+): Promise<{ url?: string; name?: string; error?: string }> {
+  const { userId } = await assertStudent()
+  const admin = createAdminClient()
+
+  const { data } = await admin
+    .from("note_attachments")
+    .select("file_url, name, note:notes ( student_id, status, visibility )")
+    .eq("id", attachmentId)
+    .maybeSingle()
+  const row = data as { file_url: string; name: string | null; note: { student_id: string | null; status: string; visibility: string } | null } | null
+  if (!row || row.note?.student_id !== userId || row.note?.status !== "approved" || row.note?.visibility !== "shared") {
+    return { error: "Attachment not found." }
+  }
+  const { data: signed, error } = await admin.storage.from(ATTACHMENTS_BUCKET).createSignedUrl(row.file_url, 120)
+  if (error) return { error: error.message }
+  return { url: signed.signedUrl, name: row.name ?? "Attachment" }
 }
 
 /** The student's assigned mentor(s) — recipients for the "New Conversation" dropdown. */
@@ -776,5 +806,6 @@ export async function submitAbsenceReport(
     }
   }
 
+  await logActivity({ actorId: userId, actorRole: "student", action: "Reported absence", targetType: "absence_report", targetId: data.id, description: `${absenceDate}: ${reason}` }, admin)
   return { id: data.id }
 }

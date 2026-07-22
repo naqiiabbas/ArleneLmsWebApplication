@@ -2,6 +2,7 @@
 
 import { createAdminClient } from "@/lib/supabase/admin"
 import { assertSponsor } from "@/lib/data/guards"
+import { logActivity, notifyAdmins } from "@/lib/data/audit"
 import type {
   SponsorActivity,
   SponsorDashboard,
@@ -508,6 +509,9 @@ export async function submitSponsorRequest(
     .select("id")
     .single()
   if (error) return { error: error.message }
+
+  await notifyAdmins({ type: "sponsor", title: "New sponsorship request", body: `${input.companyName.trim() || "A sponsor"} requested "${input.programName.trim()}" (${input.tier}).`, senderId: userId, entityType: "sponsorship_request", entityId: data.id }, admin)
+  await logActivity({ actorId: userId, actorRole: "sponsor", action: "Submitted sponsorship request", targetType: "sponsorship_request", targetId: data.id, description: input.programName.trim() }, admin)
   return { id: data.id }
 }
 

@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { logActivity } from "@/lib/data/audit"
 import {
   PORTAL_ROLES,
   PORTAL_HOME,
@@ -30,6 +31,7 @@ export async function signIn(
     password,
   })
   if (error || !data.user) {
+    await logActivity({ action: "Failed login", status: "failed", description: email.trim(), targetType: "auth" })
     return { error: error?.message ?? "Invalid email or password." }
   }
 
@@ -58,12 +60,18 @@ export async function signIn(
     .update({ last_login_at: new Date().toISOString() })
     .eq("id", data.user.id)
 
+  await logActivity({ actorId: data.user.id, actorRole: profile.role, action: "Logged in", targetType: "auth" })
+
   redirect(PORTAL_HOME[portal])
 }
 
 /** Sign out and return to the given portal's login (or the public home). */
 export async function signOut(portal?: Portal): Promise<void> {
   const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (user) await logActivity({ actorId: user.id, action: "Logged out", targetType: "auth" })
   await supabase.auth.signOut()
   redirect(portal ? LOGIN_ROUTE[portal] : "/")
 }

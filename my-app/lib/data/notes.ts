@@ -2,6 +2,7 @@
 
 import { createAdminClient } from "@/lib/supabase/admin"
 import { assertAdmin } from "@/lib/data/guards"
+import { logActivity, notifyUsers } from "@/lib/data/audit"
 import type { NoteStatus, UINote } from "@/lib/data/notes.types"
 
 function snippet(content: string | null, len = 120): string {
@@ -65,13 +66,20 @@ export async function setNoteStatus(
   id: string,
   status: NoteStatus,
 ): Promise<{ error?: string }> {
+  let me
   try {
-    await assertAdmin()
+    me = await assertAdmin()
   } catch (e) {
     return { error: (e as Error).message }
   }
   const admin = createAdminClient()
   const { error } = await admin.from("notes").update({ status }).eq("id", id)
   if (error) return { error: error.message }
+
+  const { data: note } = await admin.from("notes").select("author_id, title").eq("id", id).single()
+  if (note?.author_id) {
+    await notifyUsers([note.author_id], { type: "alert", title: `Note ${status}`, body: `Your note "${note.title}" was ${status} by a moderator.`, senderId: me.userId, entityType: "note", entityId: id }, admin)
+  }
+  await logActivity({ actorId: me.userId, action: `${status.charAt(0).toUpperCase() + status.slice(1)} note`, targetType: "note", targetId: id, description: note?.title ?? undefined }, admin)
   return {}
 }

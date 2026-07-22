@@ -138,6 +138,22 @@ export default function Attencon() {
     doc.save(`attendance-report-${new Date().toISOString().split("T")[0]}.pdf`);
   };
 
+  const downloadCsv = () => {
+    if (typeof window === "undefined") return;
+    const esc = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const header = "Student ID,Student Name,Class,Time,Status,Date,Batch\n";
+    const rows = filteredRecords
+      .map((r) => [r.studentId, r.studentName, r.className, r.time, r.status, r.date, r.batch].map(esc).join(","))
+      .join("\n");
+    const blob = new Blob([header + rows], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `attendance-report-${new Date().toISOString().split("T")[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="min-h-full bg-[#f4f4f4] px-6 py-6 font-[Poppins]">
       <div className="mb-[24px] flex items-center justify-between gap-4">
@@ -162,11 +178,18 @@ export default function Attencon() {
             {filteredDate ? "Today" : "Filter"}
           </button>
           <button
-            onClick={downloadReport}
-            className="flex h-[48px] min-w-[194px] items-center justify-center gap-[10px] rounded-[8px] bg-[#F9A618] px-[24px] text-[16px] font-medium text-white transition-colors hover:bg-[#f0a014]"
+            onClick={downloadCsv}
+            className="flex h-[48px] min-w-[126px] items-center justify-center gap-[10px] rounded-[8px] border border-[#d6d6d6] bg-white px-[20px] text-[16px] font-normal text-[#F9A618] transition-colors hover:bg-[#fff7e8]"
           >
             <Download size={18} strokeWidth={2} />
-            Export Report
+            Export CSV
+          </button>
+          <button
+            onClick={downloadReport}
+            className="flex h-[48px] min-w-[160px] items-center justify-center gap-[10px] rounded-[8px] bg-[#F9A618] px-[24px] text-[16px] font-medium text-white transition-colors hover:bg-[#f0a014]"
+          >
+            <Download size={18} strokeWidth={2} />
+            Export PDF
           </button>
         </div>
       </div>

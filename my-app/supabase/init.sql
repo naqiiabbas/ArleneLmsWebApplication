@@ -1737,6 +1737,11 @@ insert into storage.buckets (id, name, public) values ('blog', 'blog', true)
 on conflict (id) do nothing;
 insert into storage.buckets (id, name, public) values ('attendance', 'attendance', false)
 on conflict (id) do nothing;
+-- attachments: PRIVATE (note + message file attachments, signed URLs) · resources: PUBLIC
+insert into storage.buckets (id, name, public) values ('attachments', 'attachments', false)
+on conflict (id) do nothing;
+insert into storage.buckets (id, name, public) values ('resources', 'resources', true)
+on conflict (id) do nothing;
 
 -- =============================================================================
 -- END OF SCHEMA

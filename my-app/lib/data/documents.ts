@@ -3,6 +3,7 @@
 import { randomUUID } from "node:crypto"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { assertPermission } from "@/lib/auth/permissions"
+import { logActivity, notifyAdmins, notifyUsers } from "@/lib/data/audit"
 import type { DocStatus, DocumentInput, UIDocument } from "@/lib/data/documents.types"
 
 const DOCUMENTS_BUCKET = "documents"
@@ -193,6 +194,9 @@ export async function uploadDocument(
     await admin.storage.from(DOCUMENTS_BUCKET).remove([path])
     return { error: error.message }
   }
+
+  await notifyAdmins({ type: "document", title: "New document uploaded", body: `${name || file.name} was uploaded for review.`, senderId: me.userId, entityType: "document", entityId: data.id }, admin)
+  await logActivity({ actorId: me.userId, actorRole: prof?.role ?? null, action: "Uploaded document", targetType: "document", targetId: data.id, description: name || file.name }, admin)
   return { id: data.id }
 }
 
@@ -244,6 +248,12 @@ export async function setDocumentStatus(
     })
     .eq("id", id)
   if (error) return { error: error.message }
+
+  const { data: doc } = await admin.from("documents").select("owner_id, name").eq("id", id).single()
+  if (doc?.owner_id) {
+    await notifyUsers([doc.owner_id], { type: "document", title: `Document ${status.toLowerCase()}`, body: `"${doc.name}" was ${status.toLowerCase()} by an administrator.`, senderId: me.userId, entityType: "document", entityId: id }, admin)
+  }
+  await logActivity({ actorId: me.userId, action: `${status} document`, targetType: "document", targetId: id, description: doc?.name ?? undefined }, admin)
   return {}
 }
 
