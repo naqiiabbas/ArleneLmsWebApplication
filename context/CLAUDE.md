@@ -256,7 +256,10 @@ Schema: `sponsors`, `sponsorship_programs` (amount/status), `sponsorship_timelin
   `invoices` (paid/outstanding) + `payments` history (method enum→display). PDF export client-side.
 - **Request Donate** (`Request.tsx`) — WIRED & verified: `getSponsorRequests()` (+ status counts) +
   `submitSponsorRequest(input)` (5-step wizard → `sponsorship_requests` pending). List/detail/success.
-- **Still to wire:** Reports (`Reportsspon`), Blogs/Messages/Notifications/Settings (reuse layers).
+- **Notifications/Blog/Messages** (`Notifispon`/`Blogsspon`/`Messagespon`) — WIRED & verified: reuse
+  `notifications.ts`, `listPublishedBlogPosts` (read-only reader), and `messaging.ts` (new-chat by
+  free-text contact name — sponsors have no assigned list).
+- **Still to wire:** Reports (`Reportsspon`), Settings (`Settingsspon`).
 
 ## 6. Frontend — Tech Stack & Structure
 
