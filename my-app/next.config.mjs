@@ -1,5 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Self-contained build output for Docker (bundles a minimal node_modules + server.js).
+  output: "standalone",
   typescript: {
     ignoreBuildErrors: true,
   },

@@ -2,7 +2,10 @@ param(
   [string]$ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path,
   [string]$OutputRoot = "",
   [string]$ImageName = "arlene-lms-web",
-  [string]$ImageTag = "latest"
+  [string]$ImageTag = "latest",
+  # Env file supplying the NEXT_PUBLIC_* values that get inlined into the
+  # browser bundle at build time. Defaults to .env.local for local exports.
+  [string]$EnvFile = ".env.local"
 )
 
 $ErrorActionPreference = "Stop"
@@ -35,10 +38,29 @@ if (-not (Test-Path -LiteralPath $outputRootAbsolute)) {
   New-Item -ItemType Directory -Path $outputRootAbsolute | Out-Null
 }
 
+# Collect NEXT_PUBLIC_* build args from the env file (inlined at build time).
+$buildArgs = @()
+$envFilePath = if ([System.IO.Path]::IsPathRooted($EnvFile)) { $EnvFile } else { Join-Path $resolvedProjectRoot $EnvFile }
+if (Test-Path -LiteralPath $envFilePath) {
+  Write-Host "Reading build args from: $envFilePath"
+  foreach ($line in Get-Content -LiteralPath $envFilePath) {
+    $trimmed = $line.Trim()
+    if ($trimmed -eq "" -or $trimmed.StartsWith("#")) { continue }
+    if ($trimmed -match '^(NEXT_PUBLIC_[A-Z0-9_]+)\s*=\s*(.*)$') {
+      $name = $Matches[1]
+      $value = $Matches[2].Trim().Trim('"').Trim("'")
+      $buildArgs += "--build-arg"
+      $buildArgs += "$name=$value"
+    }
+  }
+} else {
+  Write-Warning "Env file '$envFilePath' not found. Building without NEXT_PUBLIC_* args — the browser Supabase client will be misconfigured."
+}
+
 Push-Location $resolvedProjectRoot
 try {
   Write-Host "Building Docker image..."
-  docker build --file $dockerfilePath --tag $imageReference .
+  docker build @buildArgs --file $dockerfilePath --tag $imageReference .
   if ($LASTEXITCODE -ne 0) {
     throw "docker build failed."
   }

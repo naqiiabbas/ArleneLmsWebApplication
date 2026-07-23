@@ -1,19 +1,25 @@
+# Build artifacts & deps (reinstalled/rebuilt inside the image)
 node_modules
 .next
 build
 dist
+
+# VCS / editor / OS
 .git
 .gitignore
-*.log
-npm-debug.log*Dockerfile
-.dockerignore
-node_modules
-npm-debug.log
-README.md
-.next
-dist
-.git
 .vscode
-.env*
-!.env.production
-!.env.local
+.idea
+*.log
+npm-debug.log*
+
+# Docker / docs
+Dockerfile
+.dockerignore
+docker-compose.yml
+README.md
+DEPLOY.md
+
+# Secrets — NEVER copy any env file into the image.
+# NEXT_PUBLIC_* come in as build args; the service-role key is a runtime env.
+.env
+.env.*
