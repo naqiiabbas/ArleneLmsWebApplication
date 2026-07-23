@@ -14,6 +14,8 @@ export type UIStudent = {
   performance: { attendance: number; grade: string }
   quickActions: string[]
   address: string
+  /** Permanent 4-digit iPad kiosk PIN (students.attendance_code). */
+  attendanceCode: string
 }
 
 export type StudentInput = {

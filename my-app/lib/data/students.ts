@@ -77,6 +77,7 @@ type StudentRow = {
   enrollment_date: string | null
   gpa: number | null
   status: string
+  attendance_code: string | null
   profiles: {
     full_name: string | null
     email: string | null
@@ -93,7 +94,7 @@ export async function listStudents(): Promise<UIStudent[]> {
     admin
       .from("students")
       .select(
-        "id, course, address, enrollment_date, gpa, status, profiles ( full_name, email, phone, avatar_url )",
+        "id, course, address, enrollment_date, gpa, status, attendance_code, profiles ( full_name, email, phone, avatar_url )",
       )
       .order("created_at", { ascending: false }),
     admin
@@ -137,6 +138,7 @@ export async function listStudents(): Promise<UIStudent[]> {
     },
     quickActions: QUICK_ACTIONS,
     address: s.address ?? "",
+    attendanceCode: s.attendance_code ?? "",
   }))
 }
 

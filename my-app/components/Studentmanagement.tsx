@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
-import { ChevronDown, Eye, Mail, MapPin, Pencil, Phone, Plus, Search, Trash2 } from "lucide-react";
+import { ChevronDown, Eye, KeyRound, Mail, MapPin, Pencil, Phone, Plus, Search, Trash2 } from "lucide-react";
 import {
   listStudents,
   createStudent,
@@ -25,6 +25,7 @@ interface Student {
   performance: { attendance: number; grade: string };
   quickActions: string[];
   address: string;
+  attendanceCode: string;
 }
 
 type ViewMode = "list" | "detail" | "add" | "edit";
@@ -273,6 +274,21 @@ function StudentDetails({
               <InfoBlock label="Current Mentor" value={student.mentor} />
               <InfoBlock label="Course" value={student.course} />
               <InfoBlock icon={<MapPin size={15} />} label="Address" value={student.address} />
+            </div>
+
+            <div className="mt-[27px] flex items-center justify-between rounded-[8px] border border-[#F9A618]/40 bg-[#FFF7EA] px-[18px] py-[15px]">
+              <div className="flex items-center gap-[10px]">
+                <span className="text-[#F9A618]"><KeyRound size={18} /></span>
+                <div>
+                  <p className="text-[14px] font-medium leading-none text-[#666666]">iPad Kiosk PIN</p>
+                  <p className="mt-[6px] text-[12px] leading-none text-[#999999]">
+                    Student enters this 4-digit code at the kiosk to mark attendance.
+                  </p>
+                </div>
+              </div>
+              <span className="font-mono text-[26px] font-semibold tracking-[0.18em] text-[#111111]">
+                {student.attendanceCode || "—"}
+              </span>
             </div>
           </div>
         </section>
