@@ -4,7 +4,8 @@
 > `C:\Users\ZESTRO\.claude\projects\d--ArleneLmsWebApplication\memory\` are kept **in sync**
 > (see [§14 Sync Protocol](#14-claudemd--memory-sync-protocol)). Update both together.
 >
-> Last updated: 2026-07-17 · Doc version basis: client docs v1.0 (Oct–Nov 2025)
+> Last updated: 2026-07-24 · Doc version basis: client docs v1.0 (Oct–Nov 2025)
+> **Live client-test deploy:** `http://187.127.116.79:3010` (Docker on VPS — see [§9h](#9h-deployment--docker--live-on-client-test-vps)).
 >
 > **Backend stack DECIDED: Next.js + Supabase** (see [§9](#9-backend-stack--decided)).
 > **Workflow rules:** suggest commit titles (`what we did - where we did`), never commit —
@@ -763,6 +764,53 @@ constraint-name hint.
 
 ---
 
+## 9h. Deployment (Docker — live on client-test VPS)
+
+The Next.js app is containerized and **running live on the client's VPS for testing**
+(Supabase stays hosted in the cloud — only the app is containerized, no DB container).
+
+**Live test URL (as of 2026-07-24):** `http://187.127.116.79:3010`
+- VPS IP: **187.127.116.79** · published host port: **3010** (container listens on 3000).
+- Handed to the client for testing over plain HTTP (no domain yet).
+
+**Docker setup** (all in `my-app/`):
+- `next.config.mjs` → `output: "standalone"` (self-contained build).
+- `Dockerfile` — 3-stage (deps→builder→runner), `node:22-bookworm-slim`, non-root, `node server.js`.
+- `docker-compose.yml` — project name **`arlene-lms`**, container **`arlene-web`**, host port via
+  `${WEB_PORT:-3000}`, healthcheck on `/`.
+- `.env.production.example` → copy to `.env` on the VPS (git-ignored). Deployed `.env` values:
+  `WEB_PORT=3010`, `NEXT_PUBLIC_SITE_URL=http://187.127.116.79:3010`, plus the Supabase URL/anon
+  key + `SUPABASE_SERVICE_ROLE_KEY`.
+- `DEPLOY.md` — full VPS runbook. `scripts/export-docker-image.ps1` — local build→tar alternative.
+
+**Env split (load-bearing):** `NEXT_PUBLIC_*` are **build args** (Next inlines them at build
+time → must be present in `.env` when you `--build`); `SUPABASE_SERVICE_ROLE_KEY` is **runtime-only**
+env (never a build arg, never baked into the image). `.dockerignore` excludes all `.env*`.
+
+**Deploy / redeploy on the VPS** (repo cloned at `~/arlene`, run from `~/arlene/my-app`):
+```
+git pull
+docker compose up -d --build     # rebuild required if any NEXT_PUBLIC_* changed
+docker compose ps                # arlene-web → healthy
+```
+
+**Shared-VPS caveats (be careful — other projects live here):**
+- Other services on the box: **Traefik** (reverse proxy on 80/443), a node app on 5000,
+  hermes-agent (32768), vsftpd (21), and an **older `arleneapplication` container on port 3000**
+  (a prior deploy of this same app — left running; retire only when confirmed disposable).
+- NEVER `docker system prune` / `docker image prune -a` / mass `docker stop` — would hit the
+  other projects. Only `up`/`down`/`logs` from inside `my-app` (scoped to the `arlene-lms` project).
+
+**Known limits over plain HTTP:**
+- iPad **kiosk face-capture won't work** — browsers block `getUserMedia` on non-HTTPS origins.
+- **HTTPS path (planned, not yet wired):** no valid cert is possible for a bare IP (Let's Encrypt
+  won't issue for IPs). Plan is a free wildcard-DNS host **`187.127.116.79.nip.io`** routed through
+  the existing **Traefik** with its Let's Encrypt resolver → real cert + working camera. Needs
+  Traefik's network/entrypoint/certresolver names before wiring. Supabase **Redirect URLs** must
+  then include the chosen origin.
+
+---
+
 ## 10. Non-Functional Requirements
 
 - **Security:** encrypted passwords/sessions, enforced HTTPS, RBAC (→ RLS), virus scanning on
@@ -826,7 +874,9 @@ ever diverge, this file wins and memory is corrected to match.
 - [x] Backend layer choice — **DECIDED: Next.js + Supabase (§9).**
 - [ ] Notification providers: Twilio + SendGrid vs. SES? Accounts/keys available?
 - [ ] E-signature: build in-house vs. third-party (e.g. DocuSign/embedded)?
-- [ ] Hosting for API/frontend: Vercel vs. AWS/Azure (docs) — Supabase is the DB regardless.
+- [~] Hosting for API/frontend: **currently Dockerized on the client's VPS for testing**
+  (`http://187.127.116.79:3010`, see [§9h](#9h-deployment--docker--live-on-client-test-vps)).
+  Final production hosting (Vercel vs. this VPS vs. AWS/Azure) + a real domain/HTTPS still TBD.
 - [ ] iPad automated-attendance client: native app, PWA, or web kiosk?
 - [ ] Parent/guardian portal: in first release or later phase?
 - [ ] Payments: real gateway (Stripe/ACH) or record-keeping only?
