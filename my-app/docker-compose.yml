@@ -1,3 +1,7 @@
+# Explicit project name keeps this stack's containers, network and volumes
+# namespaced and isolated from other projects sharing the VPS.
+name: arlene-lms
+
 services:
   web:
     build:
@@ -12,7 +16,9 @@ services:
     container_name: arlene-web
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      # Host port is configurable (WEB_PORT in .env) to avoid clashing with
+      # other projects on a shared VPS. Container always listens on 3000.
+      - "${WEB_PORT:-3000}:3000"
     environment:
       NODE_ENV: production
       # Server-only secret — used by the service-role Supabase client at runtime.
