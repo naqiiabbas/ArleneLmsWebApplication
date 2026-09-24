@@ -89,3 +89,19 @@ password-reset email links point at the right host.
 ## Supabase side (once)
 - Add your public URL to **Auth → URL Configuration → Redirect URLs** so
   email/password + reset flows work from the deployed origin.
+
+---
+
+## AWS EC2 Instance Specifications (Configured)
+
+- **Instance Name**: `arlene-lms-production`
+- **OS / AMI**: Canonical Ubuntu 24.04 LTS, 64-bit amd64 (`ami-032cd1a6d943449a4`)
+- **Instance Type**: `t2.medium` (2 vCPU, 4.0 GiB RAM)
+- **Root Storage**: 30 GiB (gp3 SSD)
+- **Key Pair**: `arlene-ec2-key` (RSA, `.pem`)
+- **Security Group**: `arlene-lms-sg`
+  - `SSH (22)`: Admin terminal access
+  - `HTTP (80)`: Web traffic & ACME challenge
+  - `HTTPS (443)`: Secure SSL & Kiosk Camera access (`getUserMedia`)
+  - `Custom TCP (3000)`: Direct Docker container access
+

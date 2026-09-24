@@ -1,7 +1,7 @@
 # CLAUDE.md — Arlene LMS / Mentorship Platform
 
 > **Single source of truth** for this project. This file and the project memory at
-> `C:\Users\ZESTRO\.claude\projects\d--ArleneLmsWebApplication\memory\` are kept **in sync**
+> `C:\Users\USER\.claude\projects\c--Projects-ArleneLmsWebApplication\memory\` are kept **in sync**
 > (see [§14 Sync Protocol](#14-claudemd--memory-sync-protocol)). Update both together.
 >
 > Last updated: 2026-07-24 · Doc version basis: client docs v1.0 (Oct–Nov 2025)
@@ -28,7 +28,7 @@
 | **What it is** | Cloud-hosted, multi-role web platform digitizing an educational mentorship program — student records, mentoring, attendance, scheduling, communication, documents, sponsor engagement, and payments. |
 | **Current state** | **Frontend 100% built (static/mock). Backend NOT started — this is our job.** |
 | **Database** | **Supabase** (Postgres + Auth + Storage + Realtime) — client already provisioned. |
-| **Repo root** | `d:\ArleneLmsWebApplication` · app lives in `my-app/` · client docs in `my-app/doc/` |
+| **Repo root** | `c:\Projects\ArleneLmsWebApplication` · app lives in `my-app/` · client docs in `my-app/doc/` |
 
 **Goal of the engagement:** build the complete backend (database schema, auth, APIs, storage,
 notifications, business logic) that powers the existing frontend, on Supabase.
@@ -857,15 +857,31 @@ In `my-app/doc/`:
 
 ## 14. CLAUDE.md ↔ Memory Sync Protocol
 
-This file and project memory (`C:\Users\ZESTRO\.claude\projects\d--ArleneLmsWebApplication\memory\`)
+This file and project memory (`C:\Users\USER\.claude\projects\c--Projects-ArleneLmsWebApplication\memory\`)
 must always agree. **Whenever a durable project fact changes** (stack decisions, schema,
-requirements, scope, milestones, client preferences):
+requirements, scope, milestones, client preferences, a newly wired module):
 1. Update the relevant section here.
 2. Update/add the matching memory file + its `MEMORY.md` pointer.
 3. Bump the "Last updated" date at the top.
 
+Do all three **in the same turn** — never defer one half of the pair.
+
 Memory holds the compressed, recall-optimized facts; this file holds the full detail. If they
 ever diverge, this file wins and memory is corrected to match.
+
+**Current memory files** (24, all seeded from this doc on 2026-07-23):
+`claudemd-is-source-of-truth`, `project-overview`, `backend-stack-decision`,
+`supabase-project-and-schema`, `init-sql-sync-rule`, `commit-workflow`, `data-layer-conventions`,
+`supabase-query-gotchas`, `auth-implementation`, `rbac-permissions`, `storage-buckets`,
+`panel-completion-status`, `pending-followups`, `seeded-accounts`, `frontend-stack`, `user-roles`,
+`functional-modules`, `attendance-module`, `nonfunctional-requirements`, `integrations`,
+`commercials-and-timeline`, `confidential-company-info`, `client-documents`, `open-questions`.
+
+Map a change to the right file: schema/migration → `supabase-project-and-schema` +
+`init-sql-sync-rule` · a module wired → `panel-completion-status` (+ `pending-followups` if it
+leaves a gap) · auth/permissions → `auth-implementation` / `rbac-permissions` · a new bucket or
+file flow → `storage-buckets` · a client decision answered → `open-questions` (remove it) plus
+wherever the answer now lives.
 
 ---
 
@@ -874,9 +890,7 @@ ever diverge, this file wins and memory is corrected to match.
 - [x] Backend layer choice — **DECIDED: Next.js + Supabase (§9).**
 - [ ] Notification providers: Twilio + SendGrid vs. SES? Accounts/keys available?
 - [ ] E-signature: build in-house vs. third-party (e.g. DocuSign/embedded)?
-- [~] Hosting for API/frontend: **currently Dockerized on the client's VPS for testing**
-  (`http://187.127.116.79:3010`, see [§9h](#9h-deployment--docker--live-on-client-test-vps)).
-  Final production hosting (Vercel vs. this VPS vs. AWS/Azure) + a real domain/HTTPS still TBD.
+- [x] Hosting for API/frontend: **AWS EC2 provisioned** (Ubuntu 24.04 LTS, `t2.medium`, 30GB gp3, `arlene-lms-sg` with ports 22, 80, 443, 3000; key `arlene-ec2-key.pem`). Client testing VPS (`http://187.127.116.79:3010`) remains active.
 - [ ] iPad automated-attendance client: native app, PWA, or web kiosk?
 - [ ] Parent/guardian portal: in first release or later phase?
 - [ ] Payments: real gateway (Stripe/ACH) or record-keeping only?
