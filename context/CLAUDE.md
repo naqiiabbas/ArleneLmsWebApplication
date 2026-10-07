@@ -5,7 +5,7 @@
 > (see [§14 Sync Protocol](#14-claudemd--memory-sync-protocol)). Update both together.
 >
 > Last updated: 2026-07-24 · Doc version basis: client docs v1.0 (Oct–Nov 2025)
-> **Live client-test deploy:** `http://187.127.116.79:3010` (Docker on VPS — see [§9h](#9h-deployment--docker--live-on-client-test-vps)).
+> **Live production deploy:** `https://100bmoc.org` (AWS EC2 + Docker + Caddy/TLS — see [§9h](#9h-deployment--docker--live-on-client-test-vps)).
 >
 > **Backend stack DECIDED: Next.js + Supabase** (see [§9](#9-backend-stack--decided)).
 > **Workflow rules:** suggest commit titles (`what we did - where we did`), never commit —
@@ -769,50 +769,57 @@ constraint-name hint.
 The Next.js app is containerized and **running live on the client's VPS for testing**
 (Supabase stays hosted in the cloud — only the app is containerized, no DB container).
 
-**Live test URL (as of 2026-07-24):** `http://187.127.116.79:3010`
-- VPS IP: **187.127.116.79** · published host port: **3010** (container listens on 3000).
-- Handed to the client for testing over plain HTTP (no domain yet).
+**Production URL (as of 2026-10-07):** **`https://100bmoc.org`** (`www` 301-redirects to it)
+- AWS EC2 `arlene-lms-production`, Ubuntu 24.04 LTS, `t2.medium`, 30 GiB gp3, key `arlene-ec2-key.pem`.
+- Public IP **3.101.143.234**. DNS is managed by the client (Dr. Smith): root **A** record →
+  the EC2 IP, `www` **CNAME** → root. Verified resolving 2026-10-07.
+- Security group `arlene-lms-sg`: 22 (SSH), 80 (ACME challenge + redirect), 443 (public).
+  **Port 3000 must be removed** once HTTPS is verified — the app is loopback-only now.
+
+**Legacy test deploy:** `http://187.127.116.79:3010` (shared client VPS, plain HTTP). Superseded by
+the EC2 + domain deploy; retire once the client signs off on production.
 
 **Docker setup** (all in `my-app/`):
 - `next.config.mjs` → `output: "standalone"` (self-contained build).
 - `Dockerfile` — 3-stage (deps→builder→runner), `node:22-bookworm-slim`, non-root, `node server.js`.
-- `docker-compose.yml` — project name **`arlene-lms`**, container **`arlene-web`**, host port via
-  `${WEB_PORT:-3000}`, healthcheck on `/`.
-- `.env.production.example` → copy to `.env` on the VPS (git-ignored). Deployed `.env` values:
-  `WEB_PORT=3010`, `NEXT_PUBLIC_SITE_URL=http://187.127.116.79:3010`, plus the Supabase URL/anon
-  key + `SUPABASE_SERVICE_ROLE_KEY`.
-- `DEPLOY.md` — full VPS runbook. `scripts/export-docker-image.ps1` — local build→tar alternative.
+- `docker-compose.yml` — project **`arlene-lms`**, two services:
+  - **`web`** (`arlene-web`) — the app, published on **`127.0.0.1:${WEB_PORT:-3000}`** only, so it
+    is not reachable over plain HTTP from the internet. Healthcheck on `/`.
+  - **`caddy`** (`arlene-caddy`) — `caddy:2-alpine`, ports **80/443**, the public entrypoint.
+    Terminates TLS and proxies to `web:3000` over the compose network.
+- `Caddyfile` — canonical `{$APP_DOMAIN}` vhost (gzip/zstd, HSTS + nosniff/frame/referrer headers)
+  + `www.{$APP_DOMAIN}` 301 → canonical. Placeholders are filled from `.env` via compose `environment`.
+- **TLS is automatic** — Caddy obtains and renews the Let's Encrypt cert itself. No certbot, no cron.
+  Certs persist in the **`caddy_data`** named volume; deleting it re-requests and will hit the
+  Let's Encrypt rate limit (5 certs/domain/week).
+- `.env.production.example` → copy to `.env` on the server (git-ignored). Production values:
+  `APP_DOMAIN=100bmoc.org`, `ACME_EMAIL=...`, `NEXT_PUBLIC_SITE_URL=https://100bmoc.org`,
+  `WEB_PORT=3000`, plus the Supabase URL/anon key + `SUPABASE_SERVICE_ROLE_KEY`.
+- `DEPLOY.md` — full runbook (server prep → clone → build → cert → Supabase → lock down) plus a
+  TLS troubleshooting table. `scripts/export-docker-image.ps1` — local build→tar alternative.
 
 **Env split (load-bearing):** `NEXT_PUBLIC_*` are **build args** (Next inlines them at build
 time → must be present in `.env` when you `--build`); `SUPABASE_SERVICE_ROLE_KEY` is **runtime-only**
 env (never a build arg, never baked into the image). `.dockerignore` excludes all `.env*`.
 
-**Deploy / redeploy on the VPS** (repo cloned at `~/arlene`, run from `~/arlene/my-app`):
+**Deploy / redeploy** (repo cloned at `~/arlene`, run from `~/arlene/my-app`):
 ```
 git pull
 docker compose up -d --build     # rebuild required if any NEXT_PUBLIC_* changed
-docker compose ps                # arlene-web → healthy
+docker compose ps                # arlene-web → healthy, arlene-caddy → running
+docker compose logs -f caddy     # "certificate obtained successfully" on first boot
 ```
 
-**Shared-VPS caveats (be careful — other projects live here):**
-- Other services on the box: **Traefik** (reverse proxy on 80/443), a node app on 5000,
-  hermes-agent (32768), vsftpd (21), and an **older `arleneapplication` container on port 3000**
-  (a prior deploy of this same app — left running; retire only when confirmed disposable).
-- NEVER `docker system prune` / `docker image prune -a` / mass `docker stop` — would hit the
-  other projects. Only `up`/`down`/`logs` from inside `my-app` (scoped to the `arlene-lms` project).
+**Supabase (required once per origin):** Dashboard → Auth → URL Configuration → Site URL
+`https://100bmoc.org` + Redirect URLs `https://100bmoc.org/**`. Password-reset and student OTP
+email links break if this is skipped.
 
-**Known limits over plain HTTP:**
-- iPad **kiosk face-capture won't work** — browsers block `getUserMedia` on non-HTTPS origins.
-- **HTTPS path (planned, not yet wired):** no valid cert is possible for a bare IP (Let's Encrypt
-  won't issue for IPs). Plan is a free wildcard-DNS host **`187.127.116.79.nip.io`** routed through
-  the existing **Traefik** with its Let's Encrypt resolver → real cert + working camera. Needs
-  Traefik's network/entrypoint/certresolver names before wiring. Supabase **Redirect URLs** must
-  then include the chosen origin.
+**HTTPS unblocks the iPad kiosk:** `getUserMedia` (face capture for automated attendance) is blocked
+by browsers on non-secure origins, so the kiosk only works on the HTTPS domain — never on the bare IP.
 
 ---
 
 ## 10. Non-Functional Requirements
-
 - **Security:** encrypted passwords/sessions, enforced HTTPS, RBAC (→ RLS), virus scanning on
   uploads, periodic pen-testing, GDPR-compliant handling, audit logs on sensitive actions.
 - **Performance:** < 2s response for major actions.
@@ -890,7 +897,7 @@ wherever the answer now lives.
 - [x] Backend layer choice — **DECIDED: Next.js + Supabase (§9).**
 - [ ] Notification providers: Twilio + SendGrid vs. SES? Accounts/keys available?
 - [ ] E-signature: build in-house vs. third-party (e.g. DocuSign/embedded)?
-- [x] Hosting for API/frontend: **AWS EC2 provisioned** (Ubuntu 24.04 LTS, `t2.medium`, 30GB gp3, `arlene-lms-sg` with ports 22, 80, 443, 3000; key `arlene-ec2-key.pem`). Client testing VPS (`http://187.127.116.79:3010`) remains active.
+- [x] Hosting for API/frontend: **AWS EC2 live** (Ubuntu 24.04 LTS, `t2.medium`, 30GB gp3, `arlene-lms-sg`; key `arlene-ec2-key.pem`) at **https://100bmoc.org** (IP 3.101.143.234, DNS by client, Caddy auto-TLS). Legacy test VPS `http://187.127.116.79:3010` superseded.
 - [ ] iPad automated-attendance client: native app, PWA, or web kiosk?
 - [ ] Parent/guardian portal: in first release or later phase?
 - [ ] Payments: real gateway (Stripe/ACH) or record-keeping only?

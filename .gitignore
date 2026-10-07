@@ -1,0 +1,10 @@
+# SSH / EC2 private keys — never commit.
+*.pem
+*.ppk
+*.key
+
+# Env files (my-app has its own .gitignore too; this is a backstop).
+.env
+.env.*
+!.env.example
+!.env.production.example

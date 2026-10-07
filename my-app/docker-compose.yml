@@ -16,9 +16,10 @@ services:
     container_name: arlene-web
     restart: unless-stopped
     ports:
-      # Host port is configurable (WEB_PORT in .env) to avoid clashing with
-      # other projects on a shared VPS. Container always listens on 3000.
-      - "${WEB_PORT:-3000}:3000"
+      # Bound to loopback only: the public entrypoint is Caddy (80/443), so the
+      # app must not be reachable over plain HTTP from the internet. Still
+      # available on the box itself (curl / SSH tunnel) for debugging.
+      - "127.0.0.1:${WEB_PORT:-3000}:3000"
     environment:
       NODE_ENV: production
       # Server-only secret — used by the service-role Supabase client at runtime.
@@ -33,3 +34,29 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s
+
+  # Public entrypoint: terminates TLS and proxies to "web" over the internal
+  # network. Caddy obtains and renews the Let's Encrypt certificate itself.
+  caddy:
+    image: caddy:2-alpine
+    container_name: arlene-caddy
+    restart: unless-stopped
+    depends_on:
+      - web
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      # Consumed by the {$...} placeholders in ./Caddyfile.
+      APP_DOMAIN: ${APP_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Certificates and ACME account keys MUST persist, or every restart
+      # re-requests a cert and will eventually hit Let's Encrypt rate limits.
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:
