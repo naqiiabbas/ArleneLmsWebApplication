@@ -5,7 +5,7 @@
 > (see [§14 Sync Protocol](#14-claudemd--memory-sync-protocol)). Update both together.
 >
 > Last updated: 2026-07-24 · Doc version basis: client docs v1.0 (Oct–Nov 2025)
-> **Live production deploy:** `https://100bmoc.org` (AWS EC2 + Docker + Caddy/TLS — see [§9h](#9h-deployment--docker--live-on-client-test-vps)).
+> **Live deploys:** LMS → `http://3.101.143.234` (bare IP, no TLS). `100bmoc.org` → a **separate WordPress site** (see [§9h](#9h-deployment--docker--live-on-client-test-vps) / §9i).
 >
 > **Backend stack DECIDED: Next.js + Supabase** (see [§9](#9-backend-stack--decided)).
 > **Workflow rules:** suggest commit titles (`what we did - where we did`), never commit —
@@ -769,53 +769,70 @@ constraint-name hint.
 The Next.js app is containerized and **running live on the client's VPS for testing**
 (Supabase stays hosted in the cloud — only the app is containerized, no DB container).
 
-**Production URL (as of 2026-10-07):** **`https://100bmoc.org`** (`www` 301-redirects to it)
-- AWS EC2 `arlene-lms-production`, Ubuntu 24.04 LTS, `t2.medium`, 30 GiB gp3, key `arlene-ec2-key.pem`.
-- Public IP **3.101.143.234**. DNS is managed by the client (Dr. Smith): root **A** record →
-  the EC2 IP, `www` **CNAME** → root. Verified resolving 2026-10-07.
-- Security group `arlene-lms-sg`: 22 (SSH), 80 (ACME challenge + redirect), 443 (public).
-  **Port 3000 must be removed** once HTTPS is verified — the app is loopback-only now.
-
-**Legacy test deploy:** `http://187.127.116.79:3010` (shared client VPS, plain HTTP). Superseded by
-the EC2 + domain deploy; retire once the client signs off on production.
+**Current URL (as of 2026-10-20):** **`http://3.101.143.234`** — bare IP, plain HTTP, **no domain**.
+- `100bmoc.org` was repointed on 2026-10-20 to a **separate WordPress marketing site** on a different
+  EC2 box (**13.57.140.17**, Apache/PHP — not this repo). See §9i below. The LMS therefore lost its
+  hostname and its certificate.
+- AWS EC2 `arlene-lms-production`, Ubuntu 24.04 LTS, `t2.medium`, 30 GiB gp3, key `arlene-ec2-key.pem`,
+  login `ubuntu`. Repo cloned at **`~/ArleneLmsWebApplication`**; run from `~/ArleneLmsWebApplication/my-app`.
+- Security group `arlene-lms-sg`: 22 (SSH), 80 (public), 443 (open, currently unused).
 
 **Docker setup** (all in `my-app/`):
-- `next.config.mjs` → `output: "standalone"` (self-contained build).
-- `Dockerfile` — 3-stage (deps→builder→runner), `node:22-bookworm-slim`, non-root, `node server.js`.
+- `next.config.mjs` → `output: "standalone"`. `Dockerfile` — 3-stage, `node:22-bookworm-slim`, non-root.
 - `docker-compose.yml` — project **`arlene-lms`**, two services:
-  - **`web`** (`arlene-web`) — the app, published on **`127.0.0.1:${WEB_PORT:-3000}`** only, so it
-    is not reachable over plain HTTP from the internet. Healthcheck on `/`.
-  - **`caddy`** (`arlene-caddy`) — `caddy:2-alpine`, ports **80/443**, the public entrypoint.
-    Terminates TLS and proxies to `web:3000` over the compose network.
-- `Caddyfile` — canonical `{$APP_DOMAIN}` vhost (gzip/zstd, HSTS + nosniff/frame/referrer headers)
-  + `www.{$APP_DOMAIN}` 301 → canonical. Placeholders are filled from `.env` via compose `environment`.
-- **TLS is automatic** — Caddy obtains and renews the Let's Encrypt cert itself. No certbot, no cron.
-  Certs persist in the **`caddy_data`** named volume; deleting it re-requests and will hit the
-  Let's Encrypt rate limit (5 certs/domain/week).
-- `.env.production.example` → copy to `.env` on the server (git-ignored). Production values:
-  `APP_DOMAIN=100bmoc.org`, `ACME_EMAIL=...`, `NEXT_PUBLIC_SITE_URL=https://100bmoc.org`,
-  `WEB_PORT=3000`, plus the Supabase URL/anon key + `SUPABASE_SERVICE_ROLE_KEY`.
-- `DEPLOY.md` — full runbook (server prep → clone → build → cert → Supabase → lock down) plus a
-  TLS troubleshooting table. `scripts/export-docker-image.ps1` — local build→tar alternative.
+  - **`web`** (`arlene-web`) — the app, published on **`127.0.0.1:${WEB_PORT:-3000}`** only.
+  - **`caddy`** (`arlene-caddy`) — `caddy:2-alpine`, ports 80/443, public entrypoint → `web:3000`.
+- `Caddyfile` — **IP-only mode**: `auto_https off` + a catch-all `:80` block. Let's Encrypt cannot
+  issue for a bare IP, and leaving auto-HTTPS on makes Caddy 308-redirect to `https://<ip>/`, which
+  serves a mismatched certificate and breaks every visit. The **full HTTPS config is preserved as
+  comments** in that file, ready for when the LMS gets its own hostname.
 
-**Env split (load-bearing):** `NEXT_PUBLIC_*` are **build args** (Next inlines them at build
-time → must be present in `.env` when you `--build`); `SUPABASE_SERVICE_ROLE_KEY` is **runtime-only**
-env (never a build arg, never baked into the image). `.dockerignore` excludes all `.env*`.
+**GOTCHA — editing the Caddyfile does not reload Caddy.** `docker compose up -d` recreates only
+services whose *definition* changed, so Caddy keeps running the old config. Always
+`docker compose restart caddy` after changing the mounted file. Verify in the log:
+`automatic HTTPS is completely disabled` (IP mode) / `certificate obtained successfully` (domain mode).
 
-**Deploy / redeploy** (repo cloned at `~/arlene`, run from `~/arlene/my-app`):
+**Env split (load-bearing):** `NEXT_PUBLIC_*` are **build args** (Next inlines them at build time →
+`--build`, never a plain restart); `SUPABASE_SERVICE_ROLE_KEY` is **runtime-only** env (never a build
+arg, never baked into the image). `.dockerignore` excludes all `.env*`. Current `.env`:
+`NEXT_PUBLIC_SITE_URL=http://3.101.143.234`, `WEB_PORT=3000`, plus the Supabase keys.
+
+**Deploy / redeploy:**
 ```
-git pull
+cd ~/ArleneLmsWebApplication && git pull && cd my-app
 docker compose up -d --build     # rebuild required if any NEXT_PUBLIC_* changed
-docker compose ps                # arlene-web → healthy, arlene-caddy → running
-docker compose logs -f caddy     # "certificate obtained successfully" on first boot
+docker compose restart caddy     # required if Caddyfile changed
+docker compose ps
 ```
 
-**Supabase (required once per origin):** Dashboard → Auth → URL Configuration → Site URL
-`https://100bmoc.org` + Redirect URLs `https://100bmoc.org/**`. Password-reset and student OTP
-email links break if this is skipped.
+**OPEN — Supabase Auth URLs are stale.** Dashboard → Auth → URL Configuration still points at
+`https://100bmoc.org`, which is now the WordPress site. Must change to `http://3.101.143.234`, or
+password-reset and student-OTP email links send users to the wrong site.
 
-**HTTPS unblocks the iPad kiosk:** `getUserMedia` (face capture for automated attendance) is blocked
-by browsers on non-secure origins, so the kiosk only works on the HTTPS domain — never on the bare IP.
+**iPad kiosk is blocked on plain HTTP** — browsers refuse `getUserMedia` on insecure origins, so
+face-capture attendance cannot work until the LMS has an HTTPS hostname. Recommended fix: an A record
+for e.g. `portal.100bmoc.org` → 3.101.143.234, then restore the commented HTTPS blocks in `Caddyfile`,
+set `APP_DOMAIN`/`ACME_EMAIL`/`NEXT_PUBLIC_SITE_URL`, and rebuild.
+
+**Legacy:** shared client VPS `http://187.127.116.79:3010` (Traefik + other tenants) — superseded;
+never `docker system prune` there.
+
+### 9i. WordPress marketing site (separate server, not this repo)
+
+`https://100bmoc.org` serves a **WordPress site on EC2 13.57.140.17** — Ubuntu 24.04, Apache 2.4.58,
+PHP 8.3.6, standard layout (`/var/www/html`, not Bitnami). SSH `ssh -i 100-blackmen-key.pem ubuntu@13.57.140.17`
+(**different key** from the LMS). WP-CLI at `/usr/local/bin/wp`, run as `sudo -u www-data wp ...`.
+- **TLS:** Let's Encrypt via `certbot --apache --redirect` for `100bmoc.org` + `www`; expires
+  2027-01-18; `certbot.timer` auto-renews (dry-run verified). Went live 2026-10-20.
+- **Plugin gotchas:** **Elementor/Elementor Pro** keeps absolute URLs in serialized postmeta and
+  caches per-page CSS → after any URL change run `wp elementor flush_css` and delete
+  `_elementor_element_cache` rows. **WP Maintenance Mode** 302s `/.well-known/acme-challenge/` and
+  **breaks certbot** → deactivate before issuing. **LiteSpeed Cache** on Apache makes
+  `wp litespeed-purge` return 400 → purge from the admin UI.
+- Pre-SSL DB dump + config backups live in `/root/pre-ssl-backup/`.
+- **HSTS lesson:** the LMS had served `Strict-Transport-Security: max-age=31536000` on `100bmoc.org`,
+  pinning the domain to HTTPS in every browser that visited for a year. That forced the WordPress site
+  to get a real certificate rather than run on plain HTTP. **Never set HSTS on a host that may move.**
 
 ---
 
@@ -897,7 +914,7 @@ wherever the answer now lives.
 - [x] Backend layer choice — **DECIDED: Next.js + Supabase (§9).**
 - [ ] Notification providers: Twilio + SendGrid vs. SES? Accounts/keys available?
 - [ ] E-signature: build in-house vs. third-party (e.g. DocuSign/embedded)?
-- [x] Hosting for API/frontend: **AWS EC2 live** (Ubuntu 24.04 LTS, `t2.medium`, 30GB gp3, `arlene-lms-sg`; key `arlene-ec2-key.pem`) at **https://100bmoc.org** (IP 3.101.143.234, DNS by client, Caddy auto-TLS). Legacy test VPS `http://187.127.116.79:3010` superseded.
+- [x] Hosting for API/frontend: **AWS EC2 live** (Ubuntu 24.04, `t2.medium`, key `arlene-ec2-key.pem`) — LMS at **http://3.101.143.234** (bare IP, no TLS since 2026-10-20, when `100bmoc.org` moved to the separate WordPress site). **TODO:** give the LMS a hostname (e.g. `portal.100bmoc.org`) to restore HTTPS + the iPad kiosk camera.
 - [ ] iPad automated-attendance client: native app, PWA, or web kiosk?
 - [ ] Parent/guardian portal: in first release or later phase?
 - [ ] Payments: real gateway (Stripe/ACH) or record-keeping only?
