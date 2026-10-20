@@ -1,34 +1,52 @@
-# Reverse proxy + automatic HTTPS for the Arlene LMS app.
+# Reverse proxy for the Arlene LMS app.
 #
-# Caddy provisions and renews the Let's Encrypt certificate on its own; it needs
-# ports 80 (ACME HTTP-01 challenge) and 443 open to the internet, and the domain
-# must already resolve to this server.
-#
-# Values come from the ./.env file (APP_DOMAIN, ACME_EMAIL) via docker compose.
+# CURRENT MODE: no public hostname. 100bmoc.org now serves the WordPress
+# marketing site on a different server, so the LMS is reached by IP only.
+# Let's Encrypt cannot issue a certificate for a bare IP, so automatic HTTPS
+# is switched off — otherwise Caddy 308-redirects to https://<ip>/ and every
+# visitor hits a certificate-name-mismatch error.
 {
-	# Contact address Let's Encrypt uses for expiry / problem notices.
-	email {$ACME_EMAIL}
+	auto_https off
 }
 
-# Canonical host: serve the app here.
-{$APP_DOMAIN} {
+# Catch-all on port 80: serves http://<server-ip>/ whatever the Host header.
+:80 {
 	encode gzip zstd
-
-	# "web" is the compose service name, reachable on the internal network.
-	# Caddy forwards X-Forwarded-* to the upstream by default.
 	reverse_proxy web:3000
 
-	# The iPad kiosk needs camera access, which browsers only grant on a secure
-	# origin; HSTS keeps visitors on HTTPS so getUserMedia is never blocked.
 	header {
-		Strict-Transport-Security "max-age=31536000; includeSubDomains"
 		X-Content-Type-Options "nosniff"
 		X-Frame-Options "SAMEORIGIN"
 		Referrer-Policy "strict-origin-when-cross-origin"
 	}
 }
 
-# www -> canonical host (301). Keeps a single origin for Supabase auth redirects.
-www.{$APP_DOMAIN} {
-	redir https://{$APP_DOMAIN}{uri} permanent
-}
+# ── Restoring HTTPS when the LMS gets its own hostname ──────────────────
+# (e.g. portal.100bmoc.org -> this server's IP)
+#
+# Delete the `auto_https off` block and the `:80` block above, set APP_DOMAIN
+# and ACME_EMAIL in .env, set NEXT_PUBLIC_SITE_URL=https://<that host>, then
+# restore the blocks below and run: docker compose up -d --build
+#
+#	{
+#		email {$ACME_EMAIL}
+#	}
+#
+#	{$APP_DOMAIN} {
+#		encode gzip zstd
+#		reverse_proxy web:3000
+#		header {
+#			Strict-Transport-Security "max-age=31536000; includeSubDomains"
+#			X-Content-Type-Options "nosniff"
+#			X-Frame-Options "SAMEORIGIN"
+#			Referrer-Policy "strict-origin-when-cross-origin"
+#		}
+#	}
+#
+#	www.{$APP_DOMAIN} {
+#		redir https://{$APP_DOMAIN}{uri} permanent
+#	}
+#
+# NOTE: do NOT re-enable HSTS on a hostname you may later move. The old
+# max-age=31536000 on 100bmoc.org is still pinned in browsers that visited the
+# LMS there, which is why the WordPress site at that domain needs a real cert.
