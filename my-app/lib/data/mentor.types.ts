@@ -88,21 +88,30 @@ export interface MentorClassOption {
   name: string
 }
 
+export type SessionStatus = "scheduled" | "in_progress" | "completed" | "cancelled"
+
 export interface MentorSession {
   id: string
   title: string
+  classId: string
   className: string
-  date: string // yyyy-mm-dd
-  time: string // e.g. "10:00 AM"
+  date: string // yyyy-mm-dd, in the class's timezone
+  time: string // start, e.g. "10:00 AM" (class timezone)
+  endTime: string // e.g. "11:00 AM"
+  startHm: string // "HH:MM" 24h — prefills the edit form
+  endHm: string
+  startIso: string // true UTC instant, for ordering
   location: string
-  status: string
+  status: SessionStatus
+  hasAttendance: boolean // attendance recorded → can be cancelled, not deleted
 }
 
 export interface MentorSessionInput {
   classId: string
   title: string
-  date: string // yyyy-mm-dd (or any parseable date)
-  time: string // "HH:MM" (24h, from <input type=time>)
+  date: string // yyyy-mm-dd (from <input type=date>)
+  startTime: string // "HH:MM" 24h, class's local time
+  endTime: string // "HH:MM" 24h, class's local time
   location: string
 }
 

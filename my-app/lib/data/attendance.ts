@@ -2,6 +2,7 @@
 
 import { createAdminClient } from "@/lib/supabase/admin"
 import { assertPermission } from "@/lib/auth/permissions"
+import { addDaysYmd, formatTimeInZone, mondayOfWeek, ymdInZone } from "@/lib/time"
 import type {
   AttendanceData,
   AttendanceStatus,
@@ -17,13 +18,10 @@ function uiStatus(db: string): AttendanceStatus {
   return "Absent" // absent / excused_absent / pending
 }
 
+// Check-in time in the program's zone; the server's own (UTC in Docker) would
+// show a 9:05 AM check-in as 4:05 PM.
 function formatClock(iso: string | null): string {
-  if (!iso) return "-"
-  return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-}
-
-function dateStr(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+  return iso ? formatTimeInZone(iso) : "-"
 }
 
 type Row = {
@@ -73,11 +71,12 @@ export async function getAttendanceData(): Promise<AttendanceData> {
     hasPhoto: !!r.photo_url,
   }))
 
+  // All windows below compare program-local "yyyy-mm-dd" strings (which sort
+  // chronologically) rather than server-clock Dates.
   // ---- Stats (last 7 days) ----
-  const today = new Date()
-  const weekAgo = new Date(today)
-  weekAgo.setDate(today.getDate() - 6)
-  const inWeek = rows.filter((r) => r.attendance_date && new Date(r.attendance_date) >= weekAgo)
+  const today = ymdInZone()
+  const weekAgo = addDaysYmd(today, -6)
+  const inWeek = rows.filter((r) => r.attendance_date && r.attendance_date >= weekAgo && r.attendance_date <= today)
   const present = inWeek.filter((r) => r.status === "present").length
   const late = inWeek.filter((r) => r.status === "late").length
   const absent = inWeek.filter((r) => r.status === "absent" || r.status === "excused_absent").length
@@ -85,14 +84,10 @@ export async function getAttendanceData(): Promise<AttendanceData> {
   const rate = counted ? Math.round(((present + late) / counted) * 1000) / 10 : 0
 
   // ---- Weekly breakdown (Mon–Fri of current week) ----
-  const monday = new Date(today)
-  const dow = today.getDay() === 0 ? 7 : today.getDay()
-  monday.setDate(today.getDate() - (dow - 1))
+  const monday = mondayOfWeek(today)
   const dayNames = ["Mon", "Tue", "Wed", "Thu", "Fri"]
   const weekly = dayNames.map((day, i) => {
-    const d = new Date(monday)
-    d.setDate(monday.getDate() + i)
-    const key = dateStr(d)
+    const key = addDaysYmd(monday, i)
     const dayRows = rows.filter((r) => r.attendance_date === key)
     return {
       day,
@@ -105,12 +100,10 @@ export async function getAttendanceData(): Promise<AttendanceData> {
   // ---- Monthly trend (last 4 weeks, attendance rate) ----
   const monthly = [] as { week: string; rate: number }[]
   for (let i = 3; i >= 0; i--) {
-    const end = new Date(today)
-    end.setDate(today.getDate() - i * 7)
-    const start = new Date(end)
-    start.setDate(end.getDate() - 6)
+    const end = addDaysYmd(today, -i * 7)
+    const start = addDaysYmd(end, -6)
     const wr = rows.filter(
-      (r) => r.attendance_date && new Date(r.attendance_date) >= start && new Date(r.attendance_date) <= end,
+      (r) => r.attendance_date && r.attendance_date >= start && r.attendance_date <= end,
     )
     const p = wr.filter((r) => r.status === "present").length
     const l = wr.filter((r) => r.status === "late").length

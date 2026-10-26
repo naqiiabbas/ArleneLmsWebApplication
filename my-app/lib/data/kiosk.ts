@@ -6,13 +6,11 @@
 
 import { randomUUID } from "node:crypto"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { ymdInZone } from "@/lib/time"
 
 const ATTENDANCE_BUCKET = "attendance"
 const GRACE_MINUTES = 15
 
-function ymd(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
-}
 
 type StudentRow = { id: string; profile: { full_name: string | null } | null }
 type SessionLite = { id: string; class_id: string | null; start_at: string | null }
@@ -57,7 +55,9 @@ export async function markKioskAttendance(
   if (!student) return { error: "Invalid code. Please try again." }
 
   const name = student.profile?.full_name ?? "Student"
-  const today = ymd(new Date())
+  // The program's date, not the server's. In UTC (Docker) the date rolls over at
+  // ~5 PM Pacific, so evening check-ins found "no session today".
+  const today = ymdInZone()
 
   // Find today's session for one of the student's enrolled classes.
   const { data: enr } = await admin
@@ -74,6 +74,7 @@ export async function markKioskAttendance(
       .select("id, class_id, start_at")
       .in("class_id", classIds)
       .eq("session_date", today)
+      .neq("status", "cancelled") // a called-off session takes no check-ins
       .order("start_at", { ascending: true })
       .limit(1)
       .maybeSingle()

@@ -6,6 +6,7 @@ import { assertStudent } from "@/lib/data/guards"
 import { listConversations } from "@/lib/data/messaging"
 import { createNotification } from "@/lib/data/notifications"
 import { logActivity, notifyAdmins } from "@/lib/data/audit"
+import { formatTimeInZone, ymdInZone } from "@/lib/time"
 import type {
   AbsenceReportInput,
   StudentAttendance,
@@ -41,9 +42,9 @@ function formatSize(bytes: number | null): string {
   return `${(mb / 1024).toFixed(1)} GB`
 }
 
+// Session times in the program's timezone, not the server's (UTC in Docker).
 function clock(iso: string | null): string {
-  if (!iso) return ""
-  return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+  return formatTimeInZone(iso)
 }
 
 function ymd(d: Date): string {
@@ -89,7 +90,7 @@ export async function getStudentDashboard(): Promise<StudentDashboard> {
   const total = Number(summary?.total ?? 0)
   const attendancePct = summary?.attendance_pct != null ? Math.round(Number(summary.attendance_pct)) : 0
 
-  const today = ymd(new Date())
+  const today = ymdInZone()
   const now = new Date()
   const weekEnd = new Date(now)
   weekEnd.setDate(now.getDate() + 7)
@@ -182,8 +183,7 @@ export async function getStudentDashboard(): Promise<StudentDashboard> {
 }
 
 function timeRange(start: string | null, end: string | null): string {
-  const fmt = (iso: string) =>
-    new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+  const fmt = (iso: string) => formatTimeInZone(iso)
   if (start && end) return `${fmt(start)} - ${fmt(end)}`
   if (start) return fmt(start)
   return "—"
@@ -615,8 +615,8 @@ export async function getStudentCalendar(): Promise<StudentSession[]> {
     id: s.id,
     title: s.title || s.class?.name || "Session",
     mentor: s.mentor?.full_name ?? "Your mentor",
-    time: s.start_at ? new Date(s.start_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "",
-    endTime: s.end_at ? new Date(s.end_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "",
+    time: formatTimeInZone(s.start_at),
+    endTime: formatTimeInZone(s.end_at),
     location: s.location ?? "TBD",
     type: sessionKind(s.title, s.location),
     date: s.session_date ?? (s.start_at ? s.start_at.slice(0, 10) : ""),

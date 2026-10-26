@@ -4,6 +4,17 @@ import { randomUUID } from "node:crypto"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { assertMentor } from "@/lib/data/guards"
 import { logActivity, notifyAdmins } from "@/lib/data/audit"
+import {
+  APP_TIMEZONE,
+  addDaysYmd,
+  formatTimeInZone,
+  hmInZone,
+  isValidHm,
+  isValidYmd,
+  mondayOfWeek,
+  ymdInZone,
+  zonedTimeToUtc,
+} from "@/lib/time"
 import type {
   MentorAttendanceRow,
   MentorAttendanceStatus,
@@ -17,6 +28,7 @@ import type {
   MentorResourceStatus,
   MentorSession,
   MentorSessionInput,
+  SessionStatus,
   MentorStudent,
   MentorStudentDetail,
   MentorStudentOption,
@@ -87,9 +99,17 @@ function riskFromAttendance(pct: number): RiskLevel {
   return "Low"
 }
 
+// Session times are shown in the program's timezone, not the server's (UTC in
+// Docker) — see lib/time.ts.
 function clock(iso: string | null): string {
-  if (!iso) return ""
-  return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+  return formatTimeInZone(iso, APP_TIMEZONE)
+}
+
+const SESSION_STATUS_LABEL: Record<string, string> = {
+  scheduled: "Scheduled",
+  in_progress: "In Progress",
+  completed: "Completed",
+  cancelled: "Cancelled",
 }
 
 function relative(iso: string | null): string {
@@ -242,7 +262,9 @@ export async function getMentorDashboard(): Promise<MentorDashboard> {
   ])
   const ids = (assigns ?? []).map((a) => a.student_id)
   const welcomeName = (prof?.full_name ?? "").split(" ")[0] || "Mentor"
-  const today = ymd(new Date())
+  // The program's date, not the server's: in UTC, "today" flips to tomorrow at
+  // ~5 PM Pacific and evening sessions would vanish from the dashboard.
+  const today = ymdInZone()
 
   const [summaryRes, sessionsRes, pendingRes, attRes, notesRes] = await Promise.all([
     ids.length
@@ -283,7 +305,7 @@ export async function getMentorDashboard(): Promise<MentorDashboard> {
     id: s.id,
     name: s.title ?? "Session",
     time: clock(s.start_at),
-    status: s.status ? s.status.charAt(0).toUpperCase() + s.status.slice(1) : "Scheduled",
+    status: SESSION_STATUS_LABEL[s.status] ?? "Scheduled",
   }))
 
   const attRows = (attRes.data ?? []) as unknown as {
@@ -294,15 +316,10 @@ export async function getMentorDashboard(): Promise<MentorDashboard> {
     class: { name: string | null } | null
   }[]
 
-  // Weekly attendance (Mon–Fri, present = present+late)
-  const now = new Date()
-  const monday = new Date(now)
-  const dow = now.getDay() === 0 ? 7 : now.getDay()
-  monday.setDate(now.getDate() - (dow - 1))
+  // Weekly attendance (Mon–Fri of the program's current week, present = present+late)
+  const monday = mondayOfWeek(today)
   const attendance = ["Mon", "Tue", "Wed", "Thu", "Fri"].map((day, i) => {
-    const d = new Date(monday)
-    d.setDate(monday.getDate() + i)
-    const key = ymd(d)
+    const key = addDaysYmd(monday, i)
     const rows = attRows.filter((r) => r.attendance_date === key)
     return {
       day,
@@ -647,10 +664,23 @@ export async function updateMentorNote(
   return {}
 }
 
+type SessionRow = {
+  id: string
+  title: string | null
+  class_id: string
+  session_date: string
+  start_at: string
+  end_at: string
+  location: string | null
+  status: SessionStatus
+  class: { name: string | null; timezone: string | null } | null
+}
+
 /** The mentor's scheduled sessions + class options for scheduling (Calendar). */
 export async function getMentorCalendar(): Promise<{
   sessions: MentorSession[]
   classes: MentorClassOption[]
+  today: string
 }> {
   const { userId } = await assertMentor()
   const admin = createAdminClient()
@@ -658,36 +688,115 @@ export async function getMentorCalendar(): Promise<{
   const [{ data: sess, error }, { data: allClasses }] = await Promise.all([
     admin
       .from("class_sessions")
-      .select("id, title, session_date, start_at, location, status, class:classes ( name )")
+      .select("id, title, class_id, session_date, start_at, end_at, location, status, class:classes ( name, timezone )")
       .eq("mentor_id", userId)
       .order("start_at", { ascending: true }),
     admin.from("classes").select("id, name").order("name", { ascending: true }),
   ])
   if (error) throw new Error(error.message)
 
-  const sessions = ((sess ?? []) as unknown as {
-    id: string
-    title: string | null
-    session_date: string | null
-    start_at: string | null
-    location: string | null
-    status: string
-    class: { name: string | null } | null
-  }[]).map((s) => ({
-    id: s.id,
-    title: s.title || s.class?.name || "Session",
-    className: s.class?.name ?? "",
-    date: s.session_date ?? (s.start_at ? s.start_at.slice(0, 10) : ""),
-    time: clock(s.start_at),
-    location: s.location ?? "",
-    status: s.status ? s.status.charAt(0).toUpperCase() + s.status.slice(1) : "Scheduled",
-  }))
+  const rows = (sess ?? []) as unknown as SessionRow[]
+  const ids = rows.map((r) => r.id)
+  const { data: att } = ids.length
+    ? await admin.from("attendance_records").select("session_id").in("session_id", ids)
+    : { data: [] as { session_id: string | null }[] }
+  const withAttendance = new Set((att ?? []).map((a) => a.session_id))
+
+  const sessions: MentorSession[] = rows.map((s) => {
+    // Times are rendered in the class's own zone, never the server's.
+    const tz = s.class?.timezone || APP_TIMEZONE
+    return {
+      id: s.id,
+      title: s.title || s.class?.name || "Session",
+      classId: s.class_id,
+      className: s.class?.name ?? "",
+      date: s.session_date,
+      time: formatTimeInZone(s.start_at, tz),
+      endTime: formatTimeInZone(s.end_at, tz),
+      startHm: hmInZone(s.start_at, tz),
+      endHm: hmInZone(s.end_at, tz),
+      startIso: s.start_at,
+      location: s.location ?? "",
+      status: s.status,
+      hasAttendance: withAttendance.has(s.id),
+    }
+  })
 
   const classes = ((allClasses ?? []) as { id: string; name: string }[]).map((c) => ({
     id: c.id,
     name: c.name,
   }))
-  return { sessions, classes }
+  return { sessions, classes, today: ymdInZone() }
+}
+
+/**
+ * Validate a session form and turn its wall-clock date/times into UTC instants
+ * in the CLASS's timezone. Building them with new Date(date + "T" + time) on
+ * the server used the server's zone (UTC in Docker), storing a 9:00 AM Pacific
+ * session as 2:00 AM — which also made the kiosk mark every on-time student late.
+ */
+async function sessionRowFromInput(
+  admin: ReturnType<typeof createAdminClient>,
+  input: MentorSessionInput,
+): Promise<
+  | { error: string }
+  | {
+      row: {
+        class_id: string
+        title: string
+        session_date: string
+        start_at: string
+        end_at: string
+        location: string | null
+      }
+    }
+> {
+  const title = (input.title ?? "").trim()
+  const date = (input.date ?? "").trim()
+  const startTime = (input.startTime ?? "").trim()
+  const endTime = (input.endTime ?? "").trim()
+  if (!input.classId) return { error: "Please select a class." }
+  if (!title) return { error: "Please enter a session title." }
+  if (title.length > 120) return { error: "Session title is too long (120 characters max)." }
+  if (!isValidYmd(date)) return { error: "Please pick a valid date." }
+  if (!isValidHm(startTime)) return { error: "Please pick a start time." }
+  if (!isValidHm(endTime)) return { error: "Please pick an end time." }
+  if (endTime <= startTime) return { error: "End time must be after the start time." }
+
+  const { data: cls } = await admin
+    .from("classes")
+    .select("timezone")
+    .eq("id", input.classId)
+    .maybeSingle()
+  if (!cls) return { error: "That class no longer exists. Please pick another." }
+  const tz = cls.timezone || APP_TIMEZONE
+
+  return {
+    row: {
+      class_id: input.classId,
+      title,
+      session_date: date,
+      start_at: zonedTimeToUtc(date, startTime, tz).toISOString(),
+      end_at: zonedTimeToUtc(date, endTime, tz).toISOString(),
+      location: (input.location ?? "").trim() || null,
+    },
+  }
+}
+
+/** The session's status if it belongs to the current mentor, else an error. */
+async function ownSession(
+  admin: ReturnType<typeof createAdminClient>,
+  id: string,
+  userId: string,
+): Promise<{ status: SessionStatus } | { error: string }> {
+  const { data } = await admin
+    .from("class_sessions")
+    .select("mentor_id, status")
+    .eq("id", id)
+    .maybeSingle()
+  if (!data) return { error: "Session not found." }
+  if (data.mentor_id !== userId) return { error: "You can only change your own sessions." }
+  return { status: data.status }
 }
 
 /** Schedule a new class session run by the current mentor. */
@@ -700,35 +809,117 @@ export async function createMentorSession(
   } catch (e) {
     return { error: (e as Error).message }
   }
-  if (!input.classId) return { error: "Please select a class." }
-  if (!input.title.trim()) return { error: "Please enter a session title." }
-
-  // Build start/end timestamps from the date + time fields.
-  const day = input.date.trim()
-  const parsedDay = new Date(day)
-  if (isNaN(parsedDay.getTime())) return { error: "Please enter a valid date." }
-  const ymdStr = ymd(parsedDay)
-  const time = /^\d{2}:\d{2}$/.test(input.time.trim()) ? input.time.trim() : "09:00"
-  const start = new Date(`${ymdStr}T${time}:00`)
-  const end = new Date(start.getTime() + 60 * 60 * 1000)
-
   const admin = createAdminClient()
+  const built = await sessionRowFromInput(admin, input)
+  if ("error" in built) return { error: built.error }
+
   const { data, error } = await admin
     .from("class_sessions")
-    .insert({
-      class_id: input.classId,
-      mentor_id: userId,
-      title: input.title.trim(),
-      session_date: ymdStr,
-      start_at: start.toISOString(),
-      end_at: end.toISOString(),
-      location: input.location.trim() || null,
-      status: "scheduled",
-    })
+    .insert({ ...built.row, mentor_id: userId, status: "scheduled" })
     .select("id")
     .single()
   if (error) return { error: error.message }
+  await logActivity(
+    { actorId: userId, action: "Scheduled session", targetType: "session", targetId: data.id, description: built.row.title },
+    admin,
+  )
   return { id: data.id }
+}
+
+/** Edit one of the current mentor's sessions. */
+export async function updateMentorSession(
+  id: string,
+  input: MentorSessionInput,
+): Promise<{ error?: string }> {
+  let userId: string
+  try {
+    ;({ userId } = await assertMentor())
+  } catch (e) {
+    return { error: (e as Error).message }
+  }
+  const admin = createAdminClient()
+  const own = await ownSession(admin, id, userId)
+  if ("error" in own) return { error: own.error }
+  if (own.status === "completed" || own.status === "cancelled") {
+    return { error: `A ${own.status} session can't be edited.` }
+  }
+  const built = await sessionRowFromInput(admin, input)
+  if ("error" in built) return { error: built.error }
+
+  const { error } = await admin.from("class_sessions").update(built.row).eq("id", id)
+  if (error) return { error: error.message }
+  await logActivity(
+    { actorId: userId, action: "Updated session", targetType: "session", targetId: id, description: built.row.title },
+    admin,
+  )
+  return {}
+}
+
+// Allowed status moves: start a scheduled session, finish a running one, or
+// call off one that hasn't finished. Completed / cancelled are final.
+const STATUS_MOVES: Record<SessionStatus, SessionStatus[]> = {
+  scheduled: ["in_progress", "completed", "cancelled"],
+  in_progress: ["completed", "cancelled"],
+  completed: [],
+  cancelled: [],
+}
+
+/** Start / complete / cancel one of the current mentor's sessions. */
+export async function setMentorSessionStatus(
+  id: string,
+  status: SessionStatus,
+): Promise<{ error?: string }> {
+  let userId: string
+  try {
+    ;({ userId } = await assertMentor())
+  } catch (e) {
+    return { error: (e as Error).message }
+  }
+  const admin = createAdminClient()
+  const own = await ownSession(admin, id, userId)
+  if ("error" in own) return { error: own.error }
+  if (!STATUS_MOVES[own.status]?.includes(status)) {
+    const from = SESSION_STATUS_LABEL[own.status] ?? own.status
+    const to = SESSION_STATUS_LABEL[status] ?? status
+    return { error: `A ${from.toLowerCase()} session can't be marked ${to.toLowerCase()}.` }
+  }
+  const { error } = await admin.from("class_sessions").update({ status }).eq("id", id)
+  if (error) return { error: error.message }
+  await logActivity(
+    { actorId: userId, action: `Session ${SESSION_STATUS_LABEL[status]?.toLowerCase() ?? status}`, targetType: "session", targetId: id },
+    admin,
+  )
+  return {}
+}
+
+/**
+ * Delete one of the current mentor's sessions — only while no attendance has
+ * been taken against it. Attendance rows would otherwise lose their session
+ * (the FK is ON DELETE SET NULL); cancel such a session instead.
+ */
+export async function deleteMentorSession(id: string): Promise<{ error?: string }> {
+  let userId: string
+  try {
+    ;({ userId } = await assertMentor())
+  } catch (e) {
+    return { error: (e as Error).message }
+  }
+  const admin = createAdminClient()
+  const own = await ownSession(admin, id, userId)
+  if ("error" in own) return { error: own.error }
+  const { count } = await admin
+    .from("attendance_records")
+    .select("id", { count: "exact", head: true })
+    .eq("session_id", id)
+  if (count) {
+    return {
+      error: "Attendance has already been recorded for this session, so it can't be deleted. Cancel it instead.",
+    }
+  }
+  const { error } = await admin.from("class_sessions").delete().eq("id", id)
+  if (error) return { error: error.message }
+  await logActivity({ actorId: userId, action: "Deleted session", targetType: "session", targetId: id }, admin)
+  return {}
 }
 
 /** The mentor's own uploaded documents (Documents panel). */
