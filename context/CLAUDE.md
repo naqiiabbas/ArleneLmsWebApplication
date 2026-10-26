@@ -201,7 +201,7 @@ mentor's `mentor_student_assignments`.
 
 The student-facing side of everything above. Guard: **`assertStudent()`** (`lib/data/guards.ts`,
 role='student'; returns userId = `students.id` = `profiles.id`; middleware already restricts
-`/studentpanel`). Data scoped to **self**. Seeded student login: **student@arlene.com** ("Alex",
+`/studentpanel`). Data scoped to **self**. Seeded student login: **student@100bmoc.org** ("Alex",
 enrolled in "Computer Science").
 - **Dashboard** (`Studentpanel.tsx`) — WIRED & verified: **`lib/data/student.ts`** —
   `getStudentDashboard()` (stats: attendance % + attended/total from `student_attendance_summary`,
@@ -493,7 +493,7 @@ Real email+password auth replaces the mock logins. Verified end-to-end (create u
 **Not yet wired (deferred):** the Student **"Student ID"** login tab and the
 `studentverify → createpass → passsuccessful` OTP/invite flow (still routes-only); admin-driven
 **user provisioning** (creating student/mentor/sponsor accounts) — needs the admin API via the
-service-role client. **Initial admin seeded:** a Super Admin account `admin@arlene.com` (role `super_admin`, active)
+service-role client. **Initial admin seeded:** a Super Admin account `admin@100bmoc.org` (role `super_admin`, active)
 exists for logging into the admin panel — its password is temporary and should be changed after
 first login. Other accounts are created via `admin.auth.admin.createUser` with
 `user_metadata.role` (or the Supabase dashboard).
@@ -634,7 +634,7 @@ for other modules to generate notifications** (e.g. notify admins on document up
 wired to events). **`components/Notificationadmin.tsx`** — mock removed; loads real notifications,
 icons derived from `type`, mark-read / mark-all / delete persist, loading/empty states. Uses
 service-role client with explicit recipient filter (consistent w/ other modules; also resolves
-sender names across panels). Seeded 3 sample notifications for `admin@arlene.com` (deletable).
+sender names across panels). Seeded 3 sample notifications for `admin@100bmoc.org` (deletable).
 
 **Admin → Messaging** (9th slice, verified live) — **per-user** (real user-to-user chat):
 **`lib/data/messaging.types.ts`** / **`lib/data/messaging.ts`** (`"use server"`) scoped to the

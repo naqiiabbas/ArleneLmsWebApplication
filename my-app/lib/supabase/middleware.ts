@@ -32,17 +32,29 @@ export async function updateSession(request: NextRequest) {
   // IMPORTANT: do not run code between createServerClient and getUser().
   // getUser() revalidates the token and refreshes cookies when needed.
   const {
-    data: { user },
+    data: { user: authUser },
   } = await supabase.auth.getUser()
 
+  let user = authUser
   let role: UserRole | null = null
   if (user) {
     const { data: profile } = await supabase
       .from("profiles")
-      .select("role")
+      .select("role, status")
       .eq("id", user.id)
       .single()
-    role = profile?.role ?? null
+
+    // Deactivated mid-session: status is otherwise only checked at sign-in, so
+    // without this an inactive user keeps full access for as long as their
+    // refresh token lives. signOut() revokes every session for the account
+    // server-side and clears the cookies on supabaseResponse (via setAll), so
+    // the caller then treats this request as signed out.
+    if (profile && profile.status !== "active") {
+      await supabase.auth.signOut()
+      user = null
+    } else {
+      role = profile?.role ?? null
+    }
   }
 
   return { supabaseResponse, user, role }

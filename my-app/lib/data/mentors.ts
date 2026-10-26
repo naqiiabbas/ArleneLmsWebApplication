@@ -3,6 +3,7 @@
 import { randomBytes } from "node:crypto"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { assertPermission } from "@/lib/auth/permissions"
+import { checkTargetRole } from "@/lib/data/guards"
 import type { MentorInput, MentorStatus, UIMentor } from "@/lib/data/mentors.types"
 
 const QUICK_ACTIONS = ["Send Message", "View Schedule", "Assign Students", "Download Report"]
@@ -155,6 +156,8 @@ export async function updateMentor(
     return { error: (e as Error).message }
   }
   const admin = createAdminClient()
+  const notMentor = await checkTargetRole(admin, id, "mentor")
+  if (notMentor) return { error: notMentor }
   const dbStatus = uiToDbStatus(input.status)
 
   const { data: current } = await admin
@@ -204,6 +207,8 @@ export async function deleteMentor(id: string): Promise<{ error?: string }> {
     return { error: (e as Error).message }
   }
   const admin = createAdminClient()
+  const notMentor = await checkTargetRole(admin, id, "mentor")
+  if (notMentor) return { error: notMentor }
   // Cascades: auth.users → profiles → mentors.
   const { error } = await admin.auth.admin.deleteUser(id)
   if (error) return { error: error.message }

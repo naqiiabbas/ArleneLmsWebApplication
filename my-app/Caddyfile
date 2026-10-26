@@ -1,52 +1,49 @@
-# Reverse proxy for the Arlene LMS app.
+# Reverse proxy + automatic HTTPS for the Arlene LMS app.
 #
-# CURRENT MODE: no public hostname. 100bmoc.org now serves the WordPress
-# marketing site on a different server, so the LMS is reached by IP only.
-# Let's Encrypt cannot issue a certificate for a bare IP, so automatic HTTPS
-# is switched off — otherwise Caddy 308-redirects to https://<ip>/ and every
-# visitor hits a certificate-name-mismatch error.
+# Served at the LMS's own subdomain. The apex 100bmoc.org belongs to a separate
+# WordPress marketing site on a different server, so only this host is handled
+# here. There is no "www." variant of a subdomain, so no redirect block.
+#
+# Caddy obtains and renews the Let's Encrypt certificate itself; it needs
+# ports 80 (ACME HTTP-01 challenge) and 443 reachable, and APP_DOMAIN must
+# already resolve to this server. Values come from ./.env via docker compose.
+
 {
-	auto_https off
+	email {$ACME_EMAIL}
 }
 
-# Catch-all on port 80: serves http://<server-ip>/ whatever the Host header.
-:80 {
+{$APP_DOMAIN} {
 	encode gzip zstd
+
+	# "web" is the compose service name, on the internal network.
+	# Caddy forwards X-Forwarded-* to the upstream by default.
 	reverse_proxy web:3000
 
 	header {
+		# Deliberately 30 days, not a year. A long HSTS pin on 100bmoc.org is
+		# what made moving that domain to WordPress painful: browsers refused
+		# plain HTTP there for a year afterwards. 30 days still protects the
+		# auth cookies and keeps the iPad kiosk on a secure origin, while
+		# capping the damage if this host ever has to move. Raise it only once
+		# the subdomain is known to be permanent.
+		Strict-Transport-Security "max-age=2592000"
 		X-Content-Type-Options "nosniff"
 		X-Frame-Options "SAMEORIGIN"
 		Referrer-Policy "strict-origin-when-cross-origin"
 	}
 }
 
-# ── Restoring HTTPS when the LMS gets its own hostname ──────────────────
-# (e.g. portal.100bmoc.org -> this server's IP)
-#
-# Delete the `auto_https off` block and the `:80` block above, set APP_DOMAIN
-# and ACME_EMAIL in .env, set NEXT_PUBLIC_SITE_URL=https://<that host>, then
-# restore the blocks below and run: docker compose up -d --build
+# ── Reverting to IP-only mode, if the subdomain ever goes away ──────────
+# Replace everything above with:
 #
 #	{
-#		email {$ACME_EMAIL}
+#		auto_https off
 #	}
 #
-#	{$APP_DOMAIN} {
+#	:80 {
 #		encode gzip zstd
 #		reverse_proxy web:3000
-#		header {
-#			Strict-Transport-Security "max-age=31536000; includeSubDomains"
-#			X-Content-Type-Options "nosniff"
-#			X-Frame-Options "SAMEORIGIN"
-#			Referrer-Policy "strict-origin-when-cross-origin"
-#		}
 #	}
 #
-#	www.{$APP_DOMAIN} {
-#		redir https://{$APP_DOMAIN}{uri} permanent
-#	}
-#
-# NOTE: do NOT re-enable HSTS on a hostname you may later move. The old
-# max-age=31536000 on 100bmoc.org is still pinned in browsers that visited the
-# LMS there, which is why the WordPress site at that domain needs a real cert.
+# Let's Encrypt cannot issue for a bare IP, and leaving auto-HTTPS on makes
+# Caddy 308-redirect to https://<ip>/ and serve a mismatched certificate.

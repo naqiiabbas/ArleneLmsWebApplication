@@ -4,6 +4,7 @@ import { randomBytes } from "node:crypto"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { assertPermission } from "@/lib/auth/permissions"
 import { logActivity } from "@/lib/data/audit"
+import { callerRank, roleRank } from "@/lib/data/guards"
 import type { Database } from "@/lib/database.types"
 import type { AdminUser, UIRole, UIStatus, UserInput } from "@/lib/data/users.types"
 
@@ -83,6 +84,11 @@ export async function createUser(
   const password = input.password?.trim() || generatePassword()
   const dbRole = UI_TO_DB_ROLE[input.role]
 
+  // users.manage alone must not let a manager mint an administrator account.
+  if (roleRank(dbRole) > (await callerRank(admin, me.userId))) {
+    return { error: "You cannot create an account with a higher role than your own." }
+  }
+
   const { data, error } = await admin.auth.admin.createUser({
     email: input.email.trim(),
     password,
@@ -127,10 +133,23 @@ export async function updateUser(
     .eq("id", id)
     .single()
 
+  if (!current) return { error: "Account not found." }
+
   // Never silently downgrade a super_admin to admin via the "Admin" option.
   let dbRole = UI_TO_DB_ROLE[input.role]
-  if (current?.role === "super_admin" && input.role === "Admin") {
+  if (current.role === "super_admin" && input.role === "Admin") {
     dbRole = "super_admin"
+  }
+
+  // A caller may neither touch an account ranked above them (e.g. retarget the
+  // super admin's email, then reset its password) nor grant a role above their
+  // own (e.g. a manager promoting themselves to Admin).
+  const myRank = await callerRank(admin, me.userId)
+  if (roleRank(current.role) > myRank) {
+    return { error: "You cannot modify an account with a higher role than your own." }
+  }
+  if (roleRank(dbRole) > myRank) {
+    return { error: "You cannot assign a role higher than your own." }
   }
 
   const newEmail = input.email.trim()
@@ -170,7 +189,11 @@ export async function deleteUser(id: string): Promise<{ error?: string }> {
   }
 
   const admin = createAdminClient()
-  const { data: victim } = await admin.from("profiles").select("full_name").eq("id", id).single()
+  const { data: victim } = await admin.from("profiles").select("full_name, role").eq("id", id).single()
+  if (!victim) return { error: "Account not found." }
+  if (roleRank(victim.role) > (await callerRank(admin, me.userId))) {
+    return { error: "You cannot delete an account with a higher role than your own." }
+  }
   // Cascades to public.profiles via the FK on delete cascade.
   const { error } = await admin.auth.admin.deleteUser(id)
   if (error) return { error: error.message }

@@ -3,6 +3,7 @@
 import { randomBytes } from "node:crypto"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { assertPermission } from "@/lib/auth/permissions"
+import { checkTargetRole } from "@/lib/data/guards"
 import type { StudentInput, StudentStatus, UIStudent } from "@/lib/data/students.types"
 
 type Admin = ReturnType<typeof createAdminClient>
@@ -200,6 +201,8 @@ export async function updateStudent(
     return { error: (e as Error).message }
   }
   const admin = createAdminClient()
+  const notStudent = await checkTargetRole(admin, id, "student")
+  if (notStudent) return { error: notStudent }
   const dbStatus = uiToDbStatus(input.status)
 
   const { data: current } = await admin
@@ -250,6 +253,8 @@ export async function deleteStudent(id: string): Promise<{ error?: string }> {
     return { error: (e as Error).message }
   }
   const admin = createAdminClient()
+  const notStudent = await checkTargetRole(admin, id, "student")
+  if (notStudent) return { error: notStudent }
   // Cascades: auth.users → profiles → students → assignments/attendance.
   const { error } = await admin.auth.admin.deleteUser(id)
   if (error) return { error: error.message }

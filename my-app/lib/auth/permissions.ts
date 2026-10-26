@@ -26,10 +26,11 @@ async function keysForUser(userId: string): Promise<string[]> {
 
   const { data: prof } = await admin
     .from("profiles")
-    .select("role, custom_role_id")
+    .select("role, custom_role_id, status")
     .eq("id", userId)
     .single()
-  if (!prof) return []
+  // A deactivated account holds no permissions, even with a live session.
+  if (!prof || prof.status !== "active") return []
 
   if (prof.role === "super_admin" || prof.role === "admin") {
     const { data } = await admin.from("permissions").select("key")

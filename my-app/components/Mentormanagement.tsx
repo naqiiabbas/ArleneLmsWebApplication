@@ -202,6 +202,26 @@ const emptyForm: FormState = {
   address: "",
 };
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Mirrors the fields marked * in the form. Experience is stored as an integer
+// column server-side, so a phone number typed into it (e.g. "2345678900")
+// overflows and fails the save AFTER the login account was already created.
+function validateForm(f: FormState): string | null {
+  if (!f.name.trim()) return "Full name is required.";
+  if (!f.email.trim()) return "Email is required.";
+  if (!EMAIL_RE.test(f.email.trim())) return "Enter a valid email address.";
+  if (!f.phone.trim()) return "Phone is required.";
+  if (!f.expertise.trim()) return "Expertise is required.";
+  if (f.experience.trim()) {
+    const years = parseInt(f.experience, 10);
+    if (!Number.isFinite(years) || years < 0 || years > 80) {
+      return 'Experience should be a number of years, e.g. "8 years".';
+    }
+  }
+  return null;
+}
+
 export default function Mentormanagement() {
   const [mentors, setMentors] = useState<Mentor[]>([]);
   const [loading, setLoading] = useState(true);
@@ -320,20 +340,32 @@ export default function Mentormanagement() {
     URL.revokeObjectURL(url);
   };
 
+  // Errors belong to the action that produced them; drop them on navigation so
+  // a failed save doesn't linger over an unrelated screen. Success notices are
+  // kept — the one after creating a mentor carries the only copy of their
+  // temporary password.
+  const clearError = () => setNotice((n) => (n?.type === "error" ? null : n));
+
   const resetToList = () => {
+    clearError();
     setView("list");
     setSelectedMentor(null);
     setFormState(emptyForm);
   };
 
   const handleAdd = () => {
+    clearError();
     setView("add");
     setFormState(emptyForm);
     setSelectedMentor(null);
   };
 
   const handleSaveNew = async () => {
-    if (!formState.name.trim()) return;
+    const invalid = validateForm(formState);
+    if (invalid) {
+      setNotice({ type: "error", msg: invalid });
+      return;
+    }
     setSubmitting(true);
     const res = await createMentor(formState);
     setSubmitting(false);
@@ -358,6 +390,7 @@ export default function Mentormanagement() {
   };
 
   const handleEdit = (mentor: Mentor) => {
+    clearError();
     setSelectedMentor(mentor);
     setFormState({
       name: mentor.name,
@@ -373,6 +406,13 @@ export default function Mentormanagement() {
 
   const handleSaveEdit = async () => {
     if (!selectedMentor) return;
+    // Without this, clearing the email saved "" over the profile email while
+    // the login email silently stayed the same.
+    const invalid = validateForm(formState);
+    if (invalid) {
+      setNotice({ type: "error", msg: invalid });
+      return;
+    }
     setSubmitting(true);
     const res = await updateMentor(selectedMentor.id, formState);
     setSubmitting(false);
@@ -388,7 +428,7 @@ export default function Mentormanagement() {
   };
 
   const confirmDelete = async () => {
-    if (!deleteTarget) return;
+    if (!deleteTarget || submitting) return;
     setSubmitting(true);
     const res = await deleteMentor(deleteTarget.id);
     setSubmitting(false);
@@ -419,7 +459,16 @@ export default function Mentormanagement() {
   const renderForm = (mode: "add" | "edit") => (
     <div>
       {renderHeader(mode === "add" ? "Add New Mentor" : "Edit Mentor")}
-      <div className="rounded-[8px] border border-[#d6d6d6] bg-white px-[24px] py-[24px]">
+      <form
+        noValidate
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (submitting) return;
+          if (mode === "add") handleSaveNew();
+          else handleSaveEdit();
+        }}
+        className="rounded-[8px] border border-[#d6d6d6] bg-white px-[24px] py-[24px]"
+      >
         <div className="grid grid-cols-1 gap-x-[30px] gap-y-[22px] md:grid-cols-2">
           <div>
             <p className={labelClasses}>Full Name *</p>
@@ -433,6 +482,8 @@ export default function Mentormanagement() {
           <div>
             <p className={labelClasses}>Email *</p>
             <input
+              type="email"
+              autoComplete="off"
               className={inputClasses}
               value={formState.email}
               onChange={(e) => setFormState((s) => ({ ...s, email: e.target.value }))}
@@ -442,6 +493,7 @@ export default function Mentormanagement() {
           <div>
             <p className={labelClasses}>Phone *</p>
             <input
+              type="tel"
               className={inputClasses}
               value={formState.phone}
               onChange={(e) => setFormState((s) => ({ ...s, phone: e.target.value }))}
@@ -450,14 +502,17 @@ export default function Mentormanagement() {
           </div>
           <div>
             <p className={labelClasses}>Status *</p>
-            <select
-              className={`${inputClasses} appearance-none pr-8`}
-              value={formState.status}
-              onChange={(e) => setFormState((s) => ({ ...s, status: e.target.value as MentorStatus }))}
-            >
-              <option value="Active">Active</option>
-              <option value="Inactive">Inactive</option>
-            </select>
+            <div className="relative">
+              <select
+                className={`${inputClasses} appearance-none bg-white pr-8`}
+                value={formState.status}
+                onChange={(e) => setFormState((s) => ({ ...s, status: e.target.value as MentorStatus }))}
+              >
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
+              </select>
+              <ChevronDown size={16} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
+            </div>
           </div>
           <div>
             <p className={labelClasses}>Expertise *</p>
@@ -489,20 +544,24 @@ export default function Mentormanagement() {
         </div>
         <div className="mt-[24px] flex items-center gap-[16px] border-t border-[#dddddd] pt-[24px]">
           <button
-            onClick={mode === "add" ? handleSaveNew : handleSaveEdit}
+            type="submit"
             disabled={submitting}
             className="h-[42px] rounded-[8px] bg-[#ffa313] px-[19px] text-[16px] font-normal text-white hover:bg-[#f29a0b] disabled:cursor-not-allowed disabled:opacity-70"
           >
             {submitting ? "Saving..." : mode === "add" ? "Add Mentor" : "Save Changes"}
           </button>
+          {/* Locked while saving: leaving mid-request let the completed save
+              yank the view back to the detail page afterwards. */}
           <button
+            type="button"
             onClick={resetToList}
-            className="h-[42px] rounded-[8px] border border-[#dddddd] px-[22px] text-[16px] font-normal text-[#666666] hover:bg-[#f7f7f7]"
+            disabled={submitting}
+            className="h-[42px] rounded-[8px] border border-[#dddddd] px-[22px] text-[16px] font-normal text-[#666666] hover:bg-[#f7f7f7] disabled:cursor-not-allowed disabled:opacity-60"
           >
             Cancel
           </button>
         </div>
-      </div>
+      </form>
     </div>
   );
 
@@ -622,6 +681,7 @@ export default function Mentormanagement() {
                         <div className="flex items-center justify-center gap-[16px]">
                           <button
                             onClick={() => {
+                              clearError();
                               setSelectedMentor(mentor);
                               setView("detail");
                             }}
@@ -686,13 +746,15 @@ export default function Mentormanagement() {
             <div className="flex items-center gap-3">
               <button
                 onClick={confirmDelete}
-                className="flex-1 h-10 rounded-lg bg-[#D80808] text-white font-semibold text-[14px] hover:bg-[#c40707]"
+                disabled={submitting}
+                className="flex-1 h-10 rounded-lg bg-[#D80808] text-white font-semibold text-[14px] hover:bg-[#c40707] disabled:cursor-not-allowed disabled:opacity-70"
               >
-                Delete
+                {submitting ? "Deleting..." : "Delete"}
               </button>
               <button
                 onClick={() => setDeleteTarget(null)}
-                className="flex-1 h-10 rounded-lg border border-[#E5E7EB] text-[14px] font-semibold text-[#6B7280] hover:bg-gray-50"
+                disabled={submitting}
+                className="flex-1 h-10 rounded-lg border border-[#E5E7EB] text-[14px] font-semibold text-[#6B7280] hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Cancel
               </button>
