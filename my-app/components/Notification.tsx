@@ -20,6 +20,7 @@ import {
   deleteNotification,
 } from '@/lib/data/notifications';
 import type { UINotification } from '@/lib/data/notifications.types';
+import { notifyNotificationsChanged } from './HeaderProfile';
 
 const poppins = Poppins({
   subsets: ['latin'],
@@ -146,18 +147,21 @@ const NotificationPanel = () => {
     setNotifications(prev => prev.filter(n => n.id !== id));
     const res = await deleteNotification(id);
     if (res.error) setNotice(res.error);
+    else notifyNotificationsChanged(); // clear the header bell dot now
   };
 
   const handleRead = async (id: string) => {
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, unread: false } : n));
     const res = await markNotificationRead(id);
     if (res.error) setNotice(res.error);
+    else notifyNotificationsChanged(); // clear the header bell dot now
   };
 
   const markAllRead = async () => {
     setNotifications(prev => prev.map(n => ({ ...n, unread: false })));
     const res = await markAllNotificationsRead();
     if (res.error) setNotice(res.error);
+    else notifyNotificationsChanged(); // clear the header bell dot now
   };
 
   const unreadCount = notifications.filter(n => n.unread).length;

@@ -1,10 +1,10 @@
 "use client";
 
 import React, { useState } from 'react';
-import Image from 'next/image';
 import { useRouter } from "next/navigation";
 import { Bell, Menu, Search, X } from 'lucide-react';
 import Sidebaradmin from './Sidebaradmin';
+import { HeaderAvatar, HeaderName, NotificationDot, useHeaderInfo } from './HeaderProfile';
 
 type NavbarProps = {
   isSidebarOpen?: boolean;
@@ -37,6 +37,7 @@ const Navbar = ({ isSidebarOpen = false, onMenuClick }: NavbarProps) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const router = useRouter();
+  const me = useHeaderInfo();
   const sidebarOpen = onMenuClick ? isSidebarOpen : internalSidebarOpen;
   const trimmedSearch = searchQuery.trim().toLowerCase();
   const filteredSearchItems = trimmedSearch
@@ -134,22 +135,17 @@ const Navbar = ({ isSidebarOpen = false, onMenuClick }: NavbarProps) => {
             aria-label="Notifications"
           >
             <Bell size={24} strokeWidth={2} />
-            <span className="absolute top-2 right-2.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-[#F4A11D]" />
+            <NotificationDot info={me} />
           </button>
         </div>
 
-        {/* User Profile Card - Styled exactly like the screenshot */}
+        {/* User Profile Card — the signed-in user */}
         <div className="bg-transparent p-1 px-3 rounded-xl flex items-center gap-3 border border-white/40 shadow-sm min-w-[140px]">
           <div className="w-9 h-9 rounded-lg overflow-hidden relative border border-white/30 shrink-0">
-            <Image 
-              src="/images/avatar1.png" 
-              alt="Profile" 
-              fill 
-              className="object-cover" 
-            />
+            <HeaderAvatar info={me} textClass="text-[13px]" />
           </div>
           <div className="text-left hidden sm:block">
-            <p className="text-[13px] font-bold leading-none mb-1">Esther Howard</p>
+            <HeaderName info={me} className="text-[13px] font-bold leading-none mb-1" />
             <p className="text-[9px] font-medium opacity-90 uppercase tracking-wider">Online</p>
           </div>
         </div>

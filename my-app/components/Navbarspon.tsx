@@ -1,10 +1,10 @@
 "use client";
 
 import React, { useState } from 'react';
-import Image from 'next/image';
 import { useRouter } from "next/navigation";
 import { Bell, Menu, X } from 'lucide-react';
 import Sidebarspon from './Sidebarspon';
+import { HeaderAvatar, HeaderName, NotificationDot, useHeaderInfo } from './HeaderProfile';
 
 type NavbarProps = {
   isSidebarOpen?: boolean;
@@ -14,6 +14,7 @@ type NavbarProps = {
 const Navbar = ({ isSidebarOpen = false, onMenuClick }: NavbarProps) => {
   const [internalSidebarOpen, setInternalSidebarOpen] = useState(false);
   const router = useRouter();
+  const me = useHeaderInfo();
   const sidebarOpen = onMenuClick ? isSidebarOpen : internalSidebarOpen;
   const toggleSidebar = () => {
     if (onMenuClick) {
@@ -61,22 +62,17 @@ const Navbar = ({ isSidebarOpen = false, onMenuClick }: NavbarProps) => {
             aria-label="Notifications"
           >
             <Bell size={26} strokeWidth={2.2} />
-            <span className="absolute top-2 right-2.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-[#F4A11D]" />
+            <NotificationDot info={me} />
           </button>
         </div>
 
         {/* User Profile Card */}
         <div className="bg-white/15 p-1.5 pl-2.5 pr-3 md:pr-6 rounded-xl flex items-center gap-3.5 border border-white/20 backdrop-blur-sm shadow-sm">
           <div className="w-11 h-11 rounded-lg bg-gray-200 overflow-hidden relative border-[1.5px] border-white/30 shadow-inner">
-            <Image 
-              src="https://images.unsplash.com/photo-1494790108377-be9c29b29330" 
-              alt="Profile" 
-              fill 
-              className="object-cover" 
-            />
+            <HeaderAvatar info={me} />
           </div>
           <div className="hidden text-left sm:block">
-            <p className="text-[15px] font-extrabold leading-none mb-1.5">Alex Johnson</p>
+            <HeaderName info={me} className="text-[15px] font-extrabold leading-none mb-1.5" />
             <p className="text-[12px] font-normal leading-none opacity-90">Online</p>
           </div>
         </div>

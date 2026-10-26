@@ -19,6 +19,7 @@ import {
   deleteNotification,
 } from '@/lib/data/notifications';
 import type { UINotification } from '@/lib/data/notifications.types';
+import { notifyNotificationsChanged } from './HeaderProfile';
 
 const poppins = Poppins({
   subsets: ['latin'],
@@ -151,18 +152,21 @@ const NotificationPanel = () => {
   const handleDelete = async (id: string) => {
     const res = await deleteNotification(id);
     if (res.error) { setNotice(res.error); return; }
+    notifyNotificationsChanged(); // clear the header bell dot now
     await refresh();
   };
 
   const handleRead = async (id: string) => {
     const res = await markNotificationRead(id);
     if (res.error) { setNotice(res.error); return; }
+    notifyNotificationsChanged(); // clear the header bell dot now
     await refresh();
   };
 
   const markAllRead = async () => {
     const res = await markAllNotificationsRead();
     if (res.error) { setNotice(res.error); return; }
+    notifyNotificationsChanged(); // clear the header bell dot now
     await refresh();
   };
 
