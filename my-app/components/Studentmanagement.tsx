@@ -2,31 +2,19 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
-import { ChevronDown, Eye, KeyRound, Mail, MapPin, Pencil, Phone, Plus, Search, Trash2 } from "lucide-react";
+import { ChevronDown, Eye, IdCard, KeyRound, Mail, MapPin, Phone, Plus, Search, Trash2 } from "lucide-react";
 import {
   listStudents,
+  listMentorOptions,
   createStudent,
   updateStudent,
   deleteStudent,
 } from "@/lib/data/students";
+import type { MentorOption, UIStudent } from "@/lib/data/students.types";
 
 type StudentStatus = "Active" | "Inactive";
 
-interface Student {
-  id: string;
-  name: string;
-  email: string;
-  phone: string;
-  mentor: string;
-  course: string;
-  status: StudentStatus;
-  avatar: string;
-  enrollmentDate: string;
-  performance: { attendance: number; grade: string };
-  quickActions: string[];
-  address: string;
-  attendanceCode: string;
-}
+type Student = UIStudent;
 
 type ViewMode = "list" | "detail" | "add" | "edit";
 
@@ -37,7 +25,7 @@ interface FormState {
   email: string;
   phone: string;
   status: StudentStatus;
-  mentor: string;
+  mentorId: string;
   course: string;
   address: string;
 }
@@ -47,12 +35,21 @@ const emptyForm: FormState = {
   email: "",
   phone: "",
   status: "Active",
-  mentor: "",
+  mentorId: "",
   course: "",
   address: "",
 };
 
-const ORANGE = "#F9A618";
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Mirrors the fields marked * in the form (the server re-checks the same rules).
+function validateForm(f: FormState): string | null {
+  if (!f.name.trim()) return "Full name is required.";
+  if (!f.email.trim()) return "Email is required.";
+  if (!EMAIL_RE.test(f.email.trim())) return "Enter a valid email address.";
+  if (!f.phone.trim()) return "Phone is required.";
+  return null;
+}
 
 const inputClass =
   "h-[42px] w-full rounded-[8px] border border-[#d9d9d9] bg-white px-[15px] text-[16px] font-normal text-[#111111] outline-none placeholder:text-[#8a8a8a] focus:border-[#F9A618] focus:ring-2 focus:ring-[#F9A618]/15";
@@ -61,14 +58,16 @@ const labelClass = "mb-[10px] block text-[14px] font-medium leading-none text-[#
 
 const AdminFooter = () => (
   <div className="mt-6 rounded-[8px] bg-white py-[21px] text-center text-[15px] font-normal leading-none text-[#666666]">
-    Support <span className="mx-[13px]">{"\u2022"}</span> Privacy <span className="mx-[13px]">{"\u2022"}</span> Terms
+    Support <span className="mx-[13px]">{"•"}</span> Privacy <span className="mx-[13px]">{"•"}</span> Terms
   </div>
 );
 
-const BackButton = ({ onClick }: { onClick: () => void }) => (
+const BackButton = ({ onClick, disabled }: { onClick: () => void; disabled?: boolean }) => (
   <button
+    type="button"
     onClick={onClick}
-    className="flex h-[40px] w-[40px] items-center justify-center rounded-[8px] border border-[#cfcfcf] bg-white transition-colors hover:bg-[#fff7e8]"
+    disabled={disabled}
+    className="flex h-[40px] w-[40px] items-center justify-center rounded-[8px] border border-[#cfcfcf] bg-white transition-colors hover:bg-[#fff7e8] disabled:cursor-not-allowed disabled:opacity-60"
     aria-label="Back"
   >
     <img src="/images/admin-student-go-back.svg" alt="" className="h-4 w-4" />
@@ -93,6 +92,7 @@ const StatusBadge = ({ status }: { status: StudentStatus }) => (
 
 const ActionIcon = ({ children, onClick, label }: { children: React.ReactNode; onClick: () => void; label: string }) => (
   <button
+    type="button"
     onClick={onClick}
     aria-label={label}
     className="flex h-7 w-7 items-center justify-center rounded-full text-[#F9A618] transition-colors hover:bg-[#fff7e8]"
@@ -101,33 +101,95 @@ const ActionIcon = ({ children, onClick, label }: { children: React.ReactNode; o
   </button>
 );
 
+// Rendered on every view. Previously it only existed on the list, so the
+// success message after "Add Student" — which carries the ONLY copy of the new
+// student's temporary password — was invisible on the detail screen it opens.
+const NoticeBar = ({ notice, onDismiss }: { notice: Notice | null; onDismiss: () => void }) => {
+  const [copied, setCopied] = useState(false);
+  if (!notice) return null;
+  const password = /Temporary password: (\S+)/.exec(notice.msg)?.[1];
+  return (
+    <div
+      className={`mb-4 flex items-start justify-between gap-4 rounded-[8px] border px-4 py-3 text-[14px] font-semibold ${
+        notice.type === "success"
+          ? "border-green-200 bg-green-50 text-green-700"
+          : "border-red-200 bg-red-50 text-red-700"
+      }`}
+    >
+      <span className="break-words">{notice.msg}</span>
+      <div className="flex shrink-0 items-center gap-3">
+        {password && (
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(password);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+              } catch {
+                /* clipboard blocked — the password is still shown inline */
+              }
+            }}
+            className="text-[13px] underline"
+          >
+            {copied ? "Copied" : "Copy password"}
+          </button>
+        )}
+        <button type="button" onClick={onDismiss} className="text-[13px] underline">
+          Dismiss
+        </button>
+      </div>
+    </div>
+  );
+};
+
 function StudentForm({
   title,
   mode,
   form,
   setForm,
+  mentors,
+  mentorsLoading,
   onBack,
   onSave,
   submitting,
   error,
+  notice,
+  onDismissNotice,
 }: {
   title: string;
   mode: "add" | "edit";
   form: FormState;
   setForm: React.Dispatch<React.SetStateAction<FormState>>;
+  mentors: MentorOption[];
+  mentorsLoading: boolean;
   onBack: () => void;
   onSave: () => void;
   submitting?: boolean;
   error?: string;
+  notice: Notice | null;
+  onDismissNotice: () => void;
 }) {
+  // Keep a student's current mentor selectable even if that mentor has since
+  // been deactivated, so opening Edit doesn't silently unassign them.
+  const options = mentors.filter((m) => m.active || m.id === form.mentorId);
+
   return (
     <div className="min-h-full bg-[#f4f4f4] px-6 py-6 font-[Poppins]">
+      <NoticeBar notice={notice} onDismiss={onDismissNotice} />
       <div className="mb-[24px] flex items-center gap-[10px]">
-        <BackButton onClick={onBack} />
+        <BackButton onClick={onBack} disabled={submitting} />
         <h1 className="text-[24px] font-semibold leading-none text-[#111111]">{title}</h1>
       </div>
 
-      <div className="rounded-[8px] border border-[#d6d6d6] bg-white px-[24px] py-[24px]">
+      <form
+        noValidate
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!submitting) onSave();
+        }}
+        className="rounded-[8px] border border-[#d6d6d6] bg-white px-[24px] py-[24px]"
+      >
         <div className="grid grid-cols-1 gap-x-[26px] gap-y-[25px] lg:grid-cols-2">
           <label>
             <span className={labelClass}>Full Name *</span>
@@ -135,23 +197,26 @@ function StudentForm({
               className={inputClass}
               value={form.name}
               onChange={(e) => setForm((s) => ({ ...s, name: e.target.value }))}
-              placeholder={mode === "add" ? "Enter student name" : "Alex Martinez"}
+              placeholder="Enter student name"
             />
           </label>
 
           <label>
             <span className={labelClass}>Email *</span>
             <input
+              type="email"
+              autoComplete="off"
               className={inputClass}
               value={form.email}
               onChange={(e) => setForm((s) => ({ ...s, email: e.target.value }))}
-              placeholder={mode === "add" ? "student@email.com" : "alex.m@email.com"}
+              placeholder="student@email.com"
             />
           </label>
 
           <label>
             <span className={labelClass}>Phone *</span>
             <input
+              type="tel"
               className={inputClass}
               value={form.phone}
               onChange={(e) => setForm((s) => ({ ...s, phone: e.target.value }))}
@@ -161,24 +226,44 @@ function StudentForm({
 
           <label>
             <span className={labelClass}>Status *</span>
-            <select
-              className={`${inputClass} appearance-none`}
-              value={form.status}
-              onChange={(e) => setForm((s) => ({ ...s, status: e.target.value as StudentStatus }))}
-            >
-              <option value="Active">Active</option>
-              <option value="Inactive">Inactive</option>
-            </select>
+            <span className="relative block">
+              <select
+                className={`${inputClass} appearance-none pr-9`}
+                value={form.status}
+                onChange={(e) => setForm((s) => ({ ...s, status: e.target.value as StudentStatus }))}
+              >
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
+              </select>
+              <ChevronDown size={18} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#666666]" />
+            </span>
           </label>
 
           <label>
             <span className={labelClass}>Assigned Mentor</span>
-            <input
-              className={inputClass}
-              value={form.mentor}
-              onChange={(e) => setForm((s) => ({ ...s, mentor: e.target.value }))}
-              placeholder={mode === "add" ? "Select or enter mentor name" : "Dr. Sarah Johnson"}
-            />
+            {/* A real list of mentors. It used to be free text matched by exact
+                name, so a typo silently left the student unassigned. */}
+            <span className="relative block">
+              <select
+                className={`${inputClass} appearance-none pr-9`}
+                value={form.mentorId}
+                disabled={mentorsLoading}
+                onChange={(e) => setForm((s) => ({ ...s, mentorId: e.target.value }))}
+              >
+                <option value="">{mentorsLoading ? "Loading mentors..." : "No mentor (unassigned)"}</option>
+                {options.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.active ? m.name : `${m.name} (inactive)`}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown size={18} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#666666]" />
+            </span>
+            {!mentorsLoading && options.length === 0 && (
+              <span className="mt-[6px] block text-[12px] text-[#999999]">
+                No mentors yet — add one in Mentor Management first.
+              </span>
+            )}
           </label>
 
           <label>
@@ -187,7 +272,7 @@ function StudentForm({
               className={inputClass}
               value={form.course}
               onChange={(e) => setForm((s) => ({ ...s, course: e.target.value }))}
-              placeholder={mode === "add" ? "Enter course name" : "Python Fundamentals"}
+              placeholder="Enter course name"
             />
           </label>
 
@@ -197,7 +282,7 @@ function StudentForm({
               className={inputClass}
               value={form.address}
               onChange={(e) => setForm((s) => ({ ...s, address: e.target.value }))}
-              placeholder={mode === "add" ? "Enter full address" : "123 Main St, New York, NY"}
+              placeholder="Enter full address"
             />
           </label>
         </div>
@@ -206,21 +291,25 @@ function StudentForm({
           {error && <p className="mb-3 text-[14px] font-medium text-red-600">{error}</p>}
           <div className="flex flex-wrap items-center gap-[16px]">
             <button
-              onClick={onSave}
+              type="submit"
               disabled={submitting}
               className="h-[43px] rounded-[8px] bg-[#F9A618] px-[28px] text-[16px] font-medium text-white transition-colors hover:bg-[#f0a014] disabled:cursor-not-allowed disabled:opacity-70"
             >
               {submitting ? "Saving..." : mode === "add" ? "Add Student" : "Save Changes"}
             </button>
+            {/* Locked while saving: leaving mid-request let the completed save
+                yank the view back to the detail page afterwards. */}
             <button
+              type="button"
               onClick={onBack}
-              className="h-[43px] rounded-[8px] border border-[#d6d6d6] bg-white px-[26px] text-[16px] font-medium text-[#666666] transition-colors hover:bg-[#f7f7f7]"
+              disabled={submitting}
+              className="h-[43px] rounded-[8px] border border-[#d6d6d6] bg-white px-[26px] text-[16px] font-medium text-[#666666] transition-colors hover:bg-[#f7f7f7] disabled:cursor-not-allowed disabled:opacity-60"
             >
               Cancel
             </button>
           </div>
         </div>
-      </div>
+      </form>
     </div>
   );
 }
@@ -230,20 +319,26 @@ function StudentDetails({
   onBack,
   onEdit,
   onDownload,
+  notice,
+  onDismissNotice,
 }: {
   student: Student;
   onBack: () => void;
   onEdit: () => void;
   onDownload: () => void;
+  notice: Notice | null;
+  onDismissNotice: () => void;
 }) {
   return (
     <div className="min-h-full bg-[#f4f4f4] px-6 py-6 font-[Poppins]">
+      <NoticeBar notice={notice} onDismiss={onDismissNotice} />
       <div className="mb-[24px] flex items-center justify-between">
         <div className="flex items-center gap-[10px]">
           <BackButton onClick={onBack} />
           <h1 className="text-[24px] font-semibold leading-none text-[#111111]">Student Details</h1>
         </div>
         <button
+          type="button"
           onClick={onEdit}
           className="flex h-[40px] items-center gap-[9px] rounded-[8px] bg-[#F9A618] px-[18px] text-[16px] font-medium text-white transition-colors hover:bg-[#f0a014]"
         >
@@ -271,25 +366,30 @@ function StudentDetails({
               <InfoBlock icon={<Mail size={15} />} label="Email" value={student.email} />
               <InfoBlock icon={<Phone size={15} />} label="Phone" value={student.phone} />
               <InfoBlock label="Enrollment Date" value={student.enrollmentDate} />
-              <InfoBlock label="Current Mentor" value={student.mentor} />
+              <InfoBlock label="Current Mentor" value={student.mentor || "Unassigned"} />
               <InfoBlock label="Course" value={student.course} />
               <InfoBlock icon={<MapPin size={15} />} label="Address" value={student.address} />
             </div>
 
-            <div className="mt-[27px] flex items-center justify-between rounded-[8px] border border-[#F9A618]/40 bg-[#FFF7EA] px-[18px] py-[15px]">
-              <div className="flex items-center gap-[10px]">
-                <span className="text-[#F9A618]"><KeyRound size={18} /></span>
-                <div>
-                  <p className="text-[14px] font-medium leading-none text-[#666666]">iPad Kiosk PIN</p>
-                  <p className="mt-[6px] text-[12px] leading-none text-[#999999]">
-                    Student enters this 4-digit code at the kiosk to mark attendance.
-                  </p>
-                </div>
-              </div>
-              <span className="font-mono text-[26px] font-semibold tracking-[0.18em] text-[#111111]">
-                {student.attendanceCode || "—"}
-              </span>
+            <div className="mt-[27px] grid grid-cols-1 gap-[12px] md:grid-cols-2">
+              <CodeBlock
+                icon={<IdCard size={18} />}
+                label="Student ID"
+                hint="Used on the student login's Student ID tab."
+                value={student.studentCode}
+              />
+              <CodeBlock
+                icon={<KeyRound size={18} />}
+                label="iPad Kiosk PIN"
+                hint="Entered at the kiosk to mark attendance."
+                value={student.attendanceCode}
+              />
             </div>
+            {(!student.studentCode || !student.attendanceCode) && (
+              <p className="mt-[10px] text-[13px] text-[#999999]">
+                Missing codes are generated automatically the next time you save this student.
+              </p>
+            )}
           </div>
         </section>
 
@@ -299,7 +399,7 @@ function StudentDetails({
             <div className="mb-[20px]">
               <div className="mb-[6px] flex items-start justify-between text-[16px] font-normal text-[#666666]">
                 <span>Attendance</span>
-                <span className="text-[16px] text-[#111111]">{student.performance.attendance}</span>
+                <span className="text-[16px] text-[#111111]">{student.performance.attendance}%</span>
               </div>
               <div className="h-[7px] overflow-hidden rounded-full bg-[#e5e5e5]">
                 <div className="h-full rounded-full bg-[#F9A618]" style={{ width: `${student.performance.attendance}%` }} />
@@ -316,6 +416,7 @@ function StudentDetails({
             <div className="flex flex-col items-start gap-[27px] pl-[17px]">
               {student.quickActions.map((action) => (
                 <button
+                  type="button"
                   key={action}
                   onClick={() => (action === "Download Report" ? onDownload() : undefined)}
                   className="text-[16px] font-normal leading-none text-[#F9A618] transition-colors hover:text-[#d98a00]"
@@ -327,6 +428,21 @@ function StudentDetails({
           </div>
         </aside>
       </div>
+    </div>
+  );
+}
+
+function CodeBlock({ icon, label, hint, value }: { icon: React.ReactNode; label: string; hint: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-[8px] border border-[#F9A618]/40 bg-[#FFF7EA] px-[18px] py-[15px]">
+      <div className="flex items-center gap-[10px]">
+        <span className="text-[#F9A618]">{icon}</span>
+        <div>
+          <p className="text-[14px] font-medium leading-none text-[#666666]">{label}</p>
+          <p className="mt-[6px] text-[12px] leading-snug text-[#999999]">{hint}</p>
+        </div>
+      </div>
+      <span className="font-mono text-[22px] font-semibold tracking-[0.12em] text-[#111111]">{value || "—"}</span>
     </div>
   );
 }
@@ -355,11 +471,13 @@ export default function Studentmanagement() {
   const [selected, setSelected] = useState<Student | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [deleteTarget, setDeleteTarget] = useState<Student | null>(null);
+  const [mentors, setMentors] = useState<MentorOption[]>([]);
+  const [mentorsLoading, setMentorsLoading] = useState(false);
 
   const refresh = async (): Promise<Student[]> => {
     setLoading(true);
     try {
-      const data = (await listStudents()) as Student[];
+      const data = await listStudents();
       setStudents(data);
       return data;
     } catch (e) {
@@ -370,19 +488,34 @@ export default function Studentmanagement() {
     }
   };
 
+  // Fetched each time a form opens so a mentor added in another tab shows up.
+  const loadMentors = async () => {
+    setMentorsLoading(true);
+    try {
+      setMentors(await listMentorOptions());
+    } catch (e) {
+      setFormError(`Could not load mentors: ${(e as Error).message}`);
+    } finally {
+      setMentorsLoading(false);
+    }
+  };
+
   useEffect(() => {
     refresh();
   }, []);
 
-  const filtered = useMemo(
-    () =>
-      students.filter((s) => {
-        const matchesName = s.name.toLowerCase().includes(search.toLowerCase().trim());
-        const matchesStatus = filterStatus === "All Status" ? true : s.status === filterStatus;
-        return matchesName && matchesStatus;
-      }),
-    [students, search, filterStatus]
-  );
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    return students.filter((s) => {
+      const matchesText =
+        !q ||
+        s.name.toLowerCase().includes(q) ||
+        s.email.toLowerCase().includes(q) ||
+        s.studentCode.toLowerCase().includes(q);
+      const matchesStatus = filterStatus === "All Status" ? true : s.status === filterStatus;
+      return matchesText && matchesStatus;
+    });
+  }, [students, search, filterStatus]);
 
   const escapePdfText = (text: string) => text.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
 
@@ -443,6 +576,7 @@ export default function Studentmanagement() {
   const downloadReport = (student: Student) => {
     const blob = makePdfBlob("Student Report", [
       { label: "Name", value: student.name },
+      { label: "Student ID", value: student.studentCode },
       { label: "Email", value: student.email },
       { label: "Mentor", value: student.mentor },
       { label: "Course", value: student.course },
@@ -461,7 +595,12 @@ export default function Studentmanagement() {
     URL.revokeObjectURL(url);
   };
 
+  // Errors belong to the action that produced them; drop them on navigation.
+  // Success notices are kept — the one after Add carries the temp password.
+  const clearError = () => setNotice((n) => (n?.type === "error" ? null : n));
+
   const resetList = () => {
+    clearError();
     setView("list");
     setSelected(null);
     setForm(emptyForm);
@@ -469,68 +608,97 @@ export default function Studentmanagement() {
   };
 
   const handleAdd = () => {
+    clearError();
+    setSelected(null);
     setForm(emptyForm);
+    setFormError("");
     setView("add");
+    loadMentors();
+  };
+
+  const openDetail = (s: Student) => {
+    clearError();
+    setSelected(s);
+    setView("detail");
   };
 
   const saveNew = async () => {
-    if (!form.name.trim()) return;
-    setFormError("");
-    setSubmitting(true);
-    const res = await createStudent(form);
-    setSubmitting(false);
-    if (res.error) {
-      setFormError(res.error);
+    const invalid = validateForm(form);
+    if (invalid) {
+      setFormError(invalid);
       return;
     }
-    const parts = [
-      res.tempPassword
-        ? `Student created. Temporary password: ${res.tempPassword} — share it securely.`
-        : "Student created.",
-    ];
-    if (res.mentorUnmatched)
-      parts.push(`Mentor "${form.mentor}" was not found, so the student is unassigned.`);
-    setNotice({ type: "success", msg: parts.join(" ") });
-    const list = await refresh();
-    const created = res.id ? list.find((s) => s.id === res.id) ?? null : null;
-    if (created) {
-      setSelected(created);
-      setView("detail");
-    } else {
-      resetList();
-    }
-  };
-
-  const handleEdit = (s: Student) => {
-    setSelected(s);
-    setForm({
-      name: s.name,
-      email: s.email,
-      phone: s.phone,
-      status: s.status,
-      mentor: s.mentor,
-      course: s.course,
-      address: s.address,
-    });
-    setView("edit");
-  };
-
-  const saveEdit = async () => {
-    if (!selected) return;
     setFormError("");
     setSubmitting(true);
-    const res = await updateStudent(selected.id, form);
-    setSubmitting(false);
+    let res: Awaited<ReturnType<typeof createStudent>>;
+    try {
+      res = await createStudent(form);
+    } catch (e) {
+      // Without this a thrown server error left the button stuck on "Saving...".
+      setFormError((e as Error).message || "Something went wrong. Please try again.");
+      return;
+    } finally {
+      setSubmitting(false);
+    }
     if (res.error) {
       setFormError(res.error);
       return;
     }
     setNotice({
       type: "success",
-      msg: res.mentorUnmatched
-        ? `Student updated. Mentor "${form.mentor}" was not found, so the student is unassigned.`
-        : "Student updated.",
+      msg: `Student created. Temporary password: ${res.tempPassword} — share it securely; they should change it after first login.`,
     });
+    const list = await refresh();
+    const created = res.id ? list.find((s) => s.id === res.id) ?? null : null;
+    if (created) {
+      setSelected(created);
+      setView("detail");
+    } else {
+      setView("list");
+      setForm(emptyForm);
+    }
+  };
+
+  const handleEdit = (s: Student) => {
+    clearError();
+    setSelected(s);
+    setFormError("");
+    setForm({
+      name: s.name,
+      email: s.email,
+      phone: s.phone,
+      status: s.status,
+      mentorId: s.mentorId,
+      course: s.course,
+      address: s.address,
+    });
+    setView("edit");
+    loadMentors();
+  };
+
+  const saveEdit = async () => {
+    if (!selected) return;
+    const invalid = validateForm(form);
+    if (invalid) {
+      setFormError(invalid);
+      return;
+    }
+    setFormError("");
+    setSubmitting(true);
+    let res: Awaited<ReturnType<typeof updateStudent>>;
+    try {
+      res = await updateStudent(selected.id, form);
+    } catch (e) {
+      setFormError((e as Error).message || "Something went wrong. Please try again.");
+      return;
+    } finally {
+      setSubmitting(false);
+    }
+    if (res.error) {
+      setFormError(res.error);
+      return;
+    }
+    setNotice({ type: "success", msg: "Student updated." });
     const list = await refresh();
     const updated = list.find((s) => s.id === selected.id) ?? null;
     setSelected(updated);
@@ -538,10 +706,16 @@ export default function Studentmanagement() {
   };
 
   const confirmDelete = async () => {
-    if (!deleteTarget) return;
+    if (!deleteTarget || submitting) return;
     setSubmitting(true);
-    const res = await deleteStudent(deleteTarget.id);
-    setSubmitting(false);
+    let res: Awaited<ReturnType<typeof deleteStudent>>;
+    try {
+      res = await deleteStudent(deleteTarget.id);
+    } catch (e) {
+      res = { error: (e as Error).message || "Something went wrong. Please try again." };
+    } finally {
+      setSubmitting(false);
+    }
     if (res.error) {
       setNotice({ type: "error", msg: res.error });
       setDeleteTarget(null);
@@ -554,12 +728,23 @@ export default function Studentmanagement() {
     if (wasSelected) resetList();
   };
 
-  if (view === "add") {
-    return <StudentForm title="Add New Student" mode="add" form={form} setForm={setForm} onBack={resetList} onSave={saveNew} submitting={submitting} error={formError} />;
-  }
-
-  if (view === "edit") {
-    return <StudentForm title="Edit Student" mode="edit" form={form} setForm={setForm} onBack={resetList} onSave={saveEdit} submitting={submitting} error={formError} />;
+  if (view === "add" || view === "edit") {
+    return (
+      <StudentForm
+        title={view === "add" ? "Add New Student" : "Edit Student"}
+        mode={view}
+        form={form}
+        setForm={setForm}
+        mentors={mentors}
+        mentorsLoading={mentorsLoading}
+        onBack={resetList}
+        onSave={view === "add" ? saveNew : saveEdit}
+        submitting={submitting}
+        error={formError}
+        notice={notice}
+        onDismissNotice={() => setNotice(null)}
+      />
+    );
   }
 
   if (view === "detail" && selected) {
@@ -569,35 +754,27 @@ export default function Studentmanagement() {
         onBack={resetList}
         onEdit={() => handleEdit(selected)}
         onDownload={() => downloadReport(selected)}
+        notice={notice}
+        onDismissNotice={() => setNotice(null)}
       />
     );
   }
 
   return (
     <div className="min-h-full bg-[#f4f4f4] px-6 py-6 font-[Poppins]">
-      {notice && (
-        <div
-          className={`mb-4 flex items-start justify-between gap-4 rounded-[8px] border px-4 py-3 text-[14px] font-semibold ${
-            notice.type === "success"
-              ? "border-green-200 bg-green-50 text-green-700"
-              : "border-red-200 bg-red-50 text-red-700"
-          }`}
-        >
-          <span className="break-all">{notice.msg}</span>
-          <button type="button" onClick={() => setNotice(null)} className="shrink-0 text-[13px] underline">
-            Dismiss
-          </button>
-        </div>
-      )}
+      <NoticeBar notice={notice} onDismiss={() => setNotice(null)} />
       <div className="mb-[24px] flex items-center justify-between gap-4">
         <div className="flex items-center gap-[12px]">
           <HeaderIcon />
           <div>
             <h1 className="text-[24px] font-semibold leading-none text-[#111111]">Students Management</h1>
-            <p className="mt-[7px] text-[16px] font-normal leading-none text-[#666666]">{students.length} total students</p>
+            <p className="mt-[7px] text-[16px] font-normal leading-none text-[#666666]">
+              {loading ? "Loading..." : `${students.length} total student${students.length === 1 ? "" : "s"}`}
+            </p>
           </div>
         </div>
         <button
+          type="button"
           onClick={handleAdd}
           className="flex h-[41px] items-center gap-[9px] rounded-[8px] bg-[#F9A618] px-[20px] text-[16px] font-medium text-white transition-colors hover:bg-[#f0a014]"
         >
@@ -613,7 +790,7 @@ export default function Studentmanagement() {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search Student..."
+              placeholder="Search by name, email or Student ID..."
               className="h-full flex-1 bg-transparent text-[18px] font-normal text-[#111111] outline-none placeholder:text-[#777777]"
             />
           </div>
@@ -657,7 +834,7 @@ export default function Studentmanagement() {
             {!loading && filtered.length === 0 && (
               <tr>
                 <td colSpan={7} className="px-[24px] py-[40px] text-center text-[#777777]">
-                  No students found.
+                  {students.length === 0 ? "No students yet. Click “Add Student” to create one." : "No students match your search."}
                 </td>
               </tr>
             )}
@@ -666,20 +843,21 @@ export default function Studentmanagement() {
                 <td className="px-[24px] py-[24px] text-[#111111]">{s.name}</td>
                 <td className="px-[24px] py-[24px]">{s.email}</td>
                 <td className="px-[24px] py-[24px]">{s.phone}</td>
-                <td className="px-[24px] py-[24px]">{s.mentor}</td>
+                <td className="px-[24px] py-[24px]">{s.mentor || <span className="text-[#aaaaaa]">Unassigned</span>}</td>
                 <td className="px-[24px] py-[24px]">{s.course}</td>
                 <td className="px-[24px] py-[24px]">
                   <StatusBadge status={s.status} />
                 </td>
                 <td className="px-[24px] py-[21px]">
                   <div className="flex items-center justify-center gap-[14px]">
-                    <ActionIcon label="View" onClick={() => { setSelected(s); setView("detail"); }}>
+                    <ActionIcon label="View" onClick={() => openDetail(s)}>
                       <Eye size={16} strokeWidth={2} />
                     </ActionIcon>
                     <ActionIcon label="Edit" onClick={() => handleEdit(s)}>
                       <img src="/images/admin-user-icon-42.svg" alt="" className="h-4 w-4" />
                     </ActionIcon>
                     <button
+                      type="button"
                       onClick={() => setDeleteTarget(s)}
                       aria-label="Delete"
                       className="flex h-7 w-7 items-center justify-center rounded-full text-[#ff0000] transition-colors hover:bg-[#fff1f1]"
@@ -701,18 +879,23 @@ export default function Studentmanagement() {
           <div className="w-full max-w-[390px] rounded-[10px] bg-white p-6 shadow-xl">
             <h2 className="text-[20px] font-semibold text-[#111111]">Confirm Delete</h2>
             <p className="mt-3 text-[15px] leading-6 text-[#666666]">
-              Are you sure you want to delete the student {deleteTarget.name}?
+              Permanently delete {deleteTarget.name}? Their login, attendance history and mentor
+              assignment will be removed. To keep their records, set them to Inactive instead.
             </p>
             <div className="mt-6 flex gap-3">
               <button
+                type="button"
                 onClick={confirmDelete}
-                className="h-[42px] flex-1 rounded-[8px] bg-[#ff0000] text-[15px] font-semibold text-white hover:bg-[#dc0000]"
+                disabled={submitting}
+                className="h-[42px] flex-1 rounded-[8px] bg-[#ff0000] text-[15px] font-semibold text-white hover:bg-[#dc0000] disabled:cursor-not-allowed disabled:opacity-70"
               >
-                Delete
+                {submitting ? "Deleting..." : "Delete"}
               </button>
               <button
+                type="button"
                 onClick={() => setDeleteTarget(null)}
-                className="h-[42px] flex-1 rounded-[8px] border border-[#d6d6d6] bg-white text-[15px] font-semibold text-[#666666] hover:bg-[#f7f7f7]"
+                disabled={submitting}
+                className="h-[42px] flex-1 rounded-[8px] border border-[#d6d6d6] bg-white text-[15px] font-semibold text-[#666666] hover:bg-[#f7f7f7] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Cancel
               </button>

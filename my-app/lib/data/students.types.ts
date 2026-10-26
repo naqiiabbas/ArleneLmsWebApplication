@@ -6,7 +6,10 @@ export type UIStudent = {
   name: string
   email: string
   phone: string
+  /** Primary mentor's display name ("" if unassigned). */
   mentor: string
+  /** Primary mentor's profile id ("" if unassigned). */
+  mentorId: string
   course: string
   status: StudentStatus
   avatar: string
@@ -14,6 +17,8 @@ export type UIStudent = {
   performance: { attendance: number; grade: string }
   quickActions: string[]
   address: string
+  /** Human-facing Student ID (students.student_code), used by the Student ID login. */
+  studentCode: string
   /** Permanent 4-digit iPad kiosk PIN (students.attendance_code). */
   attendanceCode: string
 }
@@ -23,7 +28,15 @@ export type StudentInput = {
   email: string
   phone: string
   status: StudentStatus
-  mentor: string
+  /** Profile id of the mentor to assign; "" for none. */
+  mentorId: string
   course: string
   address: string
+}
+
+/** An assignable mentor for the Add/Edit Student dropdown. */
+export type MentorOption = {
+  id: string
+  name: string
+  active: boolean
 }

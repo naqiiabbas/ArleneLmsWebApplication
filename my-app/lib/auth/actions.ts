@@ -137,7 +137,8 @@ export async function verifyRecoveryCode(
 export async function startResetByStudentId(
   studentId: string,
 ): Promise<{ email?: string; error?: string }> {
-  const id = studentId.trim()
+  // Codes are stored upper-case (STU001); accept "stu001" as typed.
+  const id = studentId.trim().toUpperCase()
   if (!id) return { error: "Please enter your Student ID." }
   const admin = createAdminClient()
 
