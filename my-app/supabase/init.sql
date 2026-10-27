@@ -1094,14 +1094,17 @@ select o.id,
 from public.organizations o;
 
 -- Per-student attendance summary (present/late/absent + %).
+-- count(a.id), not count(*): with the LEFT JOIN, count(*) counted the empty
+-- joined row, so a student with no records showed total=1 / 0% attendance.
+-- 'pending' rows are not a decided outcome, so they're excluded from the rate.
 create or replace view public.student_attendance_summary as
 select s.id as student_id,
-       count(*) filter (where a.status = 'present')                    as present,
-       count(*) filter (where a.status = 'late')                       as late,
-       count(*) filter (where a.status in ('absent','excused_absent')) as absent,
-       count(*)                                                        as total,
-       round(100.0 * count(*) filter (where a.status in ('present','late'))
-             / nullif(count(*),0), 1)                                  as attendance_pct
+       count(a.id) filter (where a.status = 'present')                    as present,
+       count(a.id) filter (where a.status = 'late')                       as late,
+       count(a.id) filter (where a.status in ('absent','excused_absent')) as absent,
+       count(a.id) filter (where a.status <> 'pending')                   as total,
+       round(100.0 * count(a.id) filter (where a.status in ('present','late'))
+             / nullif(count(a.id) filter (where a.status <> 'pending'), 0), 1) as attendance_pct
 from public.students s
 left join public.attendance_records a on a.student_id = s.id
 group by s.id;

@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { assertPermission, getMyPermissions } from "@/lib/auth/permissions"
 import { checkTargetRole } from "@/lib/data/guards"
 import { logActivity } from "@/lib/data/audit"
+import { recordAbsencesForSession } from "@/lib/data/attendance-core"
 import {
   APP_TIMEZONE,
   addDaysYmd,
@@ -326,6 +327,10 @@ export async function updateDashboardSession(
     })
     .eq("id", id)
   if (error) return { error: error.message }
+  if (input.status === "completed") {
+    const abs = await recordAbsencesForSession(admin, id, me.userId)
+    if (abs.error) return { error: `Saved, but absences couldn't be recorded: ${abs.error}` }
+  }
   await logActivity(
     { actorId: me.userId, action: "Updated session", targetType: "session", targetId: id, description: title },
     admin,
@@ -352,6 +357,11 @@ export async function setDashboardSessionStatus(
     .eq("id", id)
   if (error) return { error: error.message }
   if (!count) return { error: "Session not found." }
+  // No-shows become absent so attendance rates are honest.
+  if (status === "completed") {
+    const abs = await recordAbsencesForSession(admin, id, me.userId)
+    if (abs.error) return { error: `Session completed, but absences couldn't be recorded: ${abs.error}` }
+  }
   await logActivity(
     { actorId: me.userId, action: `Session ${status.replace("_", " ")}`, targetType: "session", targetId: id },
     admin,

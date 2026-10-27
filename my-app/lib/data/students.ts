@@ -6,7 +6,9 @@ import { assertPermission } from "@/lib/auth/permissions"
 import { checkTargetRole } from "@/lib/data/guards"
 import { logActivity } from "@/lib/data/audit"
 import { ensureStudentRecord } from "@/lib/data/role-records"
+import { setStudentEnrollment } from "@/lib/data/attendance-core"
 import type {
+  ClassOption,
   MentorOption,
   StudentInput,
   StudentStatus,
@@ -122,7 +124,7 @@ export async function listStudents(): Promise<UIStudent[]> {
   // normally creates the students row, but listing from profiles means a
   // student account can never vanish from this screen if that row is missing
   // (e.g. accounts predating the trigger); saving it then backfills the row.
-  const [{ data: rows, error }, { data: assigns }, { data: att }] = await Promise.all([
+  const [{ data: rows, error }, { data: assigns }, { data: att }, { data: enr }] = await Promise.all([
     admin
       .from("profiles")
       .select(
@@ -136,9 +138,15 @@ export async function listStudents(): Promise<UIStudent[]> {
       .select("student_id, mentor_id, mentor:profiles!mentor_student_assignments_mentor_id_fkey ( full_name )")
       .eq("status", "active")
       .eq("is_primary", true),
-    admin.from("student_attendance_summary").select("student_id, attendance_pct"),
+    admin.from("student_attendance_summary").select("student_id, attendance_pct, total"),
+    admin.from("enrollments").select("student_id, class_id, class:classes ( name )").eq("status", "active"),
   ])
   if (error) throw new Error(error.message)
+
+  const classByStudent = new Map<string, { id: string; name: string }>()
+  for (const e of (enr ?? []) as unknown as { student_id: string; class_id: string | null; class: { name: string | null } | null }[]) {
+    if (e.class_id) classByStudent.set(e.student_id, { id: e.class_id, name: e.class?.name ?? "" })
+  }
 
   const mentorByStudent = new Map<string, { id: string; name: string }>()
   for (const a of (assigns ?? []) as unknown as {
@@ -149,9 +157,11 @@ export async function listStudents(): Promise<UIStudent[]> {
     if (a.student_id && a.mentor_id)
       mentorByStudent.set(a.student_id, { id: a.mentor_id, name: a.mentor?.full_name ?? "" })
   }
-  const attByStudent = new Map<string, number>()
-  for (const a of (att ?? []) as { student_id: string | null; attendance_pct: number | null }[]) {
-    if (a.student_id != null) attByStudent.set(a.student_id, Math.round(a.attendance_pct ?? 0))
+  // null = no attendance recorded yet (shown as "—", not a misleading 0%).
+  const attByStudent = new Map<string, number | null>()
+  for (const a of (att ?? []) as { student_id: string | null; attendance_pct: number | null; total: number | null }[]) {
+    if (a.student_id != null)
+      attByStudent.set(a.student_id, a.total && a.attendance_pct != null ? Math.round(Number(a.attendance_pct)) : null)
   }
 
   return ((rows ?? []) as unknown as ProfileRow[]).map((p) => {
@@ -165,6 +175,8 @@ export async function listStudents(): Promise<UIStudent[]> {
       avatar: p.avatar_url || DEFAULT_AVATAR,
       mentor: mentor?.name ?? "",
       mentorId: mentor?.id ?? "",
+      classId: classByStudent.get(p.id)?.id ?? "",
+      className: classByStudent.get(p.id)?.name ?? "",
       course: s?.course ?? "",
       // profiles.status is what sign-in and the middleware enforce.
       status: p.status === "active" ? "Active" : "Inactive",
@@ -172,7 +184,7 @@ export async function listStudents(): Promise<UIStudent[]> {
         ? new Date(s.enrollment_date).toLocaleDateString("en-US", { timeZone: "UTC" })
         : "",
       performance: {
-        attendance: attByStudent.get(p.id) ?? 0,
+        attendance: attByStudent.get(p.id) ?? null,
         grade: gradeFromGpa(s?.gpa ?? null),
       },
       quickActions: QUICK_ACTIONS,
@@ -181,6 +193,15 @@ export async function listStudents(): Promise<UIStudent[]> {
       attendanceCode: s?.attendance_code ?? "",
     }
   })
+}
+
+/** Classes available in the Add/Edit Student dropdown. */
+export async function listClassOptions(): Promise<ClassOption[]> {
+  await assertPermission("students.manage")
+  const admin = createAdminClient()
+  const { data, error } = await admin.from("classes").select("id, name").order("name", { ascending: true })
+  if (error) throw new Error(error.message)
+  return (data ?? []).map((c) => ({ id: c.id, name: c.name }))
 }
 
 /** Mentors available in the Add/Edit Student dropdown. */
@@ -254,6 +275,9 @@ export async function createStudent(
 
     const asg = await setPrimaryMentor(admin, id, input.mentorId, me.userId)
     if (asg.error) return rollback(asg.error)
+
+    const enr = await setStudentEnrollment(admin, id, input.classId ?? "")
+    if (enr.error) return rollback(enr.error)
   } catch (e) {
     return rollback((e as Error).message)
   }
@@ -321,6 +345,9 @@ export async function updateStudent(
 
   const asg = await setPrimaryMentor(admin, id, input.mentorId, me.userId)
   if (asg.error) return { error: asg.error }
+
+  const enr = await setStudentEnrollment(admin, id, input.classId ?? "")
+  if (enr.error) return { error: enr.error }
 
   await logActivity(
     { actorId: me.userId, action: "Updated student", targetType: "student", targetId: id, description: input.name.trim() },

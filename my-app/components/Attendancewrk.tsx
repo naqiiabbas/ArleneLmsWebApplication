@@ -14,7 +14,9 @@ export default function AttendanceFlow() {
   const [verifying, setVerifying] = useState(false);
   const [codeError, setCodeError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [result, setResult] = useState<{ name: string; status: "present" | "late" } | null>(null);
+  const [result, setResult] = useState<{ name: string; status: "present" | "late"; time?: string } | null>(null);
+  const [greeting, setGreeting] = useState<string | null>(null);
+  const submittingRef = useRef(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -38,12 +40,19 @@ export default function AttendanceFlow() {
     if (verifying || passcode.length < 4) return;
     setCodeError(null);
     setVerifying(true);
-    const res = await verifyAttendanceCode(passcode);
-    setVerifying(false);
+    let res: Awaited<ReturnType<typeof verifyAttendanceCode>>;
+    try {
+      res = await verifyAttendanceCode(passcode);
+    } catch {
+      res = { error: "Couldn't reach the server. Check the connection and try again." };
+    } finally {
+      setVerifying(false);
+    }
     if (res.error) {
       setCodeError(res.error);
       return;
     }
+    setGreeting(res.name ? `Hi ${res.name.split(" ")[0]}!` : null);
     setCurrentStep(2);
   };
 
@@ -53,8 +62,10 @@ export default function AttendanceFlow() {
     setError(null);
     setCodeError(null);
     setResult(null);
+    setGreeting(null);
     setCapturedImg(null);
     hasCapturedRef.current = false;
+    submittingRef.current = false;
   };
 
   const loadModel = async () => {
@@ -66,7 +77,8 @@ export default function AttendanceFlow() {
     modelPromiseRef.current = (async () => {
       const vision = await import("@mediapipe/tasks-vision");
       const filesetResolver = await vision.FilesetResolver.forVisionTasks(
-        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm"
+        // Must match the installed @mediapipe/tasks-vision version (package-lock).
+        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.34/wasm"
       );
 
       const options = {
@@ -139,26 +151,39 @@ export default function AttendanceFlow() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    canvas.width = width;
-    canvas.height = height;
-    ctx.setTransform(-1, 0, 0, 1, width, 0);
+    if (submittingRef.current) return; // auto-capture and the button can both fire
+    submittingRef.current = true;
+
+    // ~640px JPEG (≈50–150 KB) — plenty for photo proof, fast to upload on an iPad.
+    const scale = Math.min(1, 640 / width);
+    const w = Math.round(width * scale);
+    const h = Math.round(height * scale);
+    canvas.width = w;
+    canvas.height = h;
+    ctx.setTransform(-scale, 0, 0, scale, w, 0); // mirror, like the preview
     ctx.drawImage(video, 0, 0, width, height);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    const dataUrl = canvas.toDataURL("image/png");
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.82);
     setCapturedImg(dataUrl);
 
     // Stop the camera/detection and submit the check-in.
     stopDetection();
     stopCamera();
     setSubmitting(true);
-    const res = await markKioskAttendance(passcodeRef.current, dataUrl);
-    setSubmitting(false);
+    let res: Awaited<ReturnType<typeof markKioskAttendance>>;
+    try {
+      res = await markKioskAttendance(passcodeRef.current, dataUrl);
+    } catch {
+      res = { error: "Couldn't reach the server. Please try again." };
+    } finally {
+      setSubmitting(false);
+    }
     if (res.error) {
       setError(res.error);
       setCurrentStep(5);
       return;
     }
-    setResult({ name: res.name ?? "Student", status: res.status ?? "present" });
+    setResult({ name: res.name ?? "Student", status: res.status ?? "present", time: res.time });
     setCurrentStep(4);
   }, [stopDetection, stopCamera]);
 
@@ -312,6 +337,14 @@ export default function AttendanceFlow() {
     };
   }, [stopCamera, stopDetection]);
 
+  // Shared iPad: return to the start screen on its own so the next student isn't
+  // left looking at someone else's result.
+  useEffect(() => {
+    if (currentStep !== 4 && currentStep !== 5) return;
+    const t = window.setTimeout(resetFlow, currentStep === 4 ? 6000 : 12000);
+    return () => window.clearTimeout(t);
+  }, [currentStep]);
+
   const Logo = ({ size = "normal" }: { size?: "normal" | "large" }) => (
     <div className={`${size === "large" ? "h-[154px] w-[228px]" : "h-[160px] w-[256px] max-sm:h-[98px] max-sm:w-[158px]"} overflow-hidden rounded-[12px] bg-[#F9A618]`}>
       <img src="/images/attendance-logo.svg" alt="100 Black Men of Orange County" className="h-full w-full object-contain" />
@@ -381,7 +414,7 @@ export default function AttendanceFlow() {
       {(currentStep === 2 || currentStep === 3) && (
         <div className="flex min-h-screen flex-col items-center px-5 pb-[28px] pt-[84px] max-[700px]:pt-[165px]">
           <h2 className={`text-center font-bold leading-none tracking-[0] text-[#0a0a0a] ${currentStep === 2 ? "text-[48px] max-sm:text-[34px]" : "text-[48px] max-sm:text-[38px]"}`}>
-            {currentStep === 2 ? "Position Your Face in the Frame" : "Ready to Capture"}
+            {currentStep === 2 ? `${greeting ? greeting + " " : ""}Position Your Face in the Frame` : "Hold Still…"}
           </h2>
           <div className="relative mt-[34px] h-[528px] w-full max-w-[640px] overflow-hidden rounded-[12px] border border-[#737373] bg-white max-sm:h-[440px]">
             {isLoadingModel && (
@@ -392,21 +425,14 @@ export default function AttendanceFlow() {
             )}
             {error ? <div className="absolute inset-0 z-30 flex items-center justify-center bg-white p-6 text-center text-[22px] font-normal text-[#4d4d4d]">{error}</div> : null}
 
-            <video ref={videoRef} autoPlay playsInline muted className="absolute inset-0 h-full w-full scale-x-[-1] object-cover opacity-0" />
+            <video ref={videoRef} autoPlay playsInline muted className={`absolute inset-0 h-full w-full scale-x-[-1] object-cover ${stream ? "opacity-100" : "opacity-0"}`} />
 
-            {currentStep === 2 ? (
-              <div className="absolute inset-0 z-10 flex items-center justify-center">
-                <div className="flex h-[460px] w-[376px] items-center justify-center rounded-[190px] border-[3px] border-[#F9A618] shadow-[0_3px_5px_rgba(0,0,0,0.24)] max-sm:h-[350px] max-sm:w-[286px]">
-                  <FaceMark label="Camera Preview" />
-                </div>
+            {/* Face guide over the LIVE preview; the placeholder only shows until the camera starts. */}
+            <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
+              <div className={`flex h-[460px] w-[376px] items-center justify-center rounded-[190px] border-[3px] shadow-[0_3px_5px_rgba(0,0,0,0.24)] transition-colors max-sm:h-[350px] max-sm:w-[286px] ${currentStep === 3 ? "border-[#12C79A]" : "border-[#F9A618]"}`}>
+                {!stream && <FaceMark label="Camera Preview" />}
               </div>
-            ) : null}
-
-            {currentStep === 3 ? (
-              <div className="absolute inset-0 z-10 flex items-center justify-center">
-                <FaceMark label="Ready to Capture" large />
-              </div>
-            ) : null}
+            </div>
           </div>
           <div className="flex w-full flex-col items-center">
             {currentStep === 3 ? (
@@ -437,8 +463,10 @@ export default function AttendanceFlow() {
             {result?.status === "late" ? "Marked Late" : "Attendance Marked"}
             {result?.name ? `, ${result.name.split(" ")[0]}` : ""}
           </h1>
-          <p className="mt-[18px] text-[28px] font-medium leading-none opacity-95 max-sm:text-[22px]">You may now take your seat</p>
-          <p className="mt-[40px] text-[18px] font-normal leading-none opacity-80">Tap anywhere to finish</p>
+          <p className="mt-[18px] text-[28px] font-medium leading-none opacity-95 max-sm:text-[22px]">
+            {result?.time ? `Checked in at ${result.time}. ` : ""}You may now take your seat
+          </p>
+          <p className="mt-[40px] text-[18px] font-normal leading-none opacity-80">Tap anywhere to finish — resets automatically</p>
         </div>
       )}
 

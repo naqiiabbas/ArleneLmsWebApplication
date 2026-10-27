@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { assertMentor } from "@/lib/data/guards"
 import { logActivity, notifyAdmins } from "@/lib/data/audit"
 import { avatarFileError, removeAvatarObject, storeAvatar } from "@/lib/data/avatar"
+import { recordAbsencesForSession } from "@/lib/data/attendance-core"
 import {
   APP_TIMEZONE,
   addDaysYmd,
@@ -178,7 +179,8 @@ export async function getAssignedStudents(): Promise<MentorStudent[]> {
       avatar: s.profiles?.avatar_url || DEFAULT_AVATAR,
       school: s.school ?? "",
       grade: s.academic_year ?? "",
-      riskLevel: riskFromAttendance(a.pct),
+      // No records yet is "no data", not 0% attendance — don't flag new students.
+      riskLevel: a.total ? riskFromAttendance(a.pct) : "Low",
       attendance: a.pct,
       totalSessions: a.total,
       email: s.profiles?.email ?? "",
@@ -301,7 +303,8 @@ export async function getMentorDashboard(): Promise<MentorDashboard> {
       : Promise.resolve({ data: [] as unknown[] }),
   ])
 
-  const alerts = (summaryRes.data ?? []).filter((s) => Number(s.attendance_pct ?? 0) < 70).length
+  // Only students with recorded attendance can be "below 70%".
+  const alerts = (summaryRes.data ?? []).filter((s) => s.attendance_pct != null && Number(s.attendance_pct) < 70).length
 
   const sessions = (sessionsRes.data ?? []).map((s) => ({
     id: s.id,
@@ -384,18 +387,31 @@ export async function getMentorAttendance(): Promise<MentorAttendanceRow[]> {
     .eq("mentor_id", userId)
     .eq("status", "active")
   const ids = (assigns ?? []).map((a) => a.student_id)
-  if (ids.length === 0) return []
 
-  const { data, error } = await admin
-    .from("attendance_records")
-    .select(
-      "id, attendance_date, status, notes, student_id, student:students ( profile:profiles ( full_name, avatar_url ) ), session:class_sessions ( title ), class:classes ( name )",
-    )
-    .in("student_id", ids)
-    .order("attendance_date", { ascending: false })
-    .order("marked_at", { ascending: false })
-    .limit(200)
+  // Plus every check-in at a session this mentor runs — a student enrolled in
+  // their class but not formally assigned to them must still show up here.
+  const { data: own } = await admin.from("class_sessions").select("id").eq("mentor_id", userId)
+  const sessionIds = (own ?? []).map((s) => s.id)
+  if (ids.length === 0 && sessionIds.length === 0) return []
+
+  const cols =
+    "id, attendance_date, marked_at, status, notes, student_id, student:students ( profile:profiles ( full_name, avatar_url ) ), session:class_sessions ( title ), class:classes ( name )"
+  const [byStudent, bySession] = await Promise.all([
+    ids.length
+      ? admin.from("attendance_records").select(cols).in("student_id", ids).order("attendance_date", { ascending: false }).limit(200)
+      : Promise.resolve({ data: [], error: null }),
+    sessionIds.length
+      ? admin.from("attendance_records").select(cols).in("session_id", sessionIds).order("attendance_date", { ascending: false }).limit(200)
+      : Promise.resolve({ data: [], error: null }),
+  ])
+  const error = byStudent.error ?? bySession.error
   if (error) throw new Error(error.message)
+  type Rec = { id: string; attendance_date: string | null; marked_at: string | null }
+  const merged = new Map<string, Rec>()
+  for (const r of [...(byStudent.data ?? []), ...(bySession.data ?? [])] as unknown as Rec[]) merged.set(r.id, r)
+  const data = [...merged.values()]
+    .sort((x, y) => (y.attendance_date ?? "").localeCompare(x.attendance_date ?? "") || (y.marked_at ?? "").localeCompare(x.marked_at ?? ""))
+    .slice(0, 200)
 
   return ((data ?? []) as unknown as {
     id: string
@@ -432,32 +448,37 @@ export async function updateMentorAttendance(
   }
   const admin = createAdminClient()
 
-  // Ensure the record belongs to a student assigned to this mentor.
+  // The record must be for a student assigned to this mentor, or from one of
+  // this mentor's own sessions (the same scope as getMentorAttendance).
   const { data: rec } = await admin
     .from("attendance_records")
-    .select("student_id")
+    .select("student_id, status, session:class_sessions ( mentor_id )")
     .eq("id", id)
     .maybeSingle()
   if (!rec) return { error: "Attendance record not found." }
+  const ownSession = (rec as unknown as { session: { mentor_id: string | null } | null }).session?.mentor_id === userId
 
-  const { data: link } = await admin
-    .from("mentor_student_assignments")
-    .select("student_id")
-    .eq("mentor_id", userId)
-    .eq("student_id", rec.student_id)
-    .eq("status", "active")
-    .maybeSingle()
-  if (!link) return { error: "This student is not assigned to you." }
+  if (!ownSession) {
+    const { data: link } = await admin
+      .from("mentor_student_assignments")
+      .select("student_id")
+      .eq("mentor_id", userId)
+      .eq("student_id", rec.student_id)
+      .eq("status", "active")
+      .maybeSingle()
+    if (!link) return { error: "This student is not assigned to you." }
+  }
 
+  // Only a real status change is a new manual marking. Editing just the notes
+  // used to overwrite the kiosk's check-in time and "selfie" method.
   const dbStatus = UI_TO_DB_STATUS[status]
+  const statusChanged = rec.status !== dbStatus
   const { error } = await admin
     .from("attendance_records")
     .update({
       status: dbStatus,
       notes: notes.trim() || null,
-      method: "manual",
-      marked_by: userId,
-      marked_at: new Date().toISOString(),
+      ...(statusChanged && { method: "manual" as const, marked_by: userId, marked_at: new Date().toISOString() }),
     })
     .eq("id", id)
   if (error) return { error: error.message }
@@ -887,6 +908,12 @@ export async function setMentorSessionStatus(
   }
   const { error } = await admin.from("class_sessions").update({ status }).eq("id", id)
   if (error) return { error: error.message }
+  // Enrolled students who never checked in become absent, so attendance rates
+  // count no-shows too.
+  if (status === "completed") {
+    const abs = await recordAbsencesForSession(admin, id, userId)
+    if (abs.error) return { error: `Session completed, but absences couldn't be recorded: ${abs.error}` }
+  }
   await logActivity(
     { actorId: userId, action: `Session ${SESSION_STATUS_LABEL[status]?.toLowerCase() ?? status}`, targetType: "session", targetId: id },
     admin,

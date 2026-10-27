@@ -6,11 +6,12 @@ import { ChevronDown, Eye, IdCard, KeyRound, Mail, MapPin, Phone, Plus, Search, 
 import {
   listStudents,
   listMentorOptions,
+  listClassOptions,
   createStudent,
   updateStudent,
   deleteStudent,
 } from "@/lib/data/students";
-import type { MentorOption, UIStudent } from "@/lib/data/students.types";
+import type { ClassOption, MentorOption, UIStudent } from "@/lib/data/students.types";
 
 type StudentStatus = "Active" | "Inactive";
 
@@ -26,6 +27,7 @@ interface FormState {
   phone: string;
   status: StudentStatus;
   mentorId: string;
+  classId: string;
   course: string;
   address: string;
 }
@@ -36,6 +38,7 @@ const emptyForm: FormState = {
   phone: "",
   status: "Active",
   mentorId: "",
+  classId: "",
   course: "",
   address: "",
 };
@@ -149,6 +152,7 @@ function StudentForm({
   form,
   setForm,
   mentors,
+  classes,
   mentorsLoading,
   onBack,
   onSave,
@@ -162,6 +166,7 @@ function StudentForm({
   form: FormState;
   setForm: React.Dispatch<React.SetStateAction<FormState>>;
   mentors: MentorOption[];
+  classes: ClassOption[];
   mentorsLoading: boolean;
   onBack: () => void;
   onSave: () => void;
@@ -267,6 +272,31 @@ function StudentForm({
           </label>
 
           <label>
+            <span className={labelClass}>Class</span>
+            {/* Enrollment is what lets the iPad kiosk find the student's session.
+                Nothing used to set it, so every kiosk check-in failed. */}
+            <span className="relative block">
+              <select
+                className={`${inputClass} appearance-none pr-9`}
+                value={form.classId}
+                disabled={mentorsLoading}
+                onChange={(e) => setForm((s) => ({ ...s, classId: e.target.value }))}
+              >
+                <option value="">{mentorsLoading ? "Loading classes..." : "Not enrolled"}</option>
+                {classes.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+              <ChevronDown size={18} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#666666]" />
+            </span>
+            {!mentorsLoading && !form.classId && (
+              <span className="mt-[6px] block text-[12px] text-[#c2410c]">
+                Without a class the student can't check in at the iPad kiosk.
+              </span>
+            )}
+          </label>
+
+          <label>
             <span className={labelClass}>Course</span>
             <input
               className={inputClass}
@@ -367,6 +397,7 @@ function StudentDetails({
               <InfoBlock icon={<Phone size={15} />} label="Phone" value={student.phone} />
               <InfoBlock label="Enrollment Date" value={student.enrollmentDate} />
               <InfoBlock label="Current Mentor" value={student.mentor || "Unassigned"} />
+              <InfoBlock label="Class" value={student.className || "Not enrolled"} />
               <InfoBlock label="Course" value={student.course} />
               <InfoBlock icon={<MapPin size={15} />} label="Address" value={student.address} />
             </div>
@@ -399,10 +430,10 @@ function StudentDetails({
             <div className="mb-[20px]">
               <div className="mb-[6px] flex items-start justify-between text-[16px] font-normal text-[#666666]">
                 <span>Attendance</span>
-                <span className="text-[16px] text-[#111111]">{student.performance.attendance}%</span>
+                <span className="text-[16px] text-[#111111]">{student.performance.attendance == null ? "No records yet" : `${student.performance.attendance}%`}</span>
               </div>
               <div className="h-[7px] overflow-hidden rounded-full bg-[#e5e5e5]">
-                <div className="h-full rounded-full bg-[#F9A618]" style={{ width: `${student.performance.attendance}%` }} />
+                <div className="h-full rounded-full bg-[#F9A618]" style={{ width: `${student.performance.attendance ?? 0}%` }} />
               </div>
             </div>
             <div>
@@ -472,6 +503,7 @@ export default function Studentmanagement() {
   const [form, setForm] = useState<FormState>(emptyForm);
   const [deleteTarget, setDeleteTarget] = useState<Student | null>(null);
   const [mentors, setMentors] = useState<MentorOption[]>([]);
+  const [classes, setClasses] = useState<ClassOption[]>([]);
   const [mentorsLoading, setMentorsLoading] = useState(false);
 
   const refresh = async (): Promise<Student[]> => {
@@ -488,13 +520,17 @@ export default function Studentmanagement() {
     }
   };
 
-  // Fetched each time a form opens so a mentor added in another tab shows up.
-  const loadMentors = async () => {
+  // Fetched each time a form opens so a mentor/class added elsewhere shows up.
+  // When adding a student and only one class exists, preselect it.
+  const loadMentors = async (preselectClass = false) => {
     setMentorsLoading(true);
     try {
-      setMentors(await listMentorOptions());
+      const [m, c] = await Promise.all([listMentorOptions(), listClassOptions()]);
+      setMentors(m);
+      setClasses(c);
+      if (preselectClass && c.length === 1) setForm((f) => (f.classId ? f : { ...f, classId: c[0].id }));
     } catch (e) {
-      setFormError(`Could not load mentors: ${(e as Error).message}`);
+      setFormError(`Could not load mentors/classes: ${(e as Error).message}`);
     } finally {
       setMentorsLoading(false);
     }
@@ -581,7 +617,8 @@ export default function Studentmanagement() {
       { label: "Mentor", value: student.mentor },
       { label: "Course", value: student.course },
       { label: "Status", value: student.status },
-      { label: "Attendance", value: `${student.performance.attendance}%` },
+      { label: "Class", value: student.className },
+      { label: "Attendance", value: student.performance.attendance == null ? "No records yet" : `${student.performance.attendance}%` },
       { label: "Grade", value: student.performance.grade },
       { label: "Address", value: student.address },
     ]);
@@ -613,7 +650,7 @@ export default function Studentmanagement() {
     setForm(emptyForm);
     setFormError("");
     setView("add");
-    loadMentors();
+    loadMentors(true);
   };
 
   const openDetail = (s: Student) => {
@@ -669,6 +706,7 @@ export default function Studentmanagement() {
       phone: s.phone,
       status: s.status,
       mentorId: s.mentorId,
+      classId: s.classId,
       course: s.course,
       address: s.address,
     });
@@ -736,6 +774,7 @@ export default function Studentmanagement() {
         form={form}
         setForm={setForm}
         mentors={mentors}
+        classes={classes}
         mentorsLoading={mentorsLoading}
         onBack={resetList}
         onSave={view === "add" ? saveNew : saveEdit}

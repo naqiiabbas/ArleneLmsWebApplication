@@ -253,6 +253,20 @@ in `lib/data/me.ts` (guard `assertActiveUser()` — new in `guards.ts`). After a
   "Student ID" tab → `startResetByStudentId` (student_code → email → send code). **Requires** the
   Supabase Reset-Password email template to include `{{ .Token }}` so the code is emailed.
 - **Student panel COMPLETE** — every screen + kiosk + auth flow wired.
+- **iPad kiosk rules (fixed 2026-10-27; `lib/data/kiosk.ts` + `lib/data/attendance-core.ts`):** a
+  student can only check in with an **active enrollment** (`enrollments`) in a class that has a
+  non-cancelled session **today (Pacific)**. Enrollment is set by the **Class** dropdown in admin
+  Student Management (`setStudentEnrollment`) — before this, nothing created enrollments, so every
+  check-in failed. The session used is the one still running or next up (not the day's first).
+  Check-in opens **60 min before start**; present vs late uses
+  `system_settings.attendance.late_grace_minutes` (default 10); the photo is required per
+  `attendance.require_photo`; inactive students are blocked; a repeat check-in is refused (never
+  overwritten). Problems are reported at the **code step**, before the camera opens.
+- **Absences:** completing a session (mentor calendar or admin dashboard) runs
+  `recordAbsencesForSession` — enrolled **active** students with no record get `absent` (method
+  manual). Without it no-shows had no row and attendance % only counted days attended.
+  `student_attendance_summary` now uses `count(a.id)` (count(*) gave new students total=1 / 0%) and
+  ignores `pending` rows.
 
 ## 5d. Sponsor Panel (COMPLETE)
 
