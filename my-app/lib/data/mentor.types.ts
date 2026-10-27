@@ -88,6 +88,13 @@ export interface MentorClassOption {
   name: string
 }
 
+/** New class created from the mentor Calendar ("+ New class"). */
+export interface MentorClassInput {
+  name: string
+  batch: string // optional label, e.g. "Fall 2026"
+  location: string // optional default meeting place
+}
+
 export type SessionStatus = "scheduled" | "in_progress" | "completed" | "cancelled"
 
 export interface MentorSession {

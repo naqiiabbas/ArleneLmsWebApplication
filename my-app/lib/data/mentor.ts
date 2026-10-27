@@ -21,6 +21,7 @@ import type {
   MentorAttendanceRow,
   MentorAttendanceStatus,
   MentorClassOption,
+  MentorClassInput,
   MentorDashboard,
   MentorDocument,
   MentorNote,
@@ -820,6 +821,44 @@ async function ownSession(
   if (!data) return { error: "Session not found." }
   if (data.mentor_id !== userId) return { error: "You can only change your own sessions." }
   return { status: data.status }
+}
+
+/**
+ * Create a class from the mentor Calendar. Sessions must belong to a class, and
+ * there was no screen anywhere to create one — on a fresh database (the
+ * self-hosted move) the class list was empty and mentors couldn't schedule at
+ * all. Students are enrolled in it from admin Student Management.
+ */
+export async function createMentorClass(
+  input: MentorClassInput,
+): Promise<{ error?: string; class?: MentorClassOption }> {
+  let userId: string
+  try {
+    ;({ userId } = await assertMentor())
+  } catch (e) {
+    return { error: (e as Error).message }
+  }
+  const name = (input.name ?? "").trim().replace(/\s+/g, " ") // collapse runs of whitespace
+  const batch = (input.batch ?? "").trim()
+  const location = (input.location ?? "").trim()
+  if (!name) return { error: "Please enter a class name." }
+  if (name.length > 80) return { error: "Class name is too long (80 characters max)." }
+  if (batch.length > 60) return { error: "Batch is too long (60 characters max)." }
+
+  const admin = createAdminClient()
+  // Names aren't unique in the schema; stop accidental duplicates (case-insensitive).
+  const { data: dupes } = await admin.from("classes").select("id, name").ilike("name", name)
+  const dupe = (dupes ?? []).find((c) => c.name.trim().toLowerCase() === name.toLowerCase())
+  if (dupe) return { error: `A class called "${dupe.name}" already exists — pick it from the list.` }
+
+  const { data, error } = await admin
+    .from("classes")
+    .insert({ name, batch: batch || null, location: location || null, timezone: APP_TIMEZONE })
+    .select("id, name")
+    .single()
+  if (error) return { error: error.message }
+  await logActivity({ actorId: userId, action: "Created class", targetType: "class", targetId: data.id, description: name }, admin)
+  return { class: { id: data.id, name: data.name } }
 }
 
 /** Schedule a new class session run by the current mentor. */

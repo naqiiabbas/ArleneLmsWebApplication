@@ -262,6 +262,11 @@ in `lib/data/me.ts` (guard `assertActiveUser()` — new in `guards.ts`). After a
   `system_settings.attendance.late_grace_minutes` (default 10); the photo is required per
   `attendance.require_photo`; inactive students are blocked; a repeat check-in is refused (never
   overwritten). Problems are reported at the **code step**, before the camera opens.
+- **Classes:** mentors create them from the Calendar's session form (**"+ New class"** →
+  `createMentorClass` in `lib/data/mentor.ts`: name required, case-insensitive duplicate check,
+  optional batch/location, timezone = Pacific). Before this there was no way to create a class, and
+  `init.sql` seeds none — so on the fresh self-hosted DB mentors could not schedule any session.
+  Admins still have no class screen; they enrol students via Student Management → Class.
 - **Absences:** completing a session (mentor calendar or admin dashboard) runs
   `recordAbsencesForSession` — enrolled **active** students with no record get `absent` (method
   manual). Without it no-shows had no row and attendance % only counted days attended.

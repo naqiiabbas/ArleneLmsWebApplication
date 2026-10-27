@@ -18,6 +18,7 @@ import {
 import {
   getMentorCalendar,
   createMentorSession,
+  createMentorClass,
   updateMentorSession,
   setMentorSessionStatus,
   deleteMentorSession,
@@ -106,6 +107,11 @@ const inputCls =
 export default function CalendarSection() {
   const [sessions, setSessions] = useState<MentorSession[]>([]);
   const [classes, setClasses] = useState<MentorClassOption[]>([]);
+  // "+ New class" panel inside the session form.
+  const [newClassOpen, setNewClassOpen] = useState(false);
+  const [newClass, setNewClass] = useState({ name: "", batch: "", location: "" });
+  const [classSaving, setClassSaving] = useState(false);
+  const [classError, setClassError] = useState("");
   const [today, setToday] = useState(() => formatLocalDate(new Date()));
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState<Notice | null>(null);
@@ -196,7 +202,42 @@ export default function CalendarSection() {
 
   const goToday = () => setAnchor(parseYmd(today));
 
+  const openNewClass = () => {
+    setNewClass({ name: "", batch: "", location: "" });
+    setClassError("");
+    setNewClassOpen(true);
+  };
+
+  const handleCreateClass = async () => {
+    if (classSaving) return;
+    if (!newClass.name.trim()) {
+      setClassError("Please enter a class name.");
+      return;
+    }
+    setClassSaving(true);
+    setClassError("");
+    let res: Awaited<ReturnType<typeof createMentorClass>>;
+    try {
+      res = await createMentorClass(newClass);
+    } catch (err) {
+      res = { error: (err as Error).message || "Something went wrong. Please try again." };
+    } finally {
+      setClassSaving(false);
+    }
+    if (res.error || !res.class) {
+      setClassError(res.error ?? "Could not create the class.");
+      return;
+    }
+    const created = res.class;
+    setClasses((cs) => [...cs, created].sort((a, b) => a.name.localeCompare(b.name)));
+    setForm((f) => ({ ...f, classId: created.id })); // ready to schedule straight away
+    setNewClassOpen(false);
+  };
+
   const openCreate = (date?: string) => {
+    setNewClassOpen(classes.length === 0);
+    setNewClass({ name: "", batch: "", location: "" });
+    setClassError("");
     setEditing(null);
     setForm(emptyForm(date ?? today));
     setFormError("");
@@ -440,16 +481,57 @@ export default function CalendarSection() {
           <div className="px-[24px] pb-[30px] pt-[28px]">
             <ModalError msg={formError} />
             <div className="mb-[16px]">
-              <label className={labelCls}>Class<span className="text-[#ff4d4f]">*</span></label>
+              <div className="mb-[10px] flex items-center justify-between">
+                <label className={labelCls.replace("mb-[10px] ", "")}>Class<span className="text-[#ff4d4f]">*</span></label>
+                {!editing && !newClassOpen && (
+                  <button type="button" onClick={openNewClass} className="flex items-center gap-[4px] text-[14px] font-semibold text-[#ffa313] hover:underline">
+                    <Plus size={15} strokeWidth={2.2} /> New class
+                  </button>
+                )}
+              </div>
               <div className="relative">
                 <select value={form.classId} onChange={(e) => setForm({ ...form, classId: e.target.value })} className={`${inputCls} appearance-none pr-[42px] text-[#666666]`}>
-                  <option value="">{classes.length ? "Select a class..." : "No classes available"}</option>
+                  <option value="">{classes.length ? "Select a class..." : "No classes yet — create one below"}</option>
                   {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
                 <ChevronDown className="pointer-events-none absolute right-[13px] top-1/2 -translate-y-1/2 text-[#657183]" size={20} strokeWidth={1.8} />
               </div>
-              {classes.length === 0 && (
-                <p className="mt-[6px] text-[12px] text-[#999999]">No classes exist yet — ask an administrator to create one.</p>
+              {newClassOpen && !editing && (
+                <div className="mt-[12px] rounded-[8px] border border-[#ffd9a0] bg-[#fffaf0] p-[14px]">
+                  <p className="mb-[10px] text-[14px] font-semibold text-[#2d3b4f]">
+                    {classes.length ? "Create a new class" : "Create your first class"}
+                  </p>
+                  {classError && <p className="mb-[10px] text-[13px] font-medium text-red-600">{classError}</p>}
+                  <input
+                    value={newClass.name}
+                    maxLength={80}
+                    autoFocus
+                    onChange={(e) => setNewClass({ ...newClass, name: e.target.value })}
+                    onKeyDown={(e) => {
+                      // Enter here creates the class — it must not submit the session form.
+                      if (e.key === "Enter") { e.preventDefault(); handleCreateClass(); }
+                    }}
+                    placeholder="Class name, e.g. Leadership 101 *"
+                    className={`${inputCls} mb-[10px]`}
+                  />
+                  <div className="mb-[12px] grid grid-cols-1 gap-[10px] sm:grid-cols-2">
+                    <input value={newClass.batch} maxLength={60} onChange={(e) => setNewClass({ ...newClass, batch: e.target.value })} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleCreateClass(); } }} placeholder="Batch (optional), e.g. Fall 2026" className={inputCls} />
+                    <input value={newClass.location} onChange={(e) => setNewClass({ ...newClass, location: e.target.value })} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleCreateClass(); } }} placeholder="Location (optional)" className={inputCls} />
+                  </div>
+                  <div className="flex items-center gap-[10px]">
+                    <button type="button" disabled={classSaving} onClick={handleCreateClass} className="h-[36px] rounded-[8px] bg-[#ffa313] px-[16px] text-[14px] font-semibold text-white transition hover:bg-[#f59a0d] disabled:opacity-60">
+                      {classSaving ? "Creating…" : "Create class"}
+                    </button>
+                    {classes.length > 0 && (
+                      <button type="button" disabled={classSaving} onClick={() => setNewClassOpen(false)} className="h-[36px] rounded-[8px] border border-[#d6dce3] bg-white px-[14px] text-[14px] font-semibold text-[#2d3b4f] hover:bg-[#f7f8fa] disabled:opacity-60">
+                        Cancel
+                      </button>
+                    )}
+                  </div>
+                  <p className="mt-[10px] text-[12px] text-[#999999]">
+                    Students are added to a class by an administrator (Student Management → Class), which is what lets them check in at the kiosk.
+                  </p>
+                </div>
               )}
             </div>
             <div className="mb-[16px]">
