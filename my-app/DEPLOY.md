@@ -1,16 +1,17 @@
 # Deploying to a server (Docker + Caddy)
 
-The app is a **Next.js** server (App Router) that talks to **hosted Supabase**
-(DB, Auth, Storage). Only the Next.js app is containerized; Supabase stays in the
-cloud, so there is no database to run on the server. A **Caddy** container in front
-of it terminates TLS for the public domain.
+The app is a **Next.js** server (App Router) that talks to **self-hosted Supabase**
+(Postgres, Auth, Storage) running on the **same EC2 instance** as a second compose
+project in `~/supabase/docker` — see [Self-hosted Supabase](#self-hosted-supabase).
+A **Caddy** container in front terminates TLS for `admin.100bmoc.org` and routes
+`/auth/v1`, `/rest/v1`, `/storage/v1` to Supabase and everything else to the app.
 
 ## What you need on the server
 - Docker Engine + the Docker Compose plugin (`docker compose version` should work).
-- The Supabase project's API values (Dashboard → Project Settings → API):
-  - `NEXT_PUBLIC_SUPABASE_URL`
-  - `NEXT_PUBLIC_SUPABASE_ANON_KEY` (publishable / anon key)
-  - `SUPABASE_SERVICE_ROLE_KEY` (**secret** — server only)
+- The self-hosted Supabase stack running (its `.env` holds the keys below):
+  - `NEXT_PUBLIC_SUPABASE_URL` — the LMS's own public URL (`https://admin.100bmoc.org`)
+  - `NEXT_PUBLIC_SUPABASE_ANON_KEY` — `ANON_KEY` from `~/supabase/docker/.env`
+  - `SUPABASE_SERVICE_ROLE_KEY` — `SERVICE_ROLE_KEY` from the same file (**secret**)
 
 ## Key env facts
 - `NEXT_PUBLIC_*` are **baked into the browser bundle at build time** → they are
@@ -136,13 +137,11 @@ First boot takes a few minutes: the app image builds, then Caddy completes the A
 challenge. Once the Caddy log shows `certificate obtained successfully`, the site is
 live at **https://100bmoc.org** (and `www` 301-redirects to it).
 
-### 4. Supabase — add the origin (required, once)
+### 4. Supabase
 
-Dashboard → **Authentication → URL Configuration**:
-- **Site URL:** `https://100bmoc.org`
-- **Redirect URLs:** add `https://100bmoc.org/**`
-
-Password-reset and student OTP email links break if this is skipped.
+Supabase runs on this server — set it up per [Self-hosted Supabase](#self-hosted-supabase).
+Auth's Site URL / redirect allow-list live in `~/supabase/docker/.env`
+(`SITE_URL`, `ADDITIONAL_REDIRECT_URLS`), not in a dashboard.
 
 ### 5. Lock down the security group
 
@@ -173,6 +172,85 @@ docker compose down          # keeps the cert volume
 
 ---
 
+## Self-hosted Supabase
+
+The official Supabase Docker stack (upstream `supabase/supabase` → `docker/`),
+trimmed for the 4 GB instance by [supabase/selfhost/docker-compose.arlene.yml](supabase/selfhost/docker-compose.arlene.yml):
+Studio, Envoy gateway, Postgres 17, Auth, PostgREST, Storage, postgres-meta run;
+Realtime, Edge Functions, Supavisor and imgproxy are off (the LMS uses none of them).
+
+| Path on server | What |
+|---|---|
+| `~/supabase/docker/` | upstream compose + our override; `docker compose …` from here |
+| `~/supabase/docker/.env` | all secrets (Postgres password, JWT secret, anon/service keys, Studio login). `chmod 600`, never commit |
+| `~/supabase/docker/volumes/db/data` | Postgres data |
+| `~/supabase/docker/volumes/storage` | uploaded files |
+| `~/supabase/initial-admin.txt` | first super-admin login — delete once the password is changed |
+
+**Networking.** Nothing is published publicly. The gateway joins the LMS's
+`arlene-lms_default` network as `supabase-envoy`; Caddy forwards only
+`/auth/v1/*`, `/rest/v1/*`, `/storage/v1/*` to it. Port 8000 is bound to
+`127.0.0.1` for Studio. Postgres is not exposed at all.
+
+**Fresh install** (what was done on 2026-10-27):
+
+```bash
+git clone --depth 1 --filter=blob:none --sparse https://github.com/supabase/supabase ~/supabase
+cd ~/supabase && git sparse-checkout set docker && cd docker
+cp ~/ArleneLmsWebApplication/my-app/supabase/selfhost/docker-compose.arlene.yml .
+cp .env.example .env && chmod 600 .env
+sh utils/generate-keys.sh --update-env      # fresh secrets
+# then set in .env:
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.arlene.yml
+#   SUPABASE_PUBLIC_URL=https://admin.100bmoc.org
+#   API_EXTERNAL_URL=https://admin.100bmoc.org/auth/v1
+#   SITE_URL=https://admin.100bmoc.org
+#   ADDITIONAL_REDIRECT_URLS=https://admin.100bmoc.org/**
+#   DISABLE_SIGNUP=true   ENABLE_PHONE_SIGNUP=false   (accounts are created by admins only)
+docker compose up -d --wait
+
+# schema (one transaction; all-or-nothing)
+docker exec -i supabase-db psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+  --single-transaction < ~/ArleneLmsWebApplication/my-app/supabase/init.sql
+```
+
+Then copy `ANON_KEY` / `SERVICE_ROLE_KEY` into the LMS `.env` and rebuild the app.
+
+> `DISABLE_SIGNUP=true` matters: `handle_new_user` takes the role from user
+> metadata, so open sign-up would let anyone register as `super_admin`.
+
+**Studio (DB dashboard).** From your machine:
+`ssh -i arlene-ec2-key.pem -L 8000:127.0.0.1:8000 ubuntu@3.101.143.234`, then open
+<http://localhost:8000> — login is `DASHBOARD_USERNAME` / `DASHBOARD_PASSWORD` from
+the stack's `.env`.
+
+**Schema changes.** Write the migration, apply it with
+`docker exec -i supabase-db psql -U postgres -d postgres -v ON_ERROR_STOP=1 --single-transaction < migration.sql`,
+update `init.sql`, then `npm run types:gen` locally.
+
+**Email (SMTP) — not configured yet.** Self-hosted Auth has no built-in mailer, so
+password-reset and student-OTP emails do not send until `SMTP_*` in the stack's
+`.env` are filled in (then `docker compose up -d auth`). The student OTP flow also
+needs a custom recovery template containing `{{ .Token }}`, set via
+`GOTRUE_MAILER_TEMPLATES_RECOVERY` (a URL to the HTML template). Admin-created
+accounts and normal password logins work without SMTP.
+
+**Backups.** [supabase/selfhost/backup.sh](supabase/selfhost/backup.sh) dumps the
+database (incl. auth users) and archives stored files to `~/backups`, keeping 14 days.
+Install it on the server:
+
+```bash
+cp ~/ArleneLmsWebApplication/my-app/supabase/selfhost/backup.sh ~/supabase/ && chmod 700 ~/supabase/backup.sh
+(crontab -l 2>/dev/null; echo "15 3 * * * /home/ubuntu/supabase/backup.sh >> /home/ubuntu/backups/backup.log 2>&1") | crontab -
+```
+
+Those copies live on the same disk — also take EBS snapshots or copy `~/backups` to S3.
+
+**Updating Supabase.** Back up first, then from `~/supabase/docker`:
+`sh update.sh --dry-run`, `sh update.sh`, `docker compose pull && docker compose up -d`.
+
+---
+
 ## Troubleshooting TLS
 
 | Symptom | Cause / fix |
@@ -189,7 +267,9 @@ docker compose down          # keeps the cert volume
 
 - **Instance Name**: `arlene-lms-production`
 - **Public IP**: `3.101.143.234`
-- **Domain**: `100bmoc.org` (root A record + `www` CNAME), DNS managed by the client
+- **Domain**: `admin.100bmoc.org` (A record → this IP), DNS managed by the client.
+  The apex `100bmoc.org` is a separate WordPress site on another instance.
+- **Swap**: 2 GiB `/swapfile` (`vm.swappiness=10`) — headroom for the Supabase stack
 - **OS / AMI**: Canonical Ubuntu 24.04 LTS, 64-bit amd64 (`ami-032cd1a6d943449a4`)
 - **Instance Type**: `t2.medium` (2 vCPU, 4.0 GiB RAM)
 - **Root Storage**: 30 GiB (gp3 SSD)

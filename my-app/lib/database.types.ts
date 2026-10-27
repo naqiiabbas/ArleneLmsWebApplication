@@ -1,6 +1,3 @@
-// AUTO-GENERATED from the live Supabase schema. Do not edit by hand.
-// Regenerate after schema changes (see context/CLAUDE.md workflow).
-
 export type Json =
   | string
   | number
@@ -10,11 +7,6 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "14.5"
-  }
   public: {
     Tables: {
       absence_reports: {
@@ -31,6 +23,7 @@ export type Database = {
           student_id: string
           updated_at: string
         }
+        ComputedFields: never
         Insert: {
           absence_date: string
           created_at?: string
@@ -61,28 +54,24 @@ export type Database = {
           {
             foreignKeyName: "absence_reports_reviewed_by_fkey"
             columns: ["reviewed_by"]
-            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "absence_reports_session_id_fkey"
             columns: ["session_id"]
-            isOneToOne: false
             referencedRelation: "class_sessions"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "absence_reports_student_id_fkey"
             columns: ["student_id"]
-            isOneToOne: false
             referencedRelation: "student_attendance_summary"
             referencedColumns: ["student_id"]
           },
           {
             foreignKeyName: "absence_reports_student_id_fkey"
             columns: ["student_id"]
-            isOneToOne: false
             referencedRelation: "students"
             referencedColumns: ["id"]
           },
@@ -103,6 +92,7 @@ export type Database = {
           target_type: string | null
           user_agent: string | null
         }
+        ComputedFields: never
         Insert: {
           action: string
           actor_id?: string | null
@@ -135,7 +125,6 @@ export type Database = {
           {
             foreignKeyName: "activity_logs_actor_id_fkey"
             columns: ["actor_id"]
-            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -165,6 +154,7 @@ export type Database = {
           student_id: string
           updated_at: string
         }
+        ComputedFields: never
         Insert: {
           attendance_date?: string
           class_id?: string | null
@@ -215,42 +205,36 @@ export type Database = {
           {
             foreignKeyName: "attendance_records_class_id_fkey"
             columns: ["class_id"]
-            isOneToOne: false
             referencedRelation: "classes"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "attendance_records_excused_by_fkey"
             columns: ["excused_by"]
-            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "attendance_records_marked_by_fkey"
             columns: ["marked_by"]
-            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "attendance_records_session_id_fkey"
             columns: ["session_id"]
-            isOneToOne: false
             referencedRelation: "class_sessions"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "attendance_records_student_id_fkey"
             columns: ["student_id"]
-            isOneToOne: false
             referencedRelation: "student_attendance_summary"
             referencedColumns: ["student_id"]
           },
           {
             foreignKeyName: "attendance_records_student_id_fkey"
             columns: ["student_id"]
-            isOneToOne: false
             referencedRelation: "students"
             referencedColumns: ["id"]
           },
@@ -264,6 +248,7 @@ export type Database = {
           name: string
           price_monthly: number
         }
+        ComputedFields: never
         Insert: {
           active?: boolean
           features?: string[]
@@ -296,6 +281,7 @@ export type Database = {
           title: string
           updated_at: string
         }
+        ComputedFields: never
         Insert: {
           author_id?: string | null
           category?: string | null
@@ -330,7 +316,6 @@ export type Database = {
           {
             foreignKeyName: "blog_posts_author_id_fkey"
             columns: ["author_id"]
-            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -346,6 +331,7 @@ export type Database = {
           location: string | null
           start_time: string
         }
+        ComputedFields: never
         Insert: {
           active?: boolean
           class_id: string
@@ -368,7 +354,6 @@ export type Database = {
           {
             foreignKeyName: "class_schedules_class_id_fkey"
             columns: ["class_id"]
-            isOneToOne: false
             referencedRelation: "classes"
             referencedColumns: ["id"]
           },
@@ -388,6 +373,7 @@ export type Database = {
           title: string | null
           updated_at: string
         }
+        ComputedFields: never
         Insert: {
           class_id: string
           created_at?: string
@@ -418,14 +404,12 @@ export type Database = {
           {
             foreignKeyName: "class_sessions_class_id_fkey"
             columns: ["class_id"]
-            isOneToOne: false
             referencedRelation: "classes"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "class_sessions_mentor_id_fkey"
             columns: ["mentor_id"]
-            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -443,6 +427,7 @@ export type Database = {
           timezone: string
           updated_at: string
         }
+        ComputedFields: never
         Insert: {
           batch?: string | null
           created_at?: string
@@ -469,7 +454,6 @@ export type Database = {
           {
             foreignKeyName: "classes_program_id_fkey"
             columns: ["program_id"]
-            isOneToOne: false
             referencedRelation: "programs"
             referencedColumns: ["id"]
           },
@@ -482,6 +466,7 @@ export type Database = {
           last_read_at: string | null
           profile_id: string
         }
+        ComputedFields: never
         Insert: {
           conversation_id: string
           joined_at?: string
@@ -498,14 +483,12 @@ export type Database = {
           {
             foreignKeyName: "conversation_participants_conversation_id_fkey"
             columns: ["conversation_id"]
-            isOneToOne: false
             referencedRelation: "conversations"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "conversation_participants_profile_id_fkey"
             columns: ["profile_id"]
-            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -520,6 +503,7 @@ export type Database = {
           title: string | null
           type: Database["public"]["Enums"]["conversation_type"]
         }
+        ComputedFields: never
         Insert: {
           created_at?: string
           created_by?: string | null
@@ -540,7 +524,6 @@ export type Database = {
           {
             foreignKeyName: "conversations_created_by_fkey"
             columns: ["created_by"]
-            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -556,6 +539,7 @@ export type Database = {
           name: string
           updated_at: string
         }
+        ComputedFields: never
         Insert: {
           created_at?: string
           description?: string | null
@@ -581,6 +565,7 @@ export type Database = {
           id: string
           name: string
         }
+        ComputedFields: never
         Insert: {
           id?: string
           name: string
@@ -613,6 +598,7 @@ export type Database = {
           virus_clean: boolean | null
           virus_scanned: boolean
         }
+        ComputedFields: never
         Insert: {
           category?: string | null
           category_id?: string | null
@@ -659,42 +645,36 @@ export type Database = {
           {
             foreignKeyName: "documents_category_id_fkey"
             columns: ["category_id"]
-            isOneToOne: false
             referencedRelation: "document_categories"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "documents_owner_id_fkey"
             columns: ["owner_id"]
-            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "documents_related_event_id_fkey"
             columns: ["related_event_id"]
-            isOneToOne: false
             referencedRelation: "events"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "documents_related_student_id_fkey"
             columns: ["related_student_id"]
-            isOneToOne: false
             referencedRelation: "student_attendance_summary"
             referencedColumns: ["student_id"]
           },
           {
             foreignKeyName: "documents_related_student_id_fkey"
             columns: ["related_student_id"]
-            isOneToOne: false
             referencedRelation: "students"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "documents_reviewed_by_fkey"
             columns: ["reviewed_by"]
-            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -709,6 +689,7 @@ export type Database = {
           status: Database["public"]["Enums"]["enrollment_status"]
           student_id: string
         }
+        ComputedFields: never
         Insert: {
           class_id?: string | null
           enrolled_at?: string
@@ -729,28 +710,24 @@ export type Database = {
           {
             foreignKeyName: "enrollments_class_id_fkey"
             columns: ["class_id"]
-            isOneToOne: false
             referencedRelation: "classes"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "enrollments_program_id_fkey"
             columns: ["program_id"]
-            isOneToOne: false
             referencedRelation: "programs"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "enrollments_student_id_fkey"
             columns: ["student_id"]
-            isOneToOne: false
             referencedRelation: "student_attendance_summary"
             referencedColumns: ["student_id"]
           },
           {
             foreignKeyName: "enrollments_student_id_fkey"
             columns: ["student_id"]
-            isOneToOne: false
             referencedRelation: "students"
             referencedColumns: ["id"]
           },
@@ -770,6 +747,7 @@ export type Database = {
           subject: string
           updated_at: string
         }
+        ComputedFields: never
         Insert: {
           assigned_to?: string | null
           conversation_id?: string | null
@@ -800,35 +778,30 @@ export type Database = {
           {
             foreignKeyName: "escalations_assigned_to_fkey"
             columns: ["assigned_to"]
-            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "escalations_conversation_id_fkey"
             columns: ["conversation_id"]
-            isOneToOne: false
             referencedRelation: "conversations"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "escalations_raised_by_fkey"
             columns: ["raised_by"]
-            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "escalations_student_id_fkey"
             columns: ["student_id"]
-            isOneToOne: false
             referencedRelation: "student_attendance_summary"
             referencedColumns: ["student_id"]
           },
           {
             foreignKeyName: "escalations_student_id_fkey"
             columns: ["student_id"]
-            isOneToOne: false
             referencedRelation: "students"
             referencedColumns: ["id"]
           },
@@ -842,6 +815,7 @@ export type Database = {
           id: string
           name: string | null
         }
+        ComputedFields: never
         Insert: {
           event_id: string
           file_type?: string | null
@@ -860,7 +834,6 @@ export type Database = {
           {
             foreignKeyName: "event_materials_event_id_fkey"
             columns: ["event_id"]
-            isOneToOne: false
             referencedRelation: "events"
             referencedColumns: ["id"]
           },
@@ -874,6 +847,7 @@ export type Database = {
           profile_id: string | null
           rsvp: string | null
         }
+        ComputedFields: never
         Insert: {
           event_id: string
           id?: string
@@ -892,14 +866,12 @@ export type Database = {
           {
             foreignKeyName: "event_participants_event_id_fkey"
             columns: ["event_id"]
-            isOneToOne: false
             referencedRelation: "events"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "event_participants_profile_id_fkey"
             columns: ["profile_id"]
-            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -922,6 +894,7 @@ export type Database = {
           updated_at: string
           visibility: Database["public"]["Enums"]["visibility"]
         }
+        ComputedFields: never
         Insert: {
           created_at?: string
           created_by?: string | null
@@ -958,7 +931,6 @@ export type Database = {
           {
             foreignKeyName: "events_created_by_fkey"
             columns: ["created_by"]
-            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -966,7 +938,7 @@ export type Database = {
       }
       form_submissions: {
         Row: {
-          data: Json
+          data: NonNullable<Json>
           form_id: string
           id: string
           reviewed_at: string | null
@@ -975,8 +947,9 @@ export type Database = {
           submitted_at: string
           submitted_by: string | null
         }
+        ComputedFields: never
         Insert: {
-          data?: Json
+          data?: NonNullable<Json>
           form_id: string
           id?: string
           reviewed_at?: string | null
@@ -986,7 +959,7 @@ export type Database = {
           submitted_by?: string | null
         }
         Update: {
-          data?: Json
+          data?: NonNullable<Json>
           form_id?: string
           id?: string
           reviewed_at?: string | null
@@ -999,21 +972,18 @@ export type Database = {
           {
             foreignKeyName: "form_submissions_form_id_fkey"
             columns: ["form_id"]
-            isOneToOne: false
             referencedRelation: "forms"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "form_submissions_reviewed_by_fkey"
             columns: ["reviewed_by"]
-            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "form_submissions_submitted_by_fkey"
             columns: ["submitted_by"]
-            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -1026,19 +996,20 @@ export type Database = {
           description: string | null
           id: string
           requires_signature: boolean
-          schema: Json
+          schema: NonNullable<Json>
           status: Database["public"]["Enums"]["content_status"]
           title: string
           type: Database["public"]["Enums"]["form_type"]
           updated_at: string
         }
+        ComputedFields: never
         Insert: {
           created_at?: string
           created_by?: string | null
           description?: string | null
           id?: string
           requires_signature?: boolean
-          schema?: Json
+          schema?: NonNullable<Json>
           status?: Database["public"]["Enums"]["content_status"]
           title: string
           type?: Database["public"]["Enums"]["form_type"]
@@ -1050,7 +1021,7 @@ export type Database = {
           description?: string | null
           id?: string
           requires_signature?: boolean
-          schema?: Json
+          schema?: NonNullable<Json>
           status?: Database["public"]["Enums"]["content_status"]
           title?: string
           type?: Database["public"]["Enums"]["form_type"]
@@ -1060,7 +1031,6 @@ export type Database = {
           {
             foreignKeyName: "forms_created_by_fkey"
             columns: ["created_by"]
-            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -1076,6 +1046,7 @@ export type Database = {
           title: string
           visibility: Database["public"]["Enums"]["visibility"]
         }
+        ComputedFields: never
         Insert: {
           cover_url?: string | null
           created_at?: string
@@ -1098,7 +1069,6 @@ export type Database = {
           {
             foreignKeyName: "gallery_albums_created_by_fkey"
             columns: ["created_by"]
-            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -1113,6 +1083,7 @@ export type Database = {
           image_url: string
           sort_order: number
         }
+        ComputedFields: never
         Insert: {
           album_id?: string | null
           caption?: string | null
@@ -1133,7 +1104,6 @@ export type Database = {
           {
             foreignKeyName: "gallery_items_album_id_fkey"
             columns: ["album_id"]
-            isOneToOne: false
             referencedRelation: "gallery_albums"
             referencedColumns: ["id"]
           },
@@ -1152,6 +1122,7 @@ export type Database = {
           relationship: string | null
           student_id: string
         }
+        ComputedFields: never
         Insert: {
           address?: string | null
           created_at?: string
@@ -1180,21 +1151,18 @@ export type Database = {
           {
             foreignKeyName: "guardians_profile_id_fkey"
             columns: ["profile_id"]
-            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "guardians_student_id_fkey"
             columns: ["student_id"]
-            isOneToOne: false
             referencedRelation: "student_attendance_summary"
             referencedColumns: ["student_id"]
           },
           {
             foreignKeyName: "guardians_student_id_fkey"
             columns: ["student_id"]
-            isOneToOne: false
             referencedRelation: "students"
             referencedColumns: ["id"]
           },
@@ -1217,6 +1185,7 @@ export type Database = {
           status: Database["public"]["Enums"]["invoice_status"]
           updated_at: string
         }
+        ComputedFields: never
         Insert: {
           amount: number
           created_at?: string
@@ -1253,28 +1222,24 @@ export type Database = {
           {
             foreignKeyName: "invoices_organization_id_fkey"
             columns: ["organization_id"]
-            isOneToOne: false
             referencedRelation: "organization_stats"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "invoices_organization_id_fkey"
             columns: ["organization_id"]
-            isOneToOne: false
             referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "invoices_program_id_fkey"
             columns: ["program_id"]
-            isOneToOne: false
             referencedRelation: "sponsorship_programs"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "invoices_sponsor_id_fkey"
             columns: ["sponsor_id"]
-            isOneToOne: false
             referencedRelation: "sponsors"
             referencedColumns: ["id"]
           },
@@ -1290,6 +1255,7 @@ export type Database = {
           status: Database["public"]["Enums"]["enrollment_status"]
           student_id: string
         }
+        ComputedFields: never
         Insert: {
           assigned_at?: string
           assigned_by?: string | null
@@ -1312,28 +1278,24 @@ export type Database = {
           {
             foreignKeyName: "mentor_student_assignments_assigned_by_fkey"
             columns: ["assigned_by"]
-            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "mentor_student_assignments_mentor_id_fkey"
             columns: ["mentor_id"]
-            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "mentor_student_assignments_student_id_fkey"
             columns: ["student_id"]
-            isOneToOne: false
             referencedRelation: "student_attendance_summary"
             referencedColumns: ["student_id"]
           },
           {
             foreignKeyName: "mentor_student_assignments_student_id_fkey"
             columns: ["student_id"]
-            isOneToOne: false
             referencedRelation: "students"
             referencedColumns: ["id"]
           },
@@ -1356,6 +1318,7 @@ export type Database = {
           tags: string[]
           updated_at: string
         }
+        ComputedFields: never
         Insert: {
           about?: string | null
           address?: string | null
@@ -1392,7 +1355,6 @@ export type Database = {
           {
             foreignKeyName: "mentors_id_fkey"
             columns: ["id"]
-            isOneToOne: true
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -1407,6 +1369,7 @@ export type Database = {
           message_id: string
           size_bytes: number | null
         }
+        ComputedFields: never
         Insert: {
           file_name?: string | null
           file_type?: string | null
@@ -1427,7 +1390,6 @@ export type Database = {
           {
             foreignKeyName: "message_attachments_message_id_fkey"
             columns: ["message_id"]
-            isOneToOne: false
             referencedRelation: "messages"
             referencedColumns: ["id"]
           },
@@ -1441,6 +1403,7 @@ export type Database = {
           id: string
           sender_id: string | null
         }
+        ComputedFields: never
         Insert: {
           body?: string | null
           conversation_id: string
@@ -1459,14 +1422,12 @@ export type Database = {
           {
             foreignKeyName: "messages_conversation_id_fkey"
             columns: ["conversation_id"]
-            isOneToOne: false
             referencedRelation: "conversations"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "messages_sender_id_fkey"
             columns: ["sender_id"]
-            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -1479,6 +1440,7 @@ export type Database = {
           name: string | null
           note_id: string
         }
+        ComputedFields: never
         Insert: {
           file_url: string
           id?: string
@@ -1495,7 +1457,6 @@ export type Database = {
           {
             foreignKeyName: "note_attachments_note_id_fkey"
             columns: ["note_id"]
-            isOneToOne: false
             referencedRelation: "notes"
             referencedColumns: ["id"]
           },
@@ -1516,6 +1477,7 @@ export type Database = {
           updated_at: string
           visibility: Database["public"]["Enums"]["note_visibility"]
         }
+        ComputedFields: never
         Insert: {
           author_id?: string | null
           author_role?: Database["public"]["Enums"]["user_role"] | null
@@ -1548,28 +1510,24 @@ export type Database = {
           {
             foreignKeyName: "notes_author_id_fkey"
             columns: ["author_id"]
-            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "notes_session_id_fkey"
             columns: ["session_id"]
-            isOneToOne: false
             referencedRelation: "class_sessions"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "notes_student_id_fkey"
             columns: ["student_id"]
-            isOneToOne: false
             referencedRelation: "student_attendance_summary"
             referencedColumns: ["student_id"]
           },
           {
             foreignKeyName: "notes_student_id_fkey"
             columns: ["student_id"]
-            isOneToOne: false
             referencedRelation: "students"
             referencedColumns: ["id"]
           },
@@ -1587,6 +1545,7 @@ export type Database = {
           sent_at: string | null
           status: Database["public"]["Enums"]["delivery_status"]
         }
+        ComputedFields: never
         Insert: {
           channel: Database["public"]["Enums"]["notification_channel"]
           created_at?: string
@@ -1613,7 +1572,6 @@ export type Database = {
           {
             foreignKeyName: "notification_deliveries_notification_id_fkey"
             columns: ["notification_id"]
-            isOneToOne: false
             referencedRelation: "notifications"
             referencedColumns: ["id"]
           },
@@ -1625,15 +1583,16 @@ export type Database = {
           in_app_enabled: boolean
           profile_id: string
           sms_enabled: boolean
-          type_overrides: Json
+          type_overrides: NonNullable<Json>
           updated_at: string
         }
+        ComputedFields: never
         Insert: {
           email_enabled?: boolean
           in_app_enabled?: boolean
           profile_id: string
           sms_enabled?: boolean
-          type_overrides?: Json
+          type_overrides?: NonNullable<Json>
           updated_at?: string
         }
         Update: {
@@ -1641,14 +1600,13 @@ export type Database = {
           in_app_enabled?: boolean
           profile_id?: string
           sms_enabled?: boolean
-          type_overrides?: Json
+          type_overrides?: NonNullable<Json>
           updated_at?: string
         }
         Relationships: [
           {
             foreignKeyName: "notification_preferences_profile_id_fkey"
             columns: ["profile_id"]
-            isOneToOne: true
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -1667,6 +1625,7 @@ export type Database = {
           title: string
           type: Database["public"]["Enums"]["notification_type"]
         }
+        ComputedFields: never
         Insert: {
           body?: string | null
           created_at?: string
@@ -1695,14 +1654,12 @@ export type Database = {
           {
             foreignKeyName: "notifications_recipient_id_fkey"
             columns: ["recipient_id"]
-            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "notifications_sender_id_fkey"
             columns: ["sender_id"]
-            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -1722,6 +1679,7 @@ export type Database = {
           type: Database["public"]["Enums"]["organization_type"]
           updated_at: string
         }
+        ComputedFields: never
         Insert: {
           address?: string | null
           contact_person?: string | null
@@ -1764,6 +1722,7 @@ export type Database = {
           sponsor_id: string | null
           status: Database["public"]["Enums"]["payment_status"]
         }
+        ComputedFields: never
         Insert: {
           amount: number
           created_at?: string
@@ -1794,28 +1753,24 @@ export type Database = {
           {
             foreignKeyName: "payments_invoice_id_fkey"
             columns: ["invoice_id"]
-            isOneToOne: false
             referencedRelation: "invoices"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "payments_program_id_fkey"
             columns: ["program_id"]
-            isOneToOne: false
             referencedRelation: "sponsorship_programs"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "payments_recorded_by_fkey"
             columns: ["recorded_by"]
-            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "payments_sponsor_id_fkey"
             columns: ["sponsor_id"]
-            isOneToOne: false
             referencedRelation: "sponsors"
             referencedColumns: ["id"]
           },
@@ -1829,6 +1784,7 @@ export type Database = {
           key: string
           title: string
         }
+        ComputedFields: never
         Insert: {
           description?: string | null
           group_name: string
@@ -1861,6 +1817,7 @@ export type Database = {
           status: Database["public"]["Enums"]["user_status"]
           updated_at: string
         }
+        ComputedFields: never
         Insert: {
           avatar_url?: string | null
           bio?: string | null
@@ -1895,21 +1852,18 @@ export type Database = {
           {
             foreignKeyName: "profiles_custom_role_id_fkey"
             columns: ["custom_role_id"]
-            isOneToOne: false
             referencedRelation: "custom_roles"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "profiles_organization_fk"
             columns: ["organization_id"]
-            isOneToOne: false
             referencedRelation: "organization_stats"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "profiles_organization_fk"
             columns: ["organization_id"]
-            isOneToOne: false
             referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
@@ -1927,6 +1881,7 @@ export type Database = {
           status: Database["public"]["Enums"]["program_status"]
           updated_at: string
         }
+        ComputedFields: never
         Insert: {
           created_at?: string
           description?: string | null
@@ -1953,14 +1908,12 @@ export type Database = {
           {
             foreignKeyName: "programs_organization_id_fkey"
             columns: ["organization_id"]
-            isOneToOne: false
             referencedRelation: "organization_stats"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "programs_organization_id_fkey"
             columns: ["organization_id"]
-            isOneToOne: false
             referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
@@ -1990,6 +1943,7 @@ export type Database = {
           uploaded_by: string | null
           uploader_role: Database["public"]["Enums"]["user_role"] | null
         }
+        ComputedFields: never
         Insert: {
           category?: string | null
           course?: string | null
@@ -2040,14 +1994,12 @@ export type Database = {
           {
             foreignKeyName: "resources_program_id_fkey"
             columns: ["program_id"]
-            isOneToOne: false
             referencedRelation: "programs"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "resources_uploaded_by_fkey"
             columns: ["uploaded_by"]
-            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -2058,6 +2010,7 @@ export type Database = {
           permission_id: string
           role_id: string
         }
+        ComputedFields: never
         Insert: {
           permission_id: string
           role_id: string
@@ -2070,14 +2023,12 @@ export type Database = {
           {
             foreignKeyName: "role_permissions_permission_id_fkey"
             columns: ["permission_id"]
-            isOneToOne: false
             referencedRelation: "permissions"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "role_permissions_role_id_fkey"
             columns: ["role_id"]
-            isOneToOne: false
             referencedRelation: "custom_roles"
             referencedColumns: ["id"]
           },
@@ -2094,6 +2045,7 @@ export type Database = {
           signer_id: string | null
           signer_name: string | null
         }
+        ComputedFields: never
         Insert: {
           form_submission_id: string
           id?: string
@@ -2118,14 +2070,12 @@ export type Database = {
           {
             foreignKeyName: "signatures_form_submission_id_fkey"
             columns: ["form_submission_id"]
-            isOneToOne: false
             referencedRelation: "form_submissions"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "signatures_signer_id_fkey"
             columns: ["signer_id"]
-            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -2142,6 +2092,7 @@ export type Database = {
           role: string | null
           sponsor_id: string
         }
+        ComputedFields: never
         Insert: {
           access_level?: string
           can_remove?: boolean
@@ -2166,7 +2117,6 @@ export type Database = {
           {
             foreignKeyName: "sponsor_team_members_sponsor_id_fkey"
             columns: ["sponsor_id"]
-            isOneToOne: false
             referencedRelation: "sponsors"
             referencedColumns: ["id"]
           },
@@ -2198,6 +2148,7 @@ export type Database = {
           website: string | null
           zip_code: string | null
         }
+        ComputedFields: never
         Insert: {
           address?: string | null
           approved_at?: string | null
@@ -2252,14 +2203,12 @@ export type Database = {
           {
             foreignKeyName: "sponsors_approved_by_fkey"
             columns: ["approved_by"]
-            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "sponsors_profile_id_fkey"
             columns: ["profile_id"]
-            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -2272,6 +2221,7 @@ export type Database = {
           program_id: string
           value: string
         }
+        ComputedFields: never
         Insert: {
           id?: string
           label: string
@@ -2288,7 +2238,6 @@ export type Database = {
           {
             foreignKeyName: "sponsorship_impact_program_id_fkey"
             columns: ["program_id"]
-            isOneToOne: false
             referencedRelation: "sponsorship_programs"
             referencedColumns: ["id"]
           },
@@ -2308,6 +2257,7 @@ export type Database = {
           tier: Database["public"]["Enums"]["sponsorship_tier"] | null
           updated_at: string
         }
+        ComputedFields: never
         Insert: {
           amount?: number | null
           created_at?: string
@@ -2338,7 +2288,6 @@ export type Database = {
           {
             foreignKeyName: "sponsorship_programs_sponsor_id_fkey"
             columns: ["sponsor_id"]
-            isOneToOne: false
             referencedRelation: "sponsors"
             referencedColumns: ["id"]
           },
@@ -2363,6 +2312,7 @@ export type Database = {
           submitted_at: string
           tier: Database["public"]["Enums"]["sponsorship_tier"] | null
         }
+        ComputedFields: never
         Insert: {
           amount?: number | null
           benefits?: string[]
@@ -2403,14 +2353,12 @@ export type Database = {
           {
             foreignKeyName: "sponsorship_requests_reviewed_by_fkey"
             columns: ["reviewed_by"]
-            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "sponsorship_requests_sponsor_id_fkey"
             columns: ["sponsor_id"]
-            isOneToOne: false
             referencedRelation: "sponsors"
             referencedColumns: ["id"]
           },
@@ -2425,6 +2373,7 @@ export type Database = {
           sort_order: number
           state: Database["public"]["Enums"]["timeline_state"]
         }
+        ComputedFields: never
         Insert: {
           due_date?: string | null
           id?: string
@@ -2445,7 +2394,6 @@ export type Database = {
           {
             foreignKeyName: "sponsorship_timeline_program_id_fkey"
             columns: ["program_id"]
-            isOneToOne: false
             referencedRelation: "sponsorship_programs"
             referencedColumns: ["id"]
           },
@@ -2460,6 +2408,7 @@ export type Database = {
           title: string
           type: Database["public"]["Enums"]["activity_type"]
         }
+        ComputedFields: never
         Insert: {
           description?: string | null
           id?: string
@@ -2480,14 +2429,12 @@ export type Database = {
           {
             foreignKeyName: "student_activities_student_id_fkey"
             columns: ["student_id"]
-            isOneToOne: false
             referencedRelation: "student_attendance_summary"
             referencedColumns: ["student_id"]
           },
           {
             foreignKeyName: "student_activities_student_id_fkey"
             columns: ["student_id"]
-            isOneToOne: false
             referencedRelation: "students"
             referencedColumns: ["id"]
           },
@@ -2505,6 +2452,7 @@ export type Database = {
           title: string
           updated_at: string
         }
+        ComputedFields: never
         Insert: {
           created_at?: string
           created_by?: string | null
@@ -2531,21 +2479,18 @@ export type Database = {
           {
             foreignKeyName: "student_goals_created_by_fkey"
             columns: ["created_by"]
-            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "student_goals_student_id_fkey"
             columns: ["student_id"]
-            isOneToOne: false
             referencedRelation: "student_attendance_summary"
             referencedColumns: ["student_id"]
           },
           {
             foreignKeyName: "student_goals_student_id_fkey"
             columns: ["student_id"]
-            isOneToOne: false
             referencedRelation: "students"
             referencedColumns: ["id"]
           },
@@ -2570,6 +2515,7 @@ export type Database = {
           student_code: string | null
           updated_at: string
         }
+        ComputedFields: never
         Insert: {
           about?: string | null
           academic_year?: string | null
@@ -2610,21 +2556,18 @@ export type Database = {
           {
             foreignKeyName: "students_id_fkey"
             columns: ["id"]
-            isOneToOne: true
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "students_organization_id_fkey"
             columns: ["organization_id"]
-            isOneToOne: false
             referencedRelation: "organization_stats"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "students_organization_id_fkey"
             columns: ["organization_id"]
-            isOneToOne: false
             referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
@@ -2640,6 +2583,7 @@ export type Database = {
           started_at: string
           status: Database["public"]["Enums"]["subscription_status"]
         }
+        ComputedFields: never
         Insert: {
           created_at?: string
           current_period_end?: string | null
@@ -2662,21 +2606,18 @@ export type Database = {
           {
             foreignKeyName: "subscriptions_organization_id_fkey"
             columns: ["organization_id"]
-            isOneToOne: false
             referencedRelation: "organization_stats"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "subscriptions_organization_id_fkey"
             columns: ["organization_id"]
-            isOneToOne: false
             referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "subscriptions_plan_id_fkey"
             columns: ["plan_id"]
-            isOneToOne: false
             referencedRelation: "billing_plans"
             referencedColumns: ["id"]
           },
@@ -2691,6 +2632,7 @@ export type Database = {
           started_at: string
           status: string
         }
+        ComputedFields: never
         Insert: {
           completed_at?: string | null
           id?: string
@@ -2715,27 +2657,27 @@ export type Database = {
           key: string
           updated_at: string
           updated_by: string | null
-          value: Json
+          value: NonNullable<Json>
         }
+        ComputedFields: never
         Insert: {
           description?: string | null
           key: string
           updated_at?: string
           updated_by?: string | null
-          value: Json
+          value: NonNullable<Json>
         }
         Update: {
           description?: string | null
           key?: string
           updated_at?: string
           updated_by?: string | null
-          value?: Json
+          value?: NonNullable<Json>
         }
         Relationships: [
           {
             foreignKeyName: "system_settings_updated_by_fkey"
             columns: ["updated_by"]
-            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -2751,6 +2693,7 @@ export type Database = {
           programs: number | null
           students: number | null
         }
+        ComputedFields: never
         Insert: {
           id?: string | null
           mentors?: never
@@ -2776,11 +2719,11 @@ export type Database = {
           student_id: string | null
           total: number | null
         }
+        ComputedFields: never
         Relationships: [
           {
             foreignKeyName: "students_id_fkey"
             columns: ["student_id"]
-            isOneToOne: true
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -2792,11 +2735,11 @@ export type Database = {
         Args: { target: Database["public"]["Enums"]["user_role"] }
         Returns: boolean
       }
-      is_admin: { Args: never; Returns: boolean }
-      is_staff: { Args: never; Returns: boolean }
-      is_super_admin: { Args: never; Returns: boolean }
+      is_admin: { Args: Record<PropertyKey, never>; Returns: boolean }
+      is_staff: { Args: Record<PropertyKey, never>; Returns: boolean }
+      is_super_admin: { Args: Record<PropertyKey, never>; Returns: boolean }
       my_role: {
-        Args: never
+        Args: Record<PropertyKey, never>
         Returns: Database["public"]["Enums"]["user_role"]
       }
     }
@@ -2916,12 +2859,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -2945,11 +2888,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -2970,11 +2913,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -2995,11 +2938,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -3012,11 +2955,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }

@@ -15,9 +15,20 @@
 {$APP_DOMAIN} {
 	encode gzip zstd
 
-	# "web" is the compose service name, on the internal network.
-	# Caddy forwards X-Forwarded-* to the upstream by default.
-	reverse_proxy web:3000
+	# Self-hosted Supabase (~/supabase/docker on this server) is served on the
+	# same hostname, so storage links and auth emails point here. Its gateway
+	# joins this compose network as "supabase-envoy". Only the API prefixes are
+	# forwarded; Studio stays private (SSH tunnel to 127.0.0.1:8000).
+	@supabase path /auth/v1/* /rest/v1/* /storage/v1/*
+	handle @supabase {
+		reverse_proxy supabase-envoy:8000
+	}
+
+	# Everything else is the app. "web" is the compose service name, on the
+	# internal network. Caddy forwards X-Forwarded-* to the upstream by default.
+	handle {
+		reverse_proxy web:3000
+	}
 
 	header {
 		# Deliberately 30 days, not a year. A long HSTS pin on 100bmoc.org is

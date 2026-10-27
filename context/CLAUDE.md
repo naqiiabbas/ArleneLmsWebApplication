@@ -4,16 +4,18 @@
 > `C:\Users\USER\.claude\projects\c--Projects-ArleneLmsWebApplication\memory\` are kept **in sync**
 > (see [§14 Sync Protocol](#14-claudemd--memory-sync-protocol)). Update both together.
 >
-> Last updated: 2026-07-24 · Doc version basis: client docs v1.0 (Oct–Nov 2025)
-> **Live deploys:** LMS → `http://3.101.143.234` (bare IP, no TLS). `100bmoc.org` → a **separate WordPress site** (see [§9h](#9h-deployment--docker--live-on-client-test-vps) / §9i).
+> Last updated: 2026-10-27 · Doc version basis: client docs v1.0 (Oct–Nov 2025)
+> **Live deploys:** LMS → **`https://admin.100bmoc.org`** (EC2 3.101.143.234, Let's Encrypt via Caddy). `100bmoc.org` → a **separate WordPress site** (see [§9h](#9h-deployment--docker--live-on-client-test-vps) / §9i).
 >
-> **Backend stack DECIDED: Next.js + Supabase** (see [§9](#9-backend-stack--decided)).
+> **Backend stack DECIDED: Next.js + SELF-HOSTED Supabase** on the LMS EC2 (since 2026-10-27; see
+> [§9](#9-backend-stack--decided) / [§9j](#9j-self-hosted-supabase-since-2026-10-27)). Hosted project
+> `tzvhbymxssiuebafhypk` is **retired** (left untouched as a fallback; not used by the app).
 > **Workflow rules:** suggest commit titles (`what we did - where we did`), never commit —
-> user commits. Keep `init.sql` synced with every migration + Supabase ([§9a](#9a-database--migration-workflow)).
+> user commits. Keep `init.sql` synced with every migration + the database ([§9a](#9a-database--migration-workflow)).
 >
-> **Schema:** full DB design at `my-app/supabase/init.sql` (52 tables, RLS on) — see
-> [§8a](#8a-implemented-schema--my-appsupabaseinitsql). ✅ **APPLIED to live Supabase**
-> (project `tzvhbymxssiuebafhypk`) via MCP in 4 migrations; advisor clean of errors.
+> **Schema:** full DB design at `my-app/supabase/init.sql` (53 tables, RLS on) — see
+> [§8a](#8a-implemented-schema--my-appsupabaseinitsql). ✅ **APPLIED to the self-hosted DB** from
+> `init.sql` in one transaction; generated types matched the old hosted DB exactly.
 
 ---
 
@@ -27,7 +29,7 @@
 | **Built by** | Slicon Systems LLC |
 | **What it is** | Cloud-hosted, multi-role web platform digitizing an educational mentorship program — student records, mentoring, attendance, scheduling, communication, documents, sponsor engagement, and payments. |
 | **Current state** | **Frontend 100% built (static/mock). Backend NOT started — this is our job.** |
-| **Database** | **Supabase** (Postgres + Auth + Storage + Realtime) — client already provisioned. |
+| **Database** | **Self-hosted Supabase** (Postgres 17 + Auth + PostgREST + Storage) in Docker on the LMS EC2 — see §9j. |
 | **Repo root** | `c:\Projects\ArleneLmsWebApplication` · app lives in `my-app/` · client docs in `my-app/doc/` |
 
 **Goal of the engagement:** build the complete backend (database schema, auth, APIs, storage,
@@ -403,7 +405,14 @@ all with `updated_at` triggers, FK indexes, and RLS enabled:
 policies protect any direct anon/authenticated access — admins full, owners manage own rows,
 public read for approved sponsors / published blog / public gallery / public calendar.
 
-**Applied to live Supabase** (project `tzvhbymxssiuebafhypk`) in 4 migrations:
+**Current database (2026-10-27):** self-hosted Supabase (§9j), built by running `init.sql` in a
+single transaction → 53 tables (all RLS), 2 views, 35 enums, 109 policies, 25 triggers, 97 indexes,
+55 functions, 6 buckets, seed rows. Types regenerated from it matched the hosted DB's types exactly
+(only generator formatting differed). The `rls_auto_enable` event trigger below existed **only on the
+old hosted project** — it is NOT on the self-hosted DB, so new tables need an explicit
+`enable row level security`.
+
+**History — originally applied to hosted Supabase** (project `tzvhbymxssiuebafhypk`, now retired) in 4 migrations:
 `arlene_init_schema`, `arlene_rls_policies`, `arlene_seed_data`, `arlene_advisor_fixes` (+
 `arlene_function_grants_hardening`). Verified: 52 tables, 2 views, 35 enums, 108 policies, 24
 triggers, seed rows present. Security advisor: **0 errors**; remaining WARNs are intentional/
@@ -421,7 +430,8 @@ would break RLS).
 ## 9. Backend Stack — DECIDED
 
 **Backend = Next.js** (Route Handlers / Server Actions in the existing `my-app` app) **+
-Supabase as DB / Auth / Storage / Realtime.** ✅ Confirmed by user.
+Supabase as DB / Auth / Storage.** ✅ Confirmed by user. Since 2026-10-27 Supabase is
+**self-hosted** on the LMS EC2 (§9j) instead of supabase.com — same APIs, so no app code changed.
 
 - One codebase + one deploy with the existing Next.js 16 frontend.
 - Dedicated server-side API layer with Supabase service-role access; Supabase RLS enforces
@@ -442,17 +452,21 @@ payments gateway (Stripe/ACH vs. record-keeping), iPad attendance client type.
 
 - **`init.sql` is the canonical full schema snapshot.** It must stay **in sync with every
   migration and with the live Supabase database** at all times.
-- Every schema change follows: write the migration → apply it to Supabase → **update `init.sql`
-  to reflect the new full schema**. `init.sql` should always be able to rebuild the database
-  from scratch. Never let `init.sql`, the migrations, and Supabase drift apart.
+- Every schema change follows: write the migration → apply it to the database → **update `init.sql`
+  to reflect the new full schema** → `npm run types:gen`. `init.sql` should always be able to rebuild
+  the database from scratch (it did, on 2026-10-27). Never let `init.sql`, the migrations, and the DB
+  drift apart.
+- **Applying (self-hosted):** the Supabase MCP no longer applies (it targets the retired hosted
+  project). On the server: `docker exec -i supabase-db psql -U postgres -d postgres -v ON_ERROR_STOP=1
+  --single-transaction < migration.sql`. Run as `postgres` so objects keep the same owner as before.
 
 ### 9c. Data Layer (Next.js ↔ Supabase)
 
 Scaffolded in `my-app/`. Packages: `@supabase/supabase-js`, `@supabase/ssr`, `server-only`.
 
 - **`lib/database.types.ts`** — TypeScript types auto-generated from the live DB. Regenerate
-  after every schema change (via Supabase MCP `generate_typescript_types`, or `npm run
-  types:gen` if the Supabase CLI is authed). Do not hand-edit.
+  after every schema change with **`npm run types:gen`** (`scripts/gen-types.mjs`: SSHes to the
+  server with `arlene-ec2-key.pem` and asks the stack's postgres-meta). Do not hand-edit.
 - **`lib/supabase/client.ts`** — `createClient()` browser client (publishable key, RLS-scoped).
 - **`lib/supabase/server.ts`** — `createClient()` server client (cookie-based session, RLS as
   the signed-in user). Use in Server Components / Route Handlers / Server Actions.
@@ -730,9 +744,9 @@ init.sql + regenerated types). Note: 2FA + session-timeout are stored settings, 
 description ?? target_type; actionIcon derived from the action keyword; status success/failed →
 Success/Failed; limit 200, newest first). **`components/Activity.tsx`** — mock removed; loads real
 logs, stats computed live (total/success/failed/active users), filters (search/action/role/status),
-loading/notice, jspdf export of filtered rows. Seeded 5 sample logs. **NOTE:** no code writes to
-`activity_logs` yet — like `createNotification`, actually recording actions from the data modules is
-a follow-up (add an `logActivity()` helper called on create/update/delete/login).
+loading/notice, jspdf export of filtered rows. **Writers now exist:** `lib/data/audit.ts` has
+best-effort `logActivity()`, `notifyUsers()`, `notifyAdmins()` (never throw), called from login/logout/
+failed login, documents, notes, resources, students, users, dashboard and the role panels.
 
 **Admin → Attendance Control** (17th slice, verified live) — **completes the admin panel**:
 **`lib/data/attendance.types.ts`** / **`lib/data/attendance.ts`** (`"use server"`). `getAttendanceData()`
@@ -769,10 +783,12 @@ constraint-name hint.
 The Next.js app is containerized and **running live on the client's VPS for testing**
 (Supabase stays hosted in the cloud — only the app is containerized, no DB container).
 
-**Current URL (as of 2026-10-20):** **`http://3.101.143.234`** — bare IP, plain HTTP, **no domain**.
-- `100bmoc.org` was repointed on 2026-10-20 to a **separate WordPress marketing site** on a different
-  EC2 box (**13.57.140.17**, Apache/PHP — not this repo). See §9i below. The LMS therefore lost its
-  hostname and its certificate.
+**Current URL (as of 2026-10-26):** **`https://admin.100bmoc.org`** — own subdomain, Let's Encrypt
+via Caddy (HSTS deliberately only 30 days). Server `.env`: `APP_DOMAIN=admin.100bmoc.org`,
+`NEXT_PUBLIC_SITE_URL=https://admin.100bmoc.org`.
+- `100bmoc.org` (apex) was repointed on 2026-10-20 to a **separate WordPress marketing site** on a
+  different EC2 box (**13.57.140.17**, Apache/PHP — not this repo). See §9i below. The LMS ran on the
+  bare IP until it got the `admin.` subdomain.
 - AWS EC2 `arlene-lms-production`, Ubuntu 24.04 LTS, `t2.medium`, 30 GiB gp3, key `arlene-ec2-key.pem`,
   login `ubuntu`. Repo cloned at **`~/ArleneLmsWebApplication`**; run from `~/ArleneLmsWebApplication/my-app`.
 - Security group `arlene-lms-sg`: 22 (SSH), 80 (public), 443 (open, currently unused).
@@ -782,10 +798,9 @@ The Next.js app is containerized and **running live on the client's VPS for test
 - `docker-compose.yml` — project **`arlene-lms`**, two services:
   - **`web`** (`arlene-web`) — the app, published on **`127.0.0.1:${WEB_PORT:-3000}`** only.
   - **`caddy`** (`arlene-caddy`) — `caddy:2-alpine`, ports 80/443, public entrypoint → `web:3000`.
-- `Caddyfile` — **IP-only mode**: `auto_https off` + a catch-all `:80` block. Let's Encrypt cannot
-  issue for a bare IP, and leaving auto-HTTPS on makes Caddy 308-redirect to `https://<ip>/`, which
-  serves a mismatched certificate and breaks every visit. The **full HTTPS config is preserved as
-  comments** in that file, ready for when the LMS gets its own hostname.
+- `Caddyfile` — **domain mode** on `{$APP_DOMAIN}`: `/auth/v1/*`, `/rest/v1/*`, `/storage/v1/*` →
+  `supabase-envoy:8000` (self-hosted Supabase gateway, §9j); everything else → `web:3000`. The
+  IP-only fallback (`auto_https off` + `:80`) is kept as comments in the file.
 
 **GOTCHA — editing the Caddyfile does not reload Caddy.** `docker compose up -d` recreates only
 services whose *definition* changed, so Caddy keeps running the old config. Always
@@ -795,7 +810,9 @@ services whose *definition* changed, so Caddy keeps running the old config. Alwa
 **Env split (load-bearing):** `NEXT_PUBLIC_*` are **build args** (Next inlines them at build time →
 `--build`, never a plain restart); `SUPABASE_SERVICE_ROLE_KEY` is **runtime-only** env (never a build
 arg, never baked into the image). `.dockerignore` excludes all `.env*`. Current `.env`:
-`NEXT_PUBLIC_SITE_URL=http://3.101.143.234`, `WEB_PORT=3000`, plus the Supabase keys.
+`NEXT_PUBLIC_SITE_URL=https://admin.100bmoc.org`, `NEXT_PUBLIC_SUPABASE_URL=https://admin.100bmoc.org`
+(the self-hosted API is served on the same host), `WEB_PORT=3000`, anon + service-role keys copied from
+`~/supabase/docker/.env`. Pre-cutover backup: `.env.bak.20261027-092905` (hosted-Supabase values).
 
 **Deploy / redeploy:**
 ```
@@ -805,14 +822,44 @@ docker compose restart caddy     # required if Caddyfile changed
 docker compose ps
 ```
 
-**OPEN — Supabase Auth URLs are stale.** Dashboard → Auth → URL Configuration still points at
-`https://100bmoc.org`, which is now the WordPress site. Must change to `http://3.101.143.234`, or
-password-reset and student-OTP email links send users to the wrong site.
+**Auth URLs:** now set in the self-hosted stack's `.env` (`SITE_URL`, `ADDITIONAL_REDIRECT_URLS` =
+`https://admin.100bmoc.org[/**]`), not a dashboard. HTTPS on `admin.` also unblocks the iPad kiosk
+camera (`getUserMedia` needs a secure origin).
 
-**iPad kiosk is blocked on plain HTTP** — browsers refuse `getUserMedia` on insecure origins, so
-face-capture attendance cannot work until the LMS has an HTTPS hostname. Recommended fix: an A record
-for e.g. `portal.100bmoc.org` → 3.101.143.234, then restore the commented HTTPS blocks in `Caddyfile`,
-set `APP_DOMAIN`/`ACME_EMAIL`/`NEXT_PUBLIC_SITE_URL`, and rebuild.
+**Server repo note:** the cutover copied the new `my-app/Caddyfile` onto the server before it was
+committed, so the server checkout shows it modified. Before the next `git pull` there:
+`git checkout -- my-app/Caddyfile` (the committed version is identical).
+
+### 9j. Self-hosted Supabase (since 2026-10-27)
+
+Moved off hosted Supabase to the **official Supabase Docker stack on the LMS EC2** (user decision:
+self-host rather than plain Postgres, because the app uses Supabase Auth ~33 calls, PostgREST 261
+`.from()` queries, Storage 19 calls — plain Postgres would mean a backend rewrite). Started **fresh**
+(no data copied); hosted project left untouched as a fallback.
+- **Location:** `~/supabase/docker` (sparse clone of upstream `supabase/supabase` → `docker/`) +
+  override **`my-app/supabase/selfhost/docker-compose.arlene.yml`** (`COMPOSE_FILE` in the stack's
+  `.env`). Runs Studio, Envoy gateway, Postgres 17.6, Auth (GoTrue), PostgREST, Storage (file backend),
+  postgres-meta. **Off:** Realtime, Edge Functions, Supavisor, imgproxy (unused by the LMS) — ~830 MB RAM.
+- **Server sizing:** stays `t2.medium` (user choice); added **2 GiB swap** (`/swapfile`, swappiness 10).
+  Pruned ~10.5 GB of old Docker build cache.
+- **Networking:** nothing public. Gateway joins `arlene-lms_default` as `supabase-envoy`; Caddy
+  forwards `/auth/v1`, `/rest/v1`, `/storage/v1`. Port 8000 bound to 127.0.0.1 → **Studio via SSH
+  tunnel** (`ssh -L 8000:127.0.0.1:8000 …`, then http://localhost:8000, login from stack `.env`).
+- **Config:** `SUPABASE_PUBLIC_URL=https://admin.100bmoc.org`, `API_EXTERNAL_URL=…/auth/v1`,
+  `SITE_URL`, `ADDITIONAL_REDIRECT_URLS=https://admin.100bmoc.org/**`, **`DISABLE_SIGNUP=true`**
+  (required: `handle_new_user` trusts `user_metadata.role`, so open sign-up = anyone can become
+  super_admin), phone sign-up off. All secrets freshly generated, live only in the server `.env` (600).
+- **Initial super admin:** `admin@100bmoc.org` (role super_admin, active), random password stored in
+  `~/supabase/initial-admin.txt` on the server — change after first login, then delete the file.
+- **Verified:** auth health, admin-API user creation, password sign-in through the public hostname
+  from the app container, RLS self-read, anon denied on `profiles`, storage upload → signed URL →
+  download → delete, recovery-link shape, app pages + middleware redirect, `tsc` clean.
+- **NOT done yet:** **SMTP** (self-hosted Auth has no mailer → password-reset / student-OTP emails
+  don't send until `SMTP_*` set; the OTP flow also needs a recovery template with `{{ .Token }}` via
+  `GOTRUE_MAILER_TEMPLATES_RECOVERY`). **Backups:** `my-app/supabase/selfhost/backup.sh` (pg_dump incl.
+  auth + storage tar, 14-day retention) is written but its **cron is not installed** — user to enable
+  (commands in `my-app/DEPLOY.md`); plus off-server copies (EBS snapshots/S3).
+- **Ops reference:** `my-app/DEPLOY.md` → "Self-hosted Supabase".
 
 **Legacy:** shared client VPS `http://187.127.116.79:3010` (Traefik + other tenants) — superseded;
 never `docker system prune` there.
@@ -914,7 +961,8 @@ wherever the answer now lives.
 - [x] Backend layer choice — **DECIDED: Next.js + Supabase (§9).**
 - [ ] Notification providers: Twilio + SendGrid vs. SES? Accounts/keys available?
 - [ ] E-signature: build in-house vs. third-party (e.g. DocuSign/embedded)?
-- [x] Hosting for API/frontend: **AWS EC2 live** (Ubuntu 24.04, `t2.medium`, key `arlene-ec2-key.pem`) — LMS at **http://3.101.143.234** (bare IP, no TLS since 2026-10-20, when `100bmoc.org` moved to the separate WordPress site). **TODO:** give the LMS a hostname (e.g. `portal.100bmoc.org`) to restore HTTPS + the iPad kiosk camera.
+- [x] Hosting for API/frontend: **AWS EC2 live** (Ubuntu 24.04, `t2.medium`, key `arlene-ec2-key.pem`) — LMS at **https://admin.100bmoc.org**; database = self-hosted Supabase on the same box (§9j).
+- [ ] Email provider for Auth emails (SMTP: SES / SendGrid / Gmail) — deferred 2026-10-27; reset + OTP emails don't send until chosen.
 - [ ] iPad automated-attendance client: native app, PWA, or web kiosk?
 - [ ] Parent/guardian portal: in first release or later phase?
 - [ ] Payments: real gateway (Stripe/ACH) or record-keeping only?

@@ -8,7 +8,7 @@
     "start": "next start",
     "export-docker-image": "powershell -ExecutionPolicy Bypass -File .\\scripts\\export-docker-image.ps1",
     "lint": "eslint .",
-    "types:gen": "supabase gen types typescript --project-id tzvhbymxssiuebafhypk --schema public > lib/database.types.ts"
+    "types:gen": "node scripts/gen-types.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",

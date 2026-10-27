@@ -1,0 +1,50 @@
+# Arlene LMS overrides for the official self-hosted Supabase stack.
+#
+# Layered on top of upstream supabase/docker/docker-compose.yml via the
+# stack's .env:  COMPOSE_FILE=docker-compose.yml:docker-compose.arlene.yml
+#
+# Sized for the shared t2.medium (4 GB) that also runs the LMS:
+#   - realtime, functions, supavisor, imgproxy are switched off. The LMS polls
+#     instead of using Realtime, has no Edge Functions, talks to Postgres only
+#     through the REST/Auth/Storage APIs, and never requests image transforms.
+#   - Nothing is published on a public interface. The API gateway joins the
+#     LMS's docker network so its Caddy can proxy /auth/v1, /rest/v1 and
+#     /storage/v1 on the LMS hostname; port 8000 is bound to localhost only,
+#     for reaching Studio over an SSH tunnel.
+
+services:
+  api-gw:
+    ports: !override
+      - 127.0.0.1:8000:8000/tcp
+    networks:
+      default:
+        aliases:
+          - envoy
+          - kong
+      arlene-lms: {}
+
+  storage:
+    depends_on: !override
+      db:
+        condition: service_healthy
+      rest:
+        condition: service_started
+    environment:
+      ENABLE_IMAGE_TRANSFORMATION: "false"
+
+  imgproxy:
+    profiles: ["disabled"]
+
+  realtime:
+    profiles: ["disabled"]
+
+  functions:
+    profiles: ["disabled"]
+
+  supavisor:
+    profiles: ["disabled"]
+
+networks:
+  arlene-lms:
+    external: true
+    name: arlene-lms_default
