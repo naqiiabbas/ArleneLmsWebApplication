@@ -194,7 +194,12 @@ mentor's `mentor_student_assignments`.
   `saveMentorBlogPost` (create/update own, real image → `blog` bucket, publish/draft) +
   `deleteMentorBlogPost`. blog_posts has no moderation state, so mentor posts publish live
   (matches the "Publish Now" UI).
-- **Settings** — the mentor route renders the admin `Settings` component, already wired & self-scoped.
+- **Settings** (`components/Settings.tsx` — its own component, NOT the admin `Settingsadmin`; earlier
+  notes were wrong and it was pure mock until 2026-10-27) — **Profile tab WIRED**:
+  `getMentorProfileSettings()` / `saveMentorProfileSettings(FormData)` in `mentor.ts` (name, phone, bio →
+  `profiles`; address, expertise, availability enum → `mentors`; photo upload/remove; email read-only
+  since it is the login). **Notifications / Security / Preferences tabs are still mock** (fake success
+  alert; the Security tab does NOT change the password).
 - **Remaining:** only the **iPad attendance check-in** kiosk (student-facing, separate build).
   Cross-cutting follow-ups: attachments for notes & messaging, a resources storage bucket,
   event-driven notification writers.
@@ -229,7 +234,15 @@ enrolled in "Computer Science").
   + signed-URL view/download; fabricated pending-submissions/preview removed.
 - **Profile** (`Profile.tsx`) — WIRED & verified: `getStudentProfile()` (real profiles+students +
   assigned mentor + metrics + activity), `updateStudentProfile()`, `getStudentGoals()`/`addStudentGoal()`
-  (`student_goals`). Fabricated badges/mentor-directory trimmed.
+  (`student_goals`). Fabricated badges/mentor-directory trimmed. **Profile photo** (2026-10-27): camera
+  button on the avatar uploads immediately via `updateMyAvatar` (+ "Remove photo"); `avatar` is now
+  the real URL or "" (initials), never the stock `/images/avatar1.png`.
+
+**Profile photos — shared (2026-10-27):** `lib/data/avatar.ts` (server-only helpers: JPG/PNG/WebP/GIF,
+≤5 MB, upload to public `avatars/<userId>/<uuid>.<ext>`, delete the replaced file) used by admin
+`saveProfile`, mentor `saveMentorProfileSettings`, and the any-role action **`updateMyAvatar(FormData)`**
+in `lib/data/me.ts` (guard `assertActiveUser()` — new in `guards.ts`). After a change the UI fires
+`notifyProfileChanged()` (`HeaderProfile.tsx`) so panel headers refresh at once.
 - **iPad check-in kiosk** (`Attendancewrk.tsx`) — WIRED & verified: **public** `lib/data/kiosk.ts`
   (no auth — the 4-digit code is the credential): `verifyAttendanceCode` (→ `students.attendance_code`)
   + `markKioskAttendance` (finds today's enrolled session, uploads selfie to private `attendance`
@@ -849,8 +862,12 @@ self-host rather than plain Postgres, because the app uses Supabase Auth ~33 cal
   `SITE_URL`, `ADDITIONAL_REDIRECT_URLS=https://admin.100bmoc.org/**`, **`DISABLE_SIGNUP=true`**
   (required: `handle_new_user` trusts `user_metadata.role`, so open sign-up = anyone can become
   super_admin), phone sign-up off. All secrets freshly generated, live only in the server `.env` (600).
-- **Initial super admin:** `admin@100bmoc.org` (role super_admin, active), random password stored in
-  `~/supabase/initial-admin.txt` on the server — change after first login, then delete the file.
+- **Initial admin:** `admin@100bmoc.org` — at the user's request (2026-10-27) role **`admin`** (not
+  super_admin) with a **temporary password the user chose** (not recorded here; must be changed).
+  `~/supabase/initial-admin.txt` was deleted. **No `super_admin` exists:** the app treats admin and
+  super_admin the same, but `roleRank` stops admins creating/promoting a super_admin, and the
+  `system_backups` RLS policy is super-admin-only. To make one, on the server:
+  `docker exec supabase-db psql -U postgres -d postgres -c "update public.profiles set role='super_admin' where email='…'"`.
 - **Verified:** auth health, admin-API user creation, password sign-in through the public hostname
   from the app container, RLS self-read, anon denied on `profiles`, storage upload → signed URL →
   download → delete, recovery-link shape, app pages + middleware redirect, `tsc` clean.

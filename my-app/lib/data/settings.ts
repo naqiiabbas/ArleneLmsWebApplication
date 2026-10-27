@@ -1,8 +1,8 @@
 "use server"
 
-import { randomUUID } from "node:crypto"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { assertAdmin } from "@/lib/data/guards"
+import { avatarFileError, removeAvatarObject, storeAvatar } from "@/lib/data/avatar"
 import type {
   GeneralData,
   NotificationData,
@@ -10,8 +10,6 @@ import type {
   SecurityData,
   SettingsData,
 } from "@/lib/data/settings.types"
-
-const AVATARS_BUCKET = "avatars"
 
 export async function getSettings(): Promise<SettingsData> {
   const { userId } = await assertAdmin()
@@ -144,20 +142,19 @@ export async function saveProfile(formData: FormData): Promise<{ error?: string 
   const removeAvatar = formData.get("removeAvatar") === "true"
   let avatarUrl: string | null | undefined = undefined
   if (file instanceof File && file.size > 0) {
-    const ext = file.name.includes(".") ? file.name.split(".").pop() : "png"
-    const path = `${me.userId}/${randomUUID()}.${ext}`
-    const bytes = new Uint8Array(await file.arrayBuffer())
-    const { error: upErr } = await admin.storage
-      .from(AVATARS_BUCKET)
-      .upload(path, bytes, { contentType: file.type || "image/png", upsert: false })
-    if (upErr) return { error: upErr.message }
-    avatarUrl = admin.storage.from(AVATARS_BUCKET).getPublicUrl(path).data.publicUrl
+    const bad = avatarFileError(file)
+    if (bad) return { error: bad }
+    try {
+      avatarUrl = await storeAvatar(admin, me.userId, file)
+    } catch (e) {
+      return { error: (e as Error).message }
+    }
   } else if (removeAvatar) {
     avatarUrl = null
   }
 
   // Sync auth email if it changed.
-  const { data: cur } = await admin.from("profiles").select("email").eq("id", me.userId).single()
+  const { data: cur } = await admin.from("profiles").select("email, avatar_url").eq("id", me.userId).single()
   if (email && email !== cur?.email) {
     const { error } = await admin.auth.admin.updateUserById(me.userId, {
       email,
@@ -176,5 +173,7 @@ export async function saveProfile(formData: FormData): Promise<{ error?: string 
   if (avatarUrl !== undefined) patch.avatar_url = avatarUrl
 
   const { error } = await admin.from("profiles").update(patch).eq("id", me.userId)
-  return error ? { error: error.message } : {}
+  if (error) return { error: error.message }
+  if (avatarUrl !== undefined) await removeAvatarObject(admin, me.userId, cur?.avatar_url)
+  return {}
 }

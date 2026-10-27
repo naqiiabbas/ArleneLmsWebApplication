@@ -151,3 +151,20 @@ export interface MentorResourceInput {
   link: string
   featured: boolean
 }
+
+// Settings → Profile tab.
+export type MentorAvailability = "available" | "limited" | "full" | "unavailable"
+
+export interface MentorProfileSettings {
+  firstName: string
+  lastName: string
+  email: string // read-only here: it is the login, changed by an admin
+  phone: string
+  address: string
+  organization: string
+  memberSince: string
+  areasOfExpertise: string
+  availability: MentorAvailability
+  bio: string
+  avatarUrl: string
+}

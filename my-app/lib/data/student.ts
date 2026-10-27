@@ -372,7 +372,7 @@ export async function getStudentProfile(): Promise<StudentProfile> {
 
   return {
     name: prof?.full_name ?? "Student",
-    avatar: prof?.avatar_url || DEFAULT_AVATAR,
+    avatar: prof?.avatar_url ?? "", // empty = show initials, never a stock photo
     email: prof?.email ?? "",
     phone: prof?.phone ?? "",
     address: stu?.address ?? "",

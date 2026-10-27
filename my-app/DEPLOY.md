@@ -185,7 +185,6 @@ Realtime, Edge Functions, Supavisor and imgproxy are off (the LMS uses none of t
 | `~/supabase/docker/.env` | all secrets (Postgres password, JWT secret, anon/service keys, Studio login). `chmod 600`, never commit |
 | `~/supabase/docker/volumes/db/data` | Postgres data |
 | `~/supabase/docker/volumes/storage` | uploaded files |
-| `~/supabase/initial-admin.txt` | first super-admin login — delete once the password is changed |
 
 **Networking.** Nothing is published publicly. The gateway joins the LMS's
 `arlene-lms_default` network as `supabase-envoy`; Caddy forwards only

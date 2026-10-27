@@ -5,11 +5,12 @@ import type { createAdminClient } from "@/lib/supabase/admin"
 type AdminClient = ReturnType<typeof createAdminClient>
 
 /**
- * Ensure the caller is signed in, ACTIVE, and holds one of `roles`.
- * Status is checked on every call, not just at sign-in: a user deactivated
- * mid-session must lose access immediately rather than when their session ends.
+ * Ensure the caller is signed in, ACTIVE, and holds one of `roles` (any role
+ * when `roles` is null). Status is checked on every call, not just at sign-in:
+ * a user deactivated mid-session must lose access immediately rather than when
+ * their session ends.
  */
-async function requireRole(roles: string[]): Promise<{ userId: string }> {
+async function requireRole(roles: string[] | null): Promise<{ userId: string }> {
   const supabase = await createClient()
   const {
     data: { user },
@@ -25,10 +26,15 @@ async function requireRole(roles: string[]): Promise<{ userId: string }> {
   if (!profile || profile.status !== "active") {
     throw new Error("This account is not active. Contact an administrator.")
   }
-  if (!roles.includes(profile.role)) {
+  if (roles && !roles.includes(profile.role)) {
     throw new Error("You are not authorized to perform this action.")
   }
   return { userId: user.id }
+}
+
+/** Ensure the caller is signed in and active, whatever their role. For self-service actions. */
+export function assertActiveUser(): Promise<{ userId: string }> {
+  return requireRole(null)
 }
 
 /** Ensure the caller is a super_admin or admin. Returns their user id. */

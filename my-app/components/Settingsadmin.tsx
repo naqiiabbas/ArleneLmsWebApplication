@@ -8,6 +8,7 @@ import {
   saveSecurity,
   saveProfile,
 } from "@/lib/data/settings";
+import { notifyProfileChanged } from "@/components/HeaderProfile";
 import type {
   GeneralData,
   NotificationData,
@@ -116,6 +117,7 @@ export default function Settingsadmin() {
     setNotice({ type: "success", msg: `${labelForTab(activeTab)} updated successfully.` });
     if (activeTab === "profile") {
       setAvatarFile(null);
+      notifyProfileChanged();
       getSettings().then(setFormData).catch(() => {});
     }
   };

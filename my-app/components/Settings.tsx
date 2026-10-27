@@ -1,6 +1,6 @@
 "use client";
 
-import React, { ChangeEvent, FormEvent, useRef, useState } from "react";
+import React, { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
 import {
   Bell,
   Building2,
@@ -13,20 +13,20 @@ import {
   Save,
   User,
 } from "lucide-react";
+import { getMentorProfileSettings, saveMentorProfileSettings } from "@/lib/data/mentor";
+import type { MentorProfileSettings } from "@/lib/data/mentor.types";
+import { notifyProfileChanged } from "@/components/HeaderProfile";
 
-interface ProfileData {
-  firstName: string;
-  lastName: string;
-  email: string;
-  phone: string;
-  address: string;
-  organization: string;
-  memberSince: string;
-  areasOfExpertise: string;
-  availability: string;
-  bio: string;
-  avatarUrl: string;
-}
+type ProfileData = MentorProfileSettings;
+
+const AVATAR_MAX_BYTES = 5 * 1024 * 1024;
+
+const AVAILABILITY_OPTIONS: { value: ProfileData["availability"]; label: string }[] = [
+  { value: "available", label: "Available" },
+  { value: "limited", label: "Limited" },
+  { value: "full", label: "Full (not taking new students)" },
+  { value: "unavailable", label: "Unavailable" },
+];
 
 interface NotificationData {
   newMessages: boolean;
@@ -58,15 +58,15 @@ type TabId = "profile" | "notifications" | "security" | "preferences";
 
 const INITIAL_SETTINGS_DATA: SettingsData = {
   profile: {
-    firstName: "John",
-    lastName: "Mentor",
-    email: "john.mentor@100blackmen.org",
-    phone: "(555) 123-4567",
-    address: "123 Main Street, Orange County, CA 92868",
-    organization: "100 Black Men of Orange County",
-    memberSince: "2020-01-15",
-    areasOfExpertise: "Math, Career Planning, Technology",
-    availability: "Weekdays 4PM-8PM, Weekends 9AM-2PM",
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+    address: "",
+    organization: "",
+    memberSince: "",
+    areasOfExpertise: "",
+    availability: "available",
     bio: "",
     avatarUrl: "",
   },
@@ -103,6 +103,20 @@ export default function SettingsSection() {
   const [activeTab, setActiveTab] = useState<TabId>("profile");
   const [formData, setFormData] = useState<SettingsData>(INITIAL_SETTINGS_DATA);
   const [isLoading, setIsLoading] = useState(false);
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [notice, setNotice] = useState<{ type: "success" | "error"; msg: string } | null>(null);
+
+  const loadProfile = () =>
+    getMentorProfileSettings()
+      .then((profile) => {
+        setFormData((prev) => ({ ...prev, profile }));
+        setAvatarFile(null);
+      })
+      .catch((e) => setNotice({ type: "error", msg: (e as Error).message }));
+
+  useEffect(() => {
+    loadProfile();
+  }, []);
 
   const handleUpdate = <K extends keyof SettingsData>(
     section: K,
@@ -120,6 +134,30 @@ export default function SettingsSection() {
 
   const handleSave = async (e: FormEvent) => {
     e.preventDefault();
+    if (activeTab === "profile") {
+      const p = formData.profile;
+      const fd = new FormData();
+      fd.set("firstName", p.firstName);
+      fd.set("lastName", p.lastName);
+      fd.set("phone", p.phone);
+      fd.set("address", p.address);
+      fd.set("areasOfExpertise", p.areasOfExpertise);
+      fd.set("availability", p.availability);
+      fd.set("bio", p.bio);
+      if (avatarFile) fd.set("avatar", avatarFile);
+      else if (p.avatarUrl === "") fd.set("removeAvatar", "true");
+      setIsLoading(true);
+      const res = await saveMentorProfileSettings(fd);
+      setIsLoading(false);
+      if (res.error) {
+        setNotice({ type: "error", msg: res.error });
+        return;
+      }
+      setNotice({ type: "success", msg: "Profile updated successfully." });
+      notifyProfileChanged();
+      loadProfile();
+      return;
+    }
     setIsLoading(true);
     await new Promise((resolve) => setTimeout(resolve, 800));
     console.log("Saved Data:", formData[activeTab]);
@@ -136,6 +174,21 @@ export default function SettingsSection() {
           </h1>
           <p className="mt-1 text-[15px] leading-5 text-[#666666]">Manage your account preferences</p>
         </header>
+
+        {notice && (
+          <div
+            className={`mb-4 flex items-start justify-between gap-4 rounded-lg border px-4 py-3 text-[14px] font-medium ${
+              notice.type === "success"
+                ? "border-green-200 bg-green-50 text-green-700"
+                : "border-red-200 bg-red-50 text-red-700"
+            }`}
+          >
+            <span className="break-all">{notice.msg}</span>
+            <button type="button" onClick={() => setNotice(null)} className="shrink-0 text-[13px] underline">
+              Dismiss
+            </button>
+          </div>
+        )}
 
         <div className="grid gap-4 lg:grid-cols-[267px_minmax(0,1fr)]">
           <aside className="rounded-lg border border-[#dddddd] bg-white px-[15px] py-[9px] lg:min-h-[805px]">
@@ -168,6 +221,9 @@ export default function SettingsSection() {
                   data={formData.profile}
                   isLoading={isLoading}
                   onChange={(field, value) => handleUpdate("profile", field, value)}
+                  onAvatarFile={setAvatarFile}
+                  onError={(msg) => setNotice({ type: "error", msg })}
+                  onCancel={loadProfile}
                 />
               )}
               {activeTab === "notifications" && (
@@ -205,13 +261,40 @@ interface FormProps<T> {
   onChange: (field: keyof T, value: T[keyof T]) => void;
 }
 
-function ProfileForm({ data, isLoading, onChange }: FormProps<ProfileData>) {
+function ProfileForm({
+  data,
+  isLoading,
+  onChange,
+  onAvatarFile,
+  onError,
+  onCancel,
+}: FormProps<ProfileData> & {
+  onAvatarFile: (file: File | null) => void;
+  onError: (msg: string) => void;
+  onCancel: () => void;
+}) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const initials =
+    [data.firstName, data.lastName]
+      .map((n) => n.trim()[0] ?? "")
+      .join("")
+      .toUpperCase() || "?";
 
   const handleImageChange = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-picking the same file
     if (!file) return;
+    if (file.size > AVATAR_MAX_BYTES) {
+      onError("Profile photo must be 5 MB or smaller.");
+      return;
+    }
     onChange("avatarUrl", URL.createObjectURL(file));
+    onAvatarFile(file);
+  };
+
+  const removePhoto = () => {
+    onChange("avatarUrl", "");
+    onAvatarFile(null);
   };
 
   return (
@@ -230,7 +313,7 @@ function ProfileForm({ data, isLoading, onChange }: FormProps<ProfileData>) {
               <img src={data.avatarUrl} alt="Profile" className="h-full w-full rounded-full object-cover" />
             ) : (
               <div className="flex h-full w-full items-center justify-center rounded-full bg-[#ffa313] text-[28px] font-medium text-white">
-                JM
+                {initials}
               </div>
             )}
             <button
@@ -241,18 +324,37 @@ function ProfileForm({ data, isLoading, onChange }: FormProps<ProfileData>) {
             >
               <Camera size={14} />
             </button>
-            <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageChange} className="hidden" />
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              onChange={handleImageChange}
+              className="hidden"
+            />
           </div>
           <div>
             <h2 className="text-[21px] font-semibold leading-7 text-[#2c3e50]">Profile Photo</h2>
-            <p className="mt-1 text-[13px] text-[#687583]">Upload a new profile photo (JPG, PNG, max 5MB)</p>
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="mt-[14px] h-[40px] rounded-lg border border-[#d8dde3] bg-white px-[14px] text-[15px] font-medium text-[#2c3e50]"
-            >
-              Change Photo
-            </button>
+            <p className="mt-1 text-[13px] text-[#687583]">
+              Upload a new profile photo (JPG, PNG, WebP or GIF, max 5MB). Click Save Changes to apply.
+            </p>
+            <div className="mt-[14px] flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="h-[40px] rounded-lg border border-[#d8dde3] bg-white px-[14px] text-[15px] font-medium text-[#2c3e50]"
+              >
+                Change Photo
+              </button>
+              {data.avatarUrl && (
+                <button
+                  type="button"
+                  onClick={removePhoto}
+                  className="h-[40px] rounded-lg border border-[#d8dde3] bg-white px-[14px] text-[15px] font-medium text-[#687583]"
+                >
+                  Remove
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -269,6 +371,7 @@ function ProfileForm({ data, isLoading, onChange }: FormProps<ProfileData>) {
           type="email"
           value={data.email}
           onChange={(value) => onChange("email", value)}
+          readOnly
         />
         <IconInput
           icon={<Phone size={19} />}
@@ -303,13 +406,19 @@ function ProfileForm({ data, isLoading, onChange }: FormProps<ProfileData>) {
           value={data.areasOfExpertise}
           onChange={(value) => onChange("areasOfExpertise", value)}
         />
-        <InputField label="Availability" value={data.availability} onChange={(value) => onChange("availability", value)} />
+        <SelectField
+          label="Availability"
+          value={data.availability}
+          options={AVAILABILITY_OPTIONS}
+          onChange={(value) => onChange("availability", value as ProfileData["availability"])}
+        />
         <TextareaField label="Bio" value={data.bio} onChange={(value) => onChange("bio", value)} />
       </div>
 
       <div className="flex justify-end gap-3 border-t border-[#dddddd] px-6 py-[14px]">
         <button
           type="button"
+          onClick={onCancel}
           className="h-[40px] min-w-[114px] rounded-lg border border-[#d8dde3] bg-white px-5 text-[14px] font-medium text-[#2c3e50]"
         >
           Cancel
@@ -534,7 +643,7 @@ function SelectField({
 }: {
   label: string;
   value: string;
-  options: string[];
+  options: Array<string | { value: string; label: string }>;
   onChange: (value: string) => void;
 }) {
   return (
@@ -545,11 +654,14 @@ function SelectField({
         onChange={(e) => onChange(e.target.value)}
         className="h-[48px] w-full appearance-none rounded-lg border border-[#dddddd] bg-white px-3 text-[16px] text-[#111111] outline-none transition focus:border-[#ffa313]"
       >
-        {options.map((option) => (
-          <option key={option} value={option}>
-            {option}
-          </option>
-        ))}
+        {options.map((option) => {
+          const { value: v, label: l } = typeof option === "string" ? { value: option, label: option } : option;
+          return (
+            <option key={v} value={v}>
+              {l}
+            </option>
+          );
+        })}
       </select>
     </label>
   );

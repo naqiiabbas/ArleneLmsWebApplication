@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Poppins } from 'next/font/google';
 import {
   Award,
   Calendar,
+  Camera,
   ChevronDown,
   Clock,
   FileText,
@@ -21,7 +22,11 @@ import {
   getStudentGoals,
   addStudentGoal,
 } from '@/lib/data/student';
+import { updateMyAvatar } from '@/lib/data/me';
+import { notifyProfileChanged } from '@/components/HeaderProfile';
 import type { StudentProfile, StudentGoal } from '@/lib/data/student.types';
+
+const AVATAR_MAX_BYTES = 5 * 1024 * 1024;
 
 const poppins = Poppins({
   subsets: ['latin'],
@@ -63,6 +68,28 @@ const ProfileSection = () => {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [isGoalModalOpen, setIsGoalModalOpen] = useState(false);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+
+  const changePhoto = async (file: File | null, remove = false) => {
+    if (photoBusy) return;
+    if (file && file.size > AVATAR_MAX_BYTES) {
+      setNotice('Profile photo must be 5 MB or smaller.');
+      return;
+    }
+    const fd = new FormData();
+    if (file) fd.set('avatar', file);
+    if (remove) fd.set('remove', 'true');
+    setPhotoBusy(true);
+    const res = await updateMyAvatar(fd);
+    setPhotoBusy(false);
+    if (res.error) {
+      setNotice(res.error);
+      return;
+    }
+    setProfile((p) => (p ? { ...p, avatar: res.avatarUrl ?? '' } : p));
+    notifyProfileChanged();
+  };
 
   const loadProfile = () => {
     getStudentProfile()
@@ -139,8 +166,49 @@ const ProfileSection = () => {
       <div className="relative mb-[24px] overflow-hidden rounded-[12px] bg-white">
         <div className="h-[160px] bg-[#ffa313]" />
         <div className="relative flex min-h-[160px] flex-col gap-4 px-[32px] pb-[26px] md:flex-row md:items-start">
-          <div className="-mt-[10px] flex h-[128px] w-[128px] shrink-0 items-center justify-center overflow-hidden rounded-full border-[5px] border-white bg-[#6514df] text-[36px] font-semibold text-white shadow-lg">
-            {d ? initials(d.name) : ''}
+          <div className="relative -mt-[10px] h-[128px] w-[128px] shrink-0">
+            <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-full border-[5px] border-white bg-[#6514df] text-[36px] font-semibold text-white shadow-lg">
+              {d?.avatar ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={d.avatar} alt={d.name} className="h-full w-full object-cover" />
+              ) : d ? (
+                initials(d.name)
+              ) : (
+                ''
+              )}
+              {photoBusy && <span className="absolute inset-[5px] animate-pulse rounded-full bg-white/40" />}
+            </div>
+            <button
+              type="button"
+              onClick={() => photoInputRef.current?.click()}
+              disabled={!d || photoBusy}
+              className="absolute bottom-[4px] right-[4px] flex h-[36px] w-[36px] items-center justify-center rounded-full border border-[#dddddd] bg-white text-[#666666] shadow-md transition hover:text-[#ffa313] disabled:opacity-60"
+              aria-label="Change profile photo"
+              title="Change profile photo"
+            >
+              <Camera size={17} strokeWidth={1.8} />
+            </button>
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0] ?? null;
+                e.target.value = ''; // allow re-picking the same file
+                if (file) changePhoto(file);
+              }}
+            />
+            {d?.avatar && (
+              <button
+                type="button"
+                onClick={() => changePhoto(null, true)}
+                disabled={photoBusy}
+                className="absolute -bottom-[22px] left-1/2 -translate-x-1/2 whitespace-nowrap text-[12px] text-[#666666] underline transition hover:text-[#111111] disabled:opacity-60"
+              >
+                Remove photo
+              </button>
+            )}
           </div>
           <div className="min-w-0 flex-1 pt-[2px]">
             <h2 className="text-[24px] font-semibold leading-none text-[#111111]">{d?.name ?? '—'}</h2>

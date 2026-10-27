@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { assertMentor } from "@/lib/data/guards"
 import { logActivity, notifyAdmins } from "@/lib/data/audit"
+import { avatarFileError, removeAvatarObject, storeAvatar } from "@/lib/data/avatar"
 import {
   APP_TIMEZONE,
   addDaysYmd,
@@ -33,6 +34,7 @@ import type {
   MentorStudentDetail,
   MentorStudentOption,
   RiskLevel,
+  MentorProfileSettings,
 } from "@/lib/data/mentor.types"
 import type { BlogStatus, UIBlogPost } from "@/lib/data/blog.types"
 
@@ -1405,5 +1407,117 @@ export async function deleteMentorBlogPost(id: string): Promise<{ error?: string
 
   const { error } = await admin.from("blog_posts").delete().eq("id", id).eq("author_id", userId)
   if (error) return { error: error.message }
+  return {}
+}
+
+// ── Settings → Profile ──────────────────────────────────────────────────────
+
+const MENTOR_AVAILABILITY: MentorProfileSettings["availability"][] = ["available", "limited", "full", "unavailable"]
+
+/** The signed-in mentor's own profile for the Settings page. */
+export async function getMentorProfileSettings(): Promise<MentorProfileSettings> {
+  const { userId } = await assertMentor()
+  const admin = createAdminClient()
+
+  const [{ data: prof }, { data: mentor }] = await Promise.all([
+    admin
+      .from("profiles")
+      .select("full_name, email, phone, bio, avatar_url, created_at, organization:organizations!profiles_organization_fk ( name )")
+      .eq("id", userId)
+      .single(),
+    admin.from("mentors").select("address, expertise, availability, join_date").eq("id", userId).maybeSingle(),
+  ])
+
+  const p = prof as unknown as {
+    full_name: string | null
+    email: string | null
+    phone: string | null
+    bio: string | null
+    avatar_url: string | null
+    created_at: string | null
+    organization: { name: string | null } | null
+  } | null
+  const nameParts = (p?.full_name ?? "").split(" ").filter(Boolean)
+  const since = mentor?.join_date ?? p?.created_at ?? null
+
+  return {
+    firstName: nameParts[0] ?? "",
+    lastName: nameParts.slice(1).join(" "),
+    email: p?.email ?? "",
+    phone: p?.phone ?? "",
+    address: mentor?.address ?? "",
+    organization: p?.organization?.name ?? "100 Black Men of Orange County",
+    memberSince: since
+      ? new Date(since).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })
+      : "",
+    areasOfExpertise: mentor?.expertise ?? "",
+    availability: mentor?.availability ?? "available",
+    bio: p?.bio ?? "",
+    avatarUrl: p?.avatar_url ?? "",
+  }
+}
+
+/**
+ * Save the signed-in mentor's own profile. FormData carries the text fields plus
+ * an optional "avatar" file or removeAvatar="true". Email is not editable here.
+ */
+export async function saveMentorProfileSettings(formData: FormData): Promise<{ error?: string }> {
+  let userId: string
+  try {
+    ;({ userId } = await assertMentor())
+  } catch (e) {
+    return { error: (e as Error).message }
+  }
+  const admin = createAdminClient()
+
+  const text = (key: string) => ((formData.get(key) as string) || "").trim()
+  const firstName = text("firstName")
+  const lastName = text("lastName")
+  const availability = text("availability") as MentorProfileSettings["availability"]
+  if (!firstName) return { error: "First name is required." }
+  if (!MENTOR_AVAILABILITY.includes(availability)) return { error: "Choose a valid availability." }
+
+  const file = formData.get("avatar")
+  let avatarUrl: string | null | undefined = undefined
+  if (file instanceof File && file.size > 0) {
+    const bad = avatarFileError(file)
+    if (bad) return { error: bad }
+    try {
+      avatarUrl = await storeAvatar(admin, userId, file)
+    } catch (e) {
+      return { error: (e as Error).message }
+    }
+  } else if (formData.get("removeAvatar") === "true") {
+    avatarUrl = null
+  }
+
+  const { data: cur } = await admin.from("profiles").select("avatar_url").eq("id", userId).single()
+
+  const patch: { full_name: string; phone: string | null; bio: string | null; avatar_url?: string | null } = {
+    full_name: [firstName, lastName].filter(Boolean).join(" "),
+    phone: text("phone") || null,
+    bio: text("bio") || null,
+  }
+  if (avatarUrl !== undefined) patch.avatar_url = avatarUrl
+
+  const { error: pErr } = await admin.from("profiles").update(patch).eq("id", userId)
+  if (pErr) {
+    if (avatarUrl) await removeAvatarObject(admin, userId, avatarUrl)
+    return { error: pErr.message }
+  }
+
+  const { error: mErr } = await admin.from("mentors").upsert(
+    {
+      id: userId,
+      address: text("address") || null,
+      expertise: text("areasOfExpertise") || null,
+      availability,
+    },
+    { onConflict: "id" },
+  )
+  if (mErr) return { error: mErr.message }
+
+  if (avatarUrl !== undefined) await removeAvatarObject(admin, userId, cur?.avatar_url)
+  await logActivity({ actorId: userId, actorRole: "mentor", action: "Updated profile", targetType: "profile", targetId: userId }, admin)
   return {}
 }

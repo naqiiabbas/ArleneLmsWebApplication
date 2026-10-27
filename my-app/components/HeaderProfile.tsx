@@ -12,6 +12,12 @@ export const notifyNotificationsChanged = () => {
   if (typeof window !== "undefined") window.dispatchEvent(new Event(NOTIFICATIONS_CHANGED));
 };
 
+/** Fire after the user changes their own name or photo so the header updates at once. */
+export const PROFILE_CHANGED = "lms:profile-changed";
+export const notifyProfileChanged = () => {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(PROFILE_CHANGED));
+};
+
 const REFRESH_MS = 60_000;
 
 export function useHeaderInfo(): HeaderInfo | null {
@@ -30,11 +36,13 @@ export function useHeaderInfo(): HeaderInfo | null {
     const timer = setInterval(load, REFRESH_MS);
     window.addEventListener("focus", load);
     window.addEventListener(NOTIFICATIONS_CHANGED, load);
+    window.addEventListener(PROFILE_CHANGED, load);
     return () => {
       alive = false;
       clearInterval(timer);
       window.removeEventListener("focus", load);
       window.removeEventListener(NOTIFICATIONS_CHANGED, load);
+      window.removeEventListener(PROFILE_CHANGED, load);
     };
   }, []);
 
