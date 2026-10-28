@@ -597,10 +597,22 @@ export async function getStudentCalendar(): Promise<StudentSession[]> {
 
   const { data, error } = await admin
     .from("class_sessions")
-    .select("id, title, session_date, start_at, end_at, location, class:classes ( name ), mentor:profiles ( full_name )")
+    .select("id, title, session_date, start_at, end_at, location, status, class:classes ( name ), mentor:profiles ( full_name )")
     .in("class_id", classIds)
     .order("start_at", { ascending: true })
   if (error) throw new Error(error.message)
+
+  const durationOf = (a: string | null, b: string | null) => {
+    if (!a || !b) return ""
+    const mins = Math.round((new Date(b).getTime() - new Date(a).getTime()) / 60_000)
+    if (mins <= 0) return ""
+    const h = Math.floor(mins / 60), m = mins % 60
+    return h ? (m ? `${h}h ${m}m` : `${h}h`) : `${m}m`
+  }
+  const urlOf = (loc: string | null) => {
+    const v = (loc ?? "").trim()
+    return /^https?:\/\/\S+$/i.test(v) ? v : "" // a pasted meeting link
+  }
 
   return ((data ?? []) as unknown as {
     id: string
@@ -609,6 +621,7 @@ export async function getStudentCalendar(): Promise<StudentSession[]> {
     start_at: string | null
     end_at: string | null
     location: string | null
+    status: "scheduled" | "in_progress" | "completed" | "cancelled"
     class: { name: string | null } | null
     mentor: { full_name: string | null } | null
   }[]).map((s) => ({
@@ -622,6 +635,11 @@ export async function getStudentCalendar(): Promise<StudentSession[]> {
     date: s.session_date ?? (s.start_at ? s.start_at.slice(0, 10) : ""),
     description: "",
     agenda: [],
+    startIso: s.start_at ?? "",
+    endIso: s.end_at ?? "",
+    duration: durationOf(s.start_at, s.end_at),
+    joinUrl: urlOf(s.location),
+    status: s.status,
   }))
 }
 

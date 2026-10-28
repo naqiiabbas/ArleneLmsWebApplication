@@ -11,14 +11,15 @@ import type { AdminUser, UIRole, UIStatus, UserInput } from "@/lib/data/users.ty
 
 type DbRole = Database["public"]["Enums"]["user_role"]
 
-// Roles surfaced in the admin User Management screen (sponsors/parents are
-// managed elsewhere).
+// Roles surfaced in the admin User Management screen. Sponsors were missing,
+// so there was no way at all to create a sponsor-portal login.
 const MANAGED_DB_ROLES: DbRole[] = [
   "super_admin",
   "admin",
   "manager",
   "mentor",
   "student",
+  "sponsor",
 ]
 
 const DB_TO_UI_ROLE: Record<string, UIRole> = {
@@ -27,12 +28,14 @@ const DB_TO_UI_ROLE: Record<string, UIRole> = {
   manager: "Manager",
   mentor: "Mentor",
   student: "Student",
+  sponsor: "Sponsor",
 }
 const UI_TO_DB_ROLE: Record<UIRole, DbRole> = {
   Admin: "admin",
   Manager: "manager",
   Mentor: "mentor",
   Student: "student",
+  Sponsor: "sponsor",
 }
 
 function uiStatusToDb(s: UIStatus) {

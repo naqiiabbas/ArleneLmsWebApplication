@@ -8,6 +8,7 @@ import {
   markConversationRead,
   createDirectConversation,
 } from "@/lib/data/messaging";
+import { useChatDeepLink } from "@/components/useChatDeepLink";
 import type { UIConversation, UIMessage } from "@/lib/data/messaging.types";
 
 type Message = UIMessage;
@@ -54,6 +55,12 @@ export default function Messagesadmin() {
       setLoadingConvos(false);
     }
   };
+
+  // "Send Message" buttons link here with ?to=<id> — open that person's chat.
+  useChatDeepLink(async (id) => {
+    await loadConversations();
+    setActiveChatId(id);
+  }, setNotice);
 
   const loadMessages = async (conversationId: string) => {
     const res = await getMessages(conversationId);

@@ -142,6 +142,14 @@ export interface StudentSession {
   date: string // yyyy-mm-dd
   description: string
   agenda: string[]
+  /** True instants, so the browser can tell whether "Join" is open yet. */
+  startIso: string
+  endIso: string
+  /** e.g. "1h 30m" — from the real start/end (was hardcoded). */
+  duration: string
+  /** Meeting URL when the session location is a link; "" for in-person sessions. */
+  joinUrl: string
+  status: "scheduled" | "in_progress" | "completed" | "cancelled"
 }
 
 export interface StudentResource {

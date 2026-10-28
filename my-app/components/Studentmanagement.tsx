@@ -2,6 +2,8 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
+import { chatLink } from "@/components/useChatDeepLink";
 import { ChevronDown, Eye, IdCard, KeyRound, Mail, MapPin, Phone, Plus, Search, Trash2 } from "lucide-react";
 import {
   listStudents,
@@ -359,6 +361,7 @@ function StudentDetails({
   notice: Notice | null;
   onDismissNotice: () => void;
 }) {
+  const router = useRouter();
   return (
     <div className="min-h-full bg-[#f4f4f4] px-6 py-6 font-[Poppins]">
       <NoticeBar notice={notice} onDismiss={onDismissNotice} />
@@ -449,7 +452,13 @@ function StudentDetails({
                 <button
                   type="button"
                   key={action}
-                  onClick={() => (action === "Download Report" ? onDownload() : undefined)}
+                  onClick={() =>
+                    action === "Download Report"
+                      ? onDownload()
+                      : action === "Send Message"
+                        ? router.push(chatLink("/adminpanel/message", student.id))
+                        : undefined
+                  }
                   className="text-[16px] font-normal leading-none text-[#F9A618] transition-colors hover:text-[#d98a00]"
                 >
                   {action}

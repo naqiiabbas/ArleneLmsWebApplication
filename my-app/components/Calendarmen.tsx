@@ -24,6 +24,8 @@ import {
   deleteMentorSession,
 } from "@/lib/data/mentor";
 import type { MentorSession, MentorClassOption, SessionStatus } from "@/lib/data/mentor.types";
+import type { VisibleEvent } from "@/lib/data/events.types";
+import { EventChip, EventDetailsModal, UpcomingEventsList, eventsByDate, useMyEvents, EVENT_COLOR } from "@/components/ProgramEvents";
 
 const SESSION_TYPES = ["Tutoring", "Career Discussion", "Study Skills", "Check-in", "Workshop"];
 
@@ -126,6 +128,10 @@ export default function CalendarSection() {
   const [saving, setSaving] = useState(false);
 
   const [selected, setSelected] = useState<MentorSession | null>(null);
+  // Admin-created program events shared with mentors (read-only here).
+  const programEvents = useMyEvents();
+  const eventsOnDay = useMemo(() => eventsByDate(programEvents), [programEvents]);
+  const [openEvent, setOpenEvent] = useState<VisibleEvent | null>(null);
   const [detailError, setDetailError] = useState("");
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState<Confirm | null>(null);
@@ -414,6 +420,9 @@ export default function CalendarSection() {
                         {date.getDate()}
                       </span>
                       <div className="space-y-[4px]">
+                        {(eventsOnDay.get(dateStr) ?? []).map((ev) => (
+                          <EventChip key={ev.id} event={ev} onOpen={setOpenEvent} />
+                        ))}
                         {daySessions.map((s) => (
                           <button
                             type="button"
@@ -439,6 +448,12 @@ export default function CalendarSection() {
 
         <div className="rounded-[8px] border border-[#dddddd] bg-white px-[24px] pb-[23px] pt-[27px]">
           <h3 className="mb-[19px] text-[22px] font-semibold leading-none text-[#111111]">Upcoming Sessions</h3>
+          {programEvents.length > 0 && (
+            <p className="-mt-[8px] mb-[14px] flex items-center gap-[8px] text-[12px] text-[#666666]">
+              <span className="h-[10px] w-[10px] rounded-full" style={{ backgroundColor: EVENT_COLOR }} />
+              Purple items on the calendar are program events posted by the administrators.
+            </p>
+          )}
           <div className="space-y-[12px]">
             {loading && <p className="py-[16px] text-[14px] text-[#666666]">Loading sessions...</p>}
             {!loading && upcoming.length === 0 && (
@@ -474,6 +489,9 @@ export default function CalendarSection() {
           </div>
         </div>
       </div>
+
+      <UpcomingEventsList events={programEvents} today={today} onOpen={setOpenEvent} />
+      <EventDetailsModal event={openEvent} onClose={() => setOpenEvent(null)} />
 
       {/* ---- Create / edit ---- */}
       <Modal isOpen={formOpen} onClose={() => !saving && setFormOpen(false)} title={editing ? "Edit Session" : "Schedule New Session"}>
@@ -574,7 +592,7 @@ export default function CalendarSection() {
               <label className={labelCls}>Location</label>
               <div className="relative">
                 <MapPin className="absolute left-[13px] top-1/2 -translate-y-1/2 text-[#657183]" size={20} strokeWidth={1.8} />
-                <input type="text" value={form.location} placeholder="e.g., Library Room 301, Virtual Meeting" onChange={(e) => setForm({ ...form, location: e.target.value })} className={`${inputCls} pl-[41px]`} />
+                <input type="text" value={form.location} placeholder="e.g., Library Room 301 — or paste a meeting link (https://…)" onChange={(e) => setForm({ ...form, location: e.target.value })} className={`${inputCls} pl-[41px]`} />
               </div>
             </div>
             <p className="mt-[14px] text-[12px] text-[#999999]">Times are Pacific Time, the class&apos;s local time.</p>

@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
+import { chatLink } from "@/components/useChatDeepLink";
 import {
   Calendar,
   ChevronDown,
@@ -225,7 +226,7 @@ export default function AssignedStudentsSection() {
               </div>
             </div>
 
-            <Link href="/mentorshippanel/message">
+            <Link href={chatLink("/mentorshippanel/message", selectedStudent.id)}>
               <button className="mt-[27px] h-[36px] w-full rounded-[8px] bg-[#ffa313] text-[14px] font-semibold text-white transition hover:bg-[#f59a0d]">
                 Send Message
               </button>
@@ -315,7 +316,7 @@ export default function AssignedStudentsSection() {
               {activeTab === "Messages" && (
                 <div className="flex min-h-[300px] flex-col items-center justify-center text-center">
                   <p className="mb-[18px] text-[15px] font-normal leading-none text-[#657183]">No messages yet. Start a conversation!</p>
-                  <Link href="/mentorshippanel/message">
+                  <Link href={chatLink("/mentorshippanel/message", selectedStudent.id)}>
                     <button className="h-[37px] rounded-[8px] bg-[#ffa313] px-[21px] text-[14px] font-semibold text-white transition hover:bg-[#f59a0d]">Send Message</button>
                   </Link>
                 </div>
@@ -531,7 +532,7 @@ export default function AssignedStudentsSection() {
                     <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center"><Eye size={17} strokeWidth={1.8} /></span>
                     <span className="-translate-y-px">View Profile</span>
                   </button>
-                  <Link href="/mentorshippanel/message">
+                  <Link href={chatLink("/mentorshippanel/message", student.id)}>
                     <button className="flex h-[43px] w-full items-center gap-[14px] px-[17px] text-[15px] font-medium leading-none text-[#666666] hover:bg-[#f8f8f8]">
                       <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center"><MessageSquare size={17} strokeWidth={1.8} /></span>
                       <span className="-translate-y-px">Send Message</span>

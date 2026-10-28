@@ -16,6 +16,7 @@ import {
 import { getMentorProfileSettings, saveMentorProfileSettings } from "@/lib/data/mentor";
 import type { MentorProfileSettings } from "@/lib/data/mentor.types";
 import { notifyProfileChanged } from "@/components/HeaderProfile";
+import { changeMyPassword, getMyNotificationPrefs, saveMyNotificationPrefs } from "@/lib/data/me";
 
 type ProfileData = MentorProfileSettings;
 
@@ -116,6 +117,11 @@ export default function SettingsSection() {
 
   useEffect(() => {
     loadProfile();
+    getMyNotificationPrefs()
+      .then((notifications) => setFormData((prev) => ({ ...prev, notifications })))
+      .catch(() => {
+        /* keep the defaults (all on) */
+      });
   }, []);
 
   const handleUpdate = <K extends keyof SettingsData>(
@@ -158,11 +164,37 @@ export default function SettingsSection() {
       loadProfile();
       return;
     }
-    setIsLoading(true);
-    await new Promise((resolve) => setTimeout(resolve, 800));
-    console.log("Saved Data:", formData[activeTab]);
-    alert(`${activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} updated successfully!`);
-    setIsLoading(false);
+    // These tabs used to wait 0.8 s, console.log and pop a browser alert()
+    // (the dark bar at the top of the page) while saving nothing.
+    if (activeTab === "notifications") {
+      setIsLoading(true);
+      const res = await saveMyNotificationPrefs(formData.notifications);
+      setIsLoading(false);
+      setNotice(res.error ? { type: "error", msg: res.error } : { type: "success", msg: "Notification preferences saved." });
+      return;
+    }
+    if (activeTab === "security") {
+      const sec = formData.security;
+      if (!sec.currentPassword || !sec.newPassword) {
+        setNotice({ type: "error", msg: "Enter your current password and a new password." });
+        return;
+      }
+      if (sec.newPassword !== sec.confirmPassword) {
+        setNotice({ type: "error", msg: "The new passwords don't match." });
+        return;
+      }
+      setIsLoading(true);
+      const res = await changeMyPassword(sec.currentPassword, sec.newPassword);
+      setIsLoading(false);
+      if (res.error) {
+        setNotice({ type: "error", msg: res.error });
+        return;
+      }
+      setFormData((prev) => ({ ...prev, security: { ...prev.security, currentPassword: "", newPassword: "", confirmPassword: "" } }));
+      setNotice({ type: "success", msg: "Password changed. Use the new password next time you sign in." });
+      return;
+    }
+    // Preferences are fixed program-wide (read-only tab) — nothing to save.
   };
 
   return (
@@ -434,7 +466,7 @@ function NotificationForm({ data, isLoading, onChange }: FormProps<NotificationD
     {
       id: "newMessages" as const,
       title: "New Messages",
-      description: "Get notified when students send you messages",
+      description: "Get notified when someone sends you a message",
     },
     {
       id: "sessionReminders" as const,
@@ -451,8 +483,8 @@ function NotificationForm({ data, isLoading, onChange }: FormProps<NotificationD
   return (
     <div className="p-6">
       <h2 className="text-[21px] font-semibold leading-7 text-[#111111]">Notification Preferences</h2>
-      <p className="mt-[8px] text-[15px] leading-5 text-[#666666]">Choose how you want to receive notifications</p>
-      <h3 className="mt-[27px] text-[18px] font-semibold leading-6 text-[#111111]">Email Notifications</h3>
+      <p className="mt-[8px] text-[15px] leading-5 text-[#666666]">Choose which notifications appear in your bell</p>
+      <h3 className="mt-[27px] text-[18px] font-semibold leading-6 text-[#111111]">In-app Notifications</h3>
 
       <div className="mt-[17px] space-y-4">
         {items.map((item) => (
@@ -513,30 +545,10 @@ function SecurityForm({ data, isLoading, onChange }: FormProps<SecurityData>) {
         />
       </div>
 
-      <div className="my-6 border-t border-[#dddddd]" />
+      <p className="mt-[12px] text-[13px] leading-[18px] text-[#888888]">At least 8 characters. You stay signed in on this device.</p>
 
-      <h3 className="text-[18px] font-semibold leading-6 text-[#111111]">Two-Factor Authentication</h3>
-      <button
-        type="button"
-        onClick={() => onChange("twoFactorEnabled", !data.twoFactorEnabled)}
-        className="mt-[17px] flex min-h-[70px] w-full items-center justify-between rounded-lg border border-[#dddddd] bg-white px-4 text-left"
-      >
-        <span>
-          <span className="block text-[15px] font-medium leading-5 text-[#111111]">Enable 2FA</span>
-          <span className="mt-[2px] block text-[13px] leading-[18px] text-[#666666]">
-            Add an extra layer of security to your account
-          </span>
-        </span>
-        <span
-          className={`h-[20px] w-[20px] rounded border ${
-            data.twoFactorEnabled ? "border-[#ffa313] bg-[#ffa313]" : "border-[#d0d0d0] bg-white"
-          }`}
-          aria-hidden="true"
-        />
-      </button>
-
-      <div className="mt-12">
-        <PrimaryButton label={isLoading ? "Saving..." : "Update Security"} />
+      <div className="mt-8">
+        <PrimaryButton label={isLoading ? "Saving..." : "Change Password"} />
       </div>
     </div>
   );
@@ -546,31 +558,12 @@ function PreferencesForm({ data, isLoading, onChange }: FormProps<PreferenceData
   return (
     <div className="p-6">
       <h2 className="text-[21px] font-semibold leading-7 text-[#111111]">General Preferences</h2>
-      <p className="mt-[8px] text-[15px] leading-5 text-[#666666]">Customize your dashboard experience</p>
+      <p className="mt-[8px] text-[15px] leading-5 text-[#666666]">These are set for the whole program</p>
 
       <div className="mt-[27px] space-y-5">
-        <SelectField
-          label="Language"
-          value={data.language}
-          options={["English", "Urdu", "Spanish"]}
-          onChange={(value) => onChange("language", value)}
-        />
-        <SelectField
-          label="Timezone"
-          value={data.timezone}
-          options={["Pacific Time (PT)", "GMT+5", "UTC"]}
-          onChange={(value) => onChange("timezone", value)}
-        />
-        <SelectField
-          label="Date Format"
-          value={data.dateFormat}
-          options={["MM/DD/YYYY", "DD/MM/YYYY", "YYYY-MM-DD"]}
-          onChange={(value) => onChange("dateFormat", value)}
-        />
-      </div>
-
-      <div className="mt-6">
-        <PrimaryButton label={isLoading ? "Saving..." : "Save Preferences"} />
+        <InputField label="Language" value="English" onChange={() => undefined} readOnly />
+        <InputField label="Timezone" value="Pacific Time (PT) — all session times are shown in this zone" onChange={() => undefined} readOnly />
+        <InputField label="Date Format" value="MM/DD/YYYY" onChange={() => undefined} readOnly />
       </div>
     </div>
   );

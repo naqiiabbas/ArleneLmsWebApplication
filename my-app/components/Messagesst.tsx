@@ -20,6 +20,7 @@ import {
   markConversationRead,
   createDirectConversation,
 } from '@/lib/data/messaging';
+import { useChatDeepLink } from "@/components/useChatDeepLink";
 import { getStudentContacts } from '@/lib/data/student';
 import type { UIConversation, UIMessage } from '@/lib/data/messaging.types';
 import type { StudentContact } from '@/lib/data/student.types';
@@ -67,6 +68,12 @@ export default function MessagingSection() {
       setLoading(false);
     }
   };
+
+  // "Send Message" buttons link here with ?to=<id> — open that person's chat.
+  useChatDeepLink(async (id) => {
+    await loadConversations();
+    setActiveId(id);
+  }, setNotice);
 
   const loadMessages = async (conversationId: string) => {
     const res = await getMessages(conversationId);

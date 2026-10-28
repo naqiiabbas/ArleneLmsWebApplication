@@ -11,6 +11,7 @@ export type UIInvoice = {
 }
 
 export type UIPlan = {
+  id: string
   name: string
   price: number
   features: string[]
@@ -25,5 +26,5 @@ export type BillingData = {
   totalInvoices: number
   invoices: UIInvoice[]
   plans: UIPlan[]
-  currentPlan: { name: string; price: number; renews: string } | null
+  currentPlan: { planId: string; name: string; price: number; renews: string } | null
 }

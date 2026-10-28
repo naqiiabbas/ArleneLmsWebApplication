@@ -917,6 +917,35 @@ PHP 8.3.6, standard layout (`/var/www/html`, not Bitnami). SSH `ssh -i 100-black
   pinning the domain to HTTPS in every browser that visited for a year. That forced the WordPress site
   to get a real certificate rather than run on plain HTTP. **Never set HSTS on a host that may move.**
 
+### 9k. Cross-portal behaviour (fixed 2026-10-28)
+
+- **Portal switching (`middleware.ts`):** a signed-in user is bounced off a login page only if their
+  role fits THAT portal. Another portal's login page now shows (signing in there switches the
+  browser's single session); a wrong-role visit to a protected page goes to that portal's login.
+  Before, an admin session made every portal link open the admin dashboard.
+- **Admin sidebar (`PermissionsProvider`):** re-fetches permissions on every navigation — it lives in
+  the `/adminpanel` layout that also wraps the login page, so it used to keep the signed-out (empty)
+  result after sign-in until a refresh.
+- **Events:** admin Calendar has **"Who should see this?"** — Everyone → `visibility='public'`;
+  Mentors/Students → `role_based` + `event_participants.invited_role`; Admins → `private`.
+  `getMyEvents()` feeds the mentor + student calendars (purple, read-only, `components/ProgramEvents.tsx`).
+- **Messaging:** `sendMessage` notifies every other participant (type `message`, one unread
+  notification per conversation, skipped when the recipient turned "New messages" off).
+  `openDirectConversationWith(userId)` + `?to=<id>` deep link (`components/useChatDeepLink.ts`) back
+  the "Send Message" buttons (admin Student/Mentor detail, mentor student view).
+- **Sponsor accounts:** User Management now has role **Sponsor**; creating one also creates the linked
+  `sponsors` row (`ensureSponsorRecord`, approved, company = person's name). Sponsor portal login:
+  `/sponsorshippanel/loginform`.
+- **Student calendar:** Join opens the session location when it's a URL (`joinUrl`), from 15 min
+  before start to the end; in-person sessions show "In person"; real durations; "Add to Calendar"
+  downloads an `.ics` invite.
+- **Mentor Settings:** Notifications save to `notification_preferences.type_overrides`
+  (`new_messages`, `session_reminders`, `student_alerts`), Security changes the password after
+  verifying the current one (`changeMyPassword`), Preferences are read-only. The tabs used to save
+  nothing and fire a browser `alert()` (the "black bar").
+- **Billing → Choose Plan:** `selectPlan` cancels the current subscription, starts the new one for a
+  month and issues a **pending** `INV-YYYY-NNN` invoice (no payment gateway — settled offline).
+
 ---
 
 ## 10. Non-Functional Requirements

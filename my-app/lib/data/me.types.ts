@@ -6,3 +6,10 @@ export type HeaderInfo = {
   avatarUrl: string
   unreadNotifications: number
 }
+
+/** In-app (bell) notification switches — stored in notification_preferences.type_overrides. */
+export type MyNotificationPrefs = {
+  newMessages: boolean
+  sessionReminders: boolean
+  studentAlerts: boolean
+}

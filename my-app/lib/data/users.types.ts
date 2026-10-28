@@ -1,5 +1,5 @@
 // Shared types for the admin User Management module (UI-facing shapes).
-export type UIRole = "Admin" | "Mentor" | "Student" | "Manager"
+export type UIRole = "Admin" | "Mentor" | "Student" | "Manager" | "Sponsor"
 export type UIStatus = "Active" | "Suspended"
 
 export type AdminUser = {

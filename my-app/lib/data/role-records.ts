@@ -119,5 +119,30 @@ export function ensureRoleRecord(
   role: string,
 ): Promise<{ error?: string }> {
   if (role === "student") return ensureStudentRecord(admin, id)
+  if (role === "sponsor") return ensureSponsorRecord(admin, id)
   return Promise.resolve({})
+}
+
+/**
+ * A sponsor login only works with a sponsors row linked by profile_id (the
+ * sponsor portal resolves everything through it) — the DB trigger doesn't
+ * create one. Created approved, named after the person; they can set the
+ * company name in their own Settings.
+ */
+export async function ensureSponsorRecord(admin: AdminClient, id: string): Promise<{ error?: string }> {
+  const { data: existing, error: readErr } = await admin.from("sponsors").select("id").eq("profile_id", id).maybeSingle()
+  if (readErr) return { error: readErr.message }
+  if (existing) return {}
+  const { data: p } = await admin.from("profiles").select("full_name, email, phone").eq("id", id).single()
+  const name = p?.full_name?.trim() || p?.email || "New sponsor"
+  const { error } = await admin.from("sponsors").insert({
+    profile_id: id,
+    company_name: name,
+    contact_name: p?.full_name ?? null,
+    email: p?.email ?? null,
+    phone: p?.phone ?? null,
+    status: "approved",
+    approved_at: new Date().toISOString(),
+  })
+  return error ? { error: error.message } : {}
 }

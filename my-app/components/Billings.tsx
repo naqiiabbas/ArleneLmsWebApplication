@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { getBillingData } from "@/lib/data/billing";
-import type { BillingData, InvoiceStatus, UIInvoice } from "@/lib/data/billing.types";
+import { getBillingData, selectPlan } from "@/lib/data/billing";
+import type { BillingData, InvoiceStatus, UIInvoice, UIPlan } from "@/lib/data/billing.types";
 
 type BillingTab = "Overview" | "Invoices" | "Plans & Pricing";
 
@@ -56,14 +56,45 @@ export default function BillingSection() {
   const [activeTab, setActiveTab] = useState<BillingTab>("Overview");
   const [isMounted, setIsMounted] = useState(false);
   const [data, setData] = useState<BillingData | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ type: "success" | "error"; msg: string } | null>(null);
+  const [confirmPlan, setConfirmPlan] = useState<UIPlan | null>(null);
+  const [choosing, setChoosing] = useState(false);
+
+  const load = () =>
+    getBillingData()
+      .then(setData)
+      .catch((e) => setNotice({ type: "error", msg: (e as Error).message }));
 
   useEffect(() => {
     setIsMounted(true);
-    getBillingData()
-      .then(setData)
-      .catch((e) => setNotice((e as Error).message));
+    load();
   }, []);
+
+  // The plan buttons had no handler; choosing now switches the subscription
+  // and issues a pending first-month invoice (see selectPlan).
+  const choosePlan = async () => {
+    if (!confirmPlan || choosing) return;
+    setChoosing(true);
+    let res: { error?: string; invoiceNumber?: string };
+    try {
+      res = await selectPlan(confirmPlan.id);
+    } catch (e) {
+      res = { error: (e as Error).message || "Something went wrong. Please try again." };
+    } finally {
+      setChoosing(false);
+    }
+    if (res.error) {
+      setNotice({ type: "error", msg: res.error });
+      setConfirmPlan(null);
+      return;
+    }
+    setNotice({
+      type: "success",
+      msg: `You're now on the ${confirmPlan.name} plan. Invoice ${res.invoiceNumber} for the first month is pending in Invoices.`,
+    });
+    setConfirmPlan(null);
+    await load();
+  };
 
   const billing = data ?? EMPTY_BILLING;
 
@@ -118,8 +149,13 @@ export default function BillingSection() {
       </div>
 
       {notice && (
-        <div className="mb-4 rounded-[8px] border border-red-200 bg-red-50 px-4 py-3 text-[14px] font-semibold text-red-700">
-          {notice}
+        <div
+          className={`mb-4 flex items-start justify-between gap-4 rounded-[8px] border px-4 py-3 text-[14px] font-semibold ${
+            notice.type === "success" ? "border-green-200 bg-green-50 text-green-700" : "border-red-200 bg-red-50 text-red-700"
+          }`}
+        >
+          <span>{notice.msg}</span>
+          <button type="button" onClick={() => setNotice(null)} className="shrink-0 text-[13px] underline">Dismiss</button>
         </div>
       )}
 
@@ -140,16 +176,39 @@ export default function BillingSection() {
         </div>
 
         <div className="p-[24px]">
-          {activeTab === "Overview" && <Overview data={billing} />}
+          {activeTab === "Overview" && <Overview data={billing} onChoosePlan={() => setActiveTab("Plans & Pricing")} />}
           {activeTab === "Invoices" && <InvoicesTable data={billing} loading={!data} onDownload={handleExport} />}
-          {activeTab === "Plans & Pricing" && <Plans data={billing} />}
+          {activeTab === "Plans & Pricing" && <Plans data={billing} loading={!data} onChoose={setConfirmPlan} />}
         </div>
       </div>
+      {confirmPlan && (
+        <ConfirmPlanDialog plan={confirmPlan} current={billing.currentPlan} busy={choosing} onConfirm={choosePlan} onCancel={() => setConfirmPlan(null)} />
+      )}
     </section>
   );
 }
 
-const Overview = ({ data }: { data: BillingData }) => {
+const ConfirmPlanDialog = ({ plan, current, busy, onConfirm, onCancel }: { plan: UIPlan; current: BillingData["currentPlan"]; busy: boolean; onConfirm: () => void; onCancel: () => void }) => (
+  <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 p-4">
+    <div className="w-full max-w-[440px] rounded-[10px] bg-white p-6 shadow-xl">
+      <h2 className="text-[20px] font-semibold text-[#111111]">{current ? `Switch to ${plan.name}?` : `Choose ${plan.name}?`}</h2>
+      <p className="mt-3 text-[15px] leading-6 text-[#666666]">
+        {current ? <>Your <strong>{current.name}</strong> plan ends now and </> : null}
+        <strong>{plan.name}</strong> starts today at <strong>${plan.price.toLocaleString("en-US")}/month</strong>. A pending invoice for the first month will be added to Invoices.
+      </p>
+      <div className="mt-6 flex gap-3">
+        <button type="button" disabled={busy} onClick={onConfirm} className="h-[42px] flex-1 rounded-[8px] bg-[#f9a313] text-[15px] font-semibold text-white hover:bg-[#f29a0b] disabled:opacity-60">
+          {busy ? "Saving..." : "Confirm"}
+        </button>
+        <button type="button" disabled={busy} onClick={onCancel} className="h-[42px] flex-1 rounded-[8px] border border-[#d6d6d6] text-[15px] font-semibold text-[#666666] hover:bg-[#f7f7f7] disabled:opacity-60">
+          Cancel
+        </button>
+      </div>
+    </div>
+  </div>
+);
+
+const Overview = ({ data, onChoosePlan }: { data: BillingData; onChoosePlan: () => void }) => {
   const cards = [
     { ...STAT_STYLES.totalRevenue, value: money(data.totalRevenue), subtext: "paid invoices" },
     { ...STAT_STYLES.pending, value: money(data.pendingAmount), subtext: plural(data.pendingCount, "invoice") },
@@ -189,8 +248,8 @@ const Overview = ({ data }: { data: BillingData }) => {
               <p className="mt-[6px] text-[14px] text-[#666666]">Choose a plan below to get started.</p>
             </div>
           )}
-          <button className="h-[42px] rounded-[8px] border border-[#f9a313] px-[22px] text-[15px] font-medium text-[#f9a313] hover:bg-[#fff7e8]">
-            {data.currentPlan ? "Upgrade Plan" : "Choose Plan"}
+          <button type="button" onClick={onChoosePlan} className="h-[42px] rounded-[8px] border border-[#f9a313] px-[22px] text-[15px] font-medium text-[#f9a313] hover:bg-[#fff7e8]">
+            {data.currentPlan ? "Change Plan" : "Choose Plan"}
           </button>
         </div>
       </div>
@@ -243,18 +302,14 @@ const InvoicesTable = ({ data, loading, onDownload }: { data: BillingData; loadi
   </div>
 );
 
-const Plans = ({ data }: { data: BillingData }) => {
-  const plans = data.plans.length
-    ? data.plans
-    : [
-        { name: "Basic", price: 49, features: [] },
-        { name: "Professional", price: 99, features: [] },
-        { name: "Enterprise", price: 199, features: [] },
-      ];
+const Plans = ({ data, loading, onChoose }: { data: BillingData; loading: boolean; onChoose: (plan: UIPlan) => void }) => {
+  const plans = data.plans;
+  if (loading) return <p className="py-10 text-center text-[14px] text-[#777777]">Loading plans...</p>;
+  if (!plans.length) return <p className="py-10 text-center text-[14px] text-[#777777]">No plans are configured yet.</p>;
   return (
     <div className="grid grid-cols-1 gap-[18px] lg:grid-cols-3">
       {plans.map((plan) => {
-        const isCurrent = data.currentPlan?.name === plan.name;
+        const isCurrent = data.currentPlan?.planId === plan.id;
         return (
           <article key={plan.name} className={`rounded-[8px] border p-[24px] ${isCurrent ? "border-[#f9a313] bg-[#fffaf1]" : "border-[#d9d9d9] bg-white"}`}>
             <h2 className="text-[20px] font-semibold">{plan.name}</h2>
@@ -267,8 +322,13 @@ const Plans = ({ data }: { data: BillingData }) => {
                 ))}
               </ul>
             )}
-            <button className={`mt-[22px] h-[42px] w-full rounded-[8px] text-[15px] font-medium ${isCurrent ? "bg-[#f9a313] text-white" : "border border-[#d9d9d9] text-[#666666]"}`}>
-              {isCurrent ? "Current Plan" : "Choose Plan"}
+            <button
+              type="button"
+              disabled={isCurrent}
+              onClick={() => onChoose(plan)}
+              className={`mt-[22px] h-[42px] w-full rounded-[8px] text-[15px] font-medium transition-colors ${isCurrent ? "cursor-default bg-[#f9a313] text-white" : "border border-[#d9d9d9] text-[#666666] hover:border-[#f9a313] hover:text-[#f9a313]"}`}
+            >
+              {isCurrent ? "Current Plan" : data.currentPlan ? `Switch to ${plan.name}` : "Choose Plan"}
             </button>
           </article>
         );

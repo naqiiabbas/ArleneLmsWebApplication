@@ -3,6 +3,8 @@
 import React from "react";
 import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
+import { chatLink } from "@/components/useChatDeepLink";
 import { Search, Trash2, ChevronDown, Plus } from "lucide-react";
 import {
   listMentors,
@@ -79,6 +81,7 @@ const ActionIcon = ({ src, label }: { src: string; label: string }) => (
 );
 
 function DetailCard({ mentor, onDownload }: { mentor: Mentor; onDownload: (mentor: Mentor) => void }) {
+  const router = useRouter();
   return (
     <div className="grid grid-cols-1 gap-[10px] xl:grid-cols-[1fr_410px]">
       <div className="min-h-[569px] rounded-[8px] border border-[#d6d6d6] bg-white px-[24px] py-[24px]">
@@ -169,7 +172,13 @@ function DetailCard({ mentor, onDownload }: { mentor: Mentor; onDownload: (mento
             {mentor.quickActions.map((action) => (
               <button
                 key={action}
-                onClick={() => action === "Download Report" ? onDownload(mentor) : undefined}
+                onClick={() =>
+                  action === "Download Report"
+                    ? onDownload(mentor)
+                    : action === "Send Message"
+                      ? router.push(chatLink("/adminpanel/message", mentor.id))
+                      : undefined
+                }
                 className="block w-full text-left text-[15px] font-normal leading-none text-[#ffa313] hover:underline"
               >
                 {action}

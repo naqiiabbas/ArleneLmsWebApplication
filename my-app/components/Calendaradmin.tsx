@@ -15,6 +15,7 @@ import {
   startOfWeek,
 } from "date-fns";
 import { listEvents, createEvent } from "@/lib/data/events";
+import type { EventAudience } from "@/lib/data/events.types";
 
 type EventType = "Session" | "Meeting" | "Deadline" | "Holiday";
 
@@ -26,46 +27,9 @@ type EventItem = {
   type: EventType;
   participants: string[];
   description: string;
+  audience: EventAudience;
 };
 
-const SEED_EVENTS: EventItem[] = [
-  {
-    id: "e1",
-    title: "Python Fundamentals Session",
-    date: "2025-12-05",
-    time: "09:00 AM - 10:00 AM",
-    type: "Session",
-    participants: ["Dr. Sarah Johnson", "+1"],
-    description: "Intro to Python fundamentals.",
-  },
-  {
-    id: "e2",
-    title: "Web Development Session",
-    date: "2025-12-05",
-    time: "10:30 AM - 11:30 AM",
-    type: "Session",
-    participants: ["Prof. Michael Chen", "+1"],
-    description: "React state management patterns.",
-  },
-  {
-    id: "e3",
-    title: "Assignment Deadline - Data Structures",
-    date: "2025-12-06",
-    time: "11:59 PM",
-    type: "Deadline",
-    participants: ["All Students"],
-    description: "Submit assignment 3.",
-  },
-  {
-    id: "e4",
-    title: "Team Meeting - Curriculum Review",
-    date: "2025-12-07",
-    time: "02:00 PM - 03:00 PM",
-    type: "Meeting",
-    participants: ["All Mentors", "+1"],
-    description: "Curriculum planning.",
-  },
-];
 
 const typeColor: Record<EventType, string> = {
   Session: "bg-[#2f80ed]",
@@ -89,6 +53,7 @@ export default function Calendaradmin() {
     type: "Session" as EventType,
     participants: "",
     description: "",
+    audience: "Everyone" as EventAudience,
   });
 
   const refresh = async () => {
@@ -130,6 +95,7 @@ export default function Calendaradmin() {
       type: form.type,
       participants,
       description: form.description,
+      audience: form.audience,
     });
     setSubmitting(false);
     if (res.error) {
@@ -138,7 +104,7 @@ export default function Calendaradmin() {
     }
     setNotice({ type: "success", msg: "Event added." });
     setShowModal(false);
-    setForm({ title: "", date: "", time: "", type: "Session", participants: "", description: "" });
+    setForm({ title: "", date: "", time: "", type: "Session", participants: "", description: "", audience: "Everyone" });
     await refresh();
   };
 
@@ -282,6 +248,9 @@ export default function Calendaradmin() {
                     <UsersIcon />
                     <span>{event.participants.join("\n")}</span>
                   </p>
+                  <p className="mt-[8px] inline-flex rounded-full bg-[#fff7e8] px-[8px] py-[3px] text-[11px] font-medium text-[#c2410c]">
+                    {event.audience === "Everyone" ? "Visible to everyone" : event.audience === "Admins" ? "Admins only" : `${event.audience} only`}
+                  </p>
                 </div>
               </div>
             ))}
@@ -344,6 +313,18 @@ export default function Calendaradmin() {
                   <option value="Meeting">Meeting</option>
                   <option value="Deadline">Deadline</option>
                   <option value="Holiday">Holiday</option>
+                </select>
+              </Field>
+              <Field label="Who should see this? *">
+                {/* Mentors and students now see events in their own calendars. */}
+                <select
+                  value={form.audience}
+                  onChange={(event) => setForm((previous) => ({ ...previous, audience: event.target.value as EventAudience }))}
+                >
+                  <option value="Everyone">Everyone (mentors, students &amp; sponsors)</option>
+                  <option value="Mentors">Mentors only</option>
+                  <option value="Students">Students only</option>
+                  <option value="Admins">Admins only (not shared)</option>
                 </select>
               </Field>
               <Field label="Participants (comma-separated)">

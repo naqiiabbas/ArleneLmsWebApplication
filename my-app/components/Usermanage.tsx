@@ -13,7 +13,7 @@ import {
   deleteUser,
 } from "@/lib/data/users";
 
-type Role = "Admin" | "Mentor" | "Student" | "Manager";
+type Role = "Admin" | "Mentor" | "Student" | "Manager" | "Sponsor";
 type Status = "Active" | "Suspended";
 
 type User = {
@@ -41,6 +41,8 @@ const badgeColor = (role: Role) => {
       return "bg-green-100 text-green-700";
     case "Manager":
       return "bg-amber-100 text-amber-700";
+    case "Sponsor":
+      return "bg-rose-100 text-rose-700";
     default:
       return "bg-gray-100 text-gray-600";
   }
@@ -100,7 +102,7 @@ export default function UserManagement() {
 
   const summary = useMemo(() => {
     const total = users.length;
-    const roles: Record<Role, number> = { Admin: 0, Mentor: 0, Student: 0, Manager: 0 };
+    const roles: Record<Role, number> = { Admin: 0, Mentor: 0, Student: 0, Manager: 0, Sponsor: 0 };
     let activeStudents = 0;
     users.forEach((u) => {
       roles[u.role] += 1;
@@ -245,6 +247,7 @@ export default function UserManagement() {
               <option value="Mentor">Mentor</option>
               <option value="Student">Student</option>
               <option value="Manager">Manager</option>
+              <option value="Sponsor">Sponsor</option>
             </select>
           </div>
           <div className="space-y-2">
@@ -424,6 +427,7 @@ export default function UserManagement() {
                 <option value="Mentor">Mentor</option>
                 <option value="Student">Student</option>
                 <option value="Manager">Manager</option>
+              <option value="Sponsor">Sponsor</option>
               </select>
               <select
                 value={statusFilter}

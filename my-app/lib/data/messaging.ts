@@ -197,7 +197,71 @@ export async function sendMessage(
     .from("conversations")
     .update({ last_message_at: new Date().toISOString() })
     .eq("id", conversationId)
+
+  // Best-effort: a failed notification must never fail the message itself.
+  try {
+    await notifyNewMessage(admin, conversationId, me, body)
+  } catch {
+    /* ignore */
+  }
   return {}
+}
+
+/**
+ * Bell notification for every other participant (mentors / students / anyone).
+ * Messages used to arrive silently — recipients only saw them by opening the
+ * inbox. Skips people who turned message notifications off, and anyone who
+ * already has an UNREAD notification for this conversation, so an active chat
+ * doesn't flood the bell.
+ */
+async function notifyNewMessage(
+  admin: ReturnType<typeof createAdminClient>,
+  conversationId: string,
+  senderId: string,
+  body: string,
+) {
+  const { data: parts } = await admin
+    .from("conversation_participants")
+    .select("profile_id")
+    .eq("conversation_id", conversationId)
+    .neq("profile_id", senderId)
+  const recipients = (parts ?? []).map((r) => r.profile_id)
+  if (!recipients.length) return
+
+  const [{ data: sender }, { data: prefs }, { data: pending }] = await Promise.all([
+    admin.from("profiles").select("full_name").eq("id", senderId).single(),
+    admin.from("notification_preferences").select("profile_id, in_app_enabled, type_overrides").in("profile_id", recipients),
+    admin
+      .from("notifications")
+      .select("recipient_id")
+      .in("recipient_id", recipients)
+      .eq("type", "message")
+      .eq("entity_type", "conversation")
+      .eq("entity_id", conversationId)
+      .eq("is_read", false),
+  ])
+  const muted = new Set(
+    (prefs ?? [])
+      .filter((r) => r.in_app_enabled === false || (r.type_overrides as Record<string, unknown> | null)?.new_messages === false)
+      .map((r) => r.profile_id),
+  )
+  const already = new Set((pending ?? []).map((r) => r.recipient_id))
+  const to = recipients.filter((id) => !muted.has(id) && !already.has(id))
+  if (!to.length) return
+
+  const name = sender?.full_name?.trim() || "Someone"
+  const preview = body.length > 140 ? body.slice(0, 137) + "…" : body
+  await admin.from("notifications").insert(
+    to.map((recipient_id) => ({
+      recipient_id,
+      sender_id: senderId,
+      type: "message" as const,
+      title: `New message from ${name}`,
+      body: preview,
+      entity_type: "conversation",
+      entity_id: conversationId,
+    })),
+  )
 }
 
 export async function markConversationRead(conversationId: string): Promise<{ error?: string }> {
@@ -243,7 +307,32 @@ export async function createDirectConversation(
   if (!other) {
     return { error: `No user found named "${contactName.trim()}".` }
   }
+  return findOrCreateDirect(admin, me, other.id)
+}
 
+/**
+ * Find-or-create a direct conversation with a user BY ID — used by the
+ * "Send Message" buttons on a student / mentor (deep link ?to=<id>), which
+ * either did nothing or only opened the inbox. Names aren't unique; ids are.
+ */
+export async function openDirectConversationWith(
+  userId: string,
+): Promise<{ id?: string; error?: string }> {
+  const me = await currentUserId()
+  if (!me) return { error: "Not authenticated." }
+  if (!userId || userId === me) return { error: "Choose someone to message." }
+  const admin = createAdminClient()
+  const { data: other } = await admin.from("profiles").select("id").eq("id", userId).maybeSingle()
+  if (!other) return { error: "That person no longer exists." }
+  return findOrCreateDirect(admin, me, other.id)
+}
+
+async function findOrCreateDirect(
+  admin: ReturnType<typeof createAdminClient>,
+  me: string,
+  otherId: string,
+): Promise<{ id?: string; error?: string }> {
+  const other = { id: otherId }
   // Existing direct conversation between the two?
   const [{ data: mine }, { data: theirs }] = await Promise.all([
     admin.from("conversation_participants").select("conversation_id").eq("profile_id", me),

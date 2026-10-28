@@ -15,6 +15,8 @@ import {
 } from 'lucide-react';
 import { getStudentCalendar } from '@/lib/data/student';
 import type { StudentSession as Session, StudentSessionType as SessionType } from '@/lib/data/student.types';
+import type { VisibleEvent } from '@/lib/data/events.types';
+import { EventDetailsModal, UpcomingEventsList, eventsByDate, useMyEvents, EVENT_COLOR } from '@/components/ProgramEvents';
 
 const poppins = Poppins({
   subsets: ['latin'],
@@ -25,13 +27,69 @@ const poppins = Poppins({
 const initials = (name: string) =>
   name.split(" ").filter(Boolean).map((p) => p[0]).join("").toUpperCase().slice(0, 3);
 
+const JOIN_OPENS_MIN = 15;
+
+/** Whether a session can be joined right now (and why not). */
+const joinState = (s: Session, now: number): { kind: 'join' | 'soon' | 'ended' | 'inperson' | 'cancelled'; label: string } => {
+  if (s.status === 'cancelled') return { kind: 'cancelled', label: 'Cancelled' };
+  if (!s.joinUrl) return { kind: 'inperson', label: 'In person' };
+  const start = new Date(s.startIso).getTime();
+  const end = new Date(s.endIso).getTime();
+  if (Number.isFinite(end) && now > end) return { kind: 'ended', label: 'Ended' };
+  if (Number.isFinite(start) && now < start - JOIN_OPENS_MIN * 60_000) return { kind: 'soon', label: 'Join' };
+  return { kind: 'join', label: 'Join' };
+};
+
+/** Real "Add to Calendar": an .ics invite that Google / Apple / Outlook can open. */
+const downloadIcs = (s: Session) => {
+  const stamp = (iso: string) => new Date(iso).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+  const esc = (v: string) => v.replace(/[\\;,]/g, (c) => '\\' + c).replace(/\n/g, '\\n');
+  const lines = [
+    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//100 Black Men OC//LMS//EN', 'BEGIN:VEVENT',
+    `UID:${s.id}@100bmoc.org`, `DTSTAMP:${stamp(new Date().toISOString())}`,
+    `DTSTART:${stamp(s.startIso)}`, `DTEND:${stamp(s.endIso || s.startIso)}`,
+    `SUMMARY:${esc(s.title)}`, `LOCATION:${esc(s.location)}`,
+    `DESCRIPTION:${esc(`With ${s.mentor}${s.joinUrl ? ` · Join: ${s.joinUrl}` : ''}`)}`,
+    'END:VEVENT', 'END:VCALENDAR',
+  ];
+  const url = URL.createObjectURL(new Blob([lines.join('\r\n')], { type: 'text/calendar' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${s.title.replace(/[^\w-]+/g, '_')}.ics`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+};
+
+/** The Join control. Used to be a button with no handler at all. */
+const JoinButton = ({ session, now, wide = false }: { session: Session; now: number; wide?: boolean }) => {
+  const st = joinState(session, now);
+  const base = `h-[35px] rounded-[9px] px-[16px] text-[14px] font-normal ${wide ? 'w-full' : 'w-full sm:w-auto sm:min-w-[60px]'}`;
+  if (st.kind === 'join')
+    return (
+      <a href={session.joinUrl} target="_blank" rel="noopener noreferrer" className={`${base} inline-flex items-center justify-center bg-[#ffa313] text-white transition-transform hover:scale-105`}>
+        Join
+      </a>
+    );
+  if (st.kind === 'soon')
+    return (
+      <button type="button" disabled title={`Opens ${JOIN_OPENS_MIN} minutes before the session starts`} className={`${base} cursor-not-allowed bg-[#ffd88d] text-white`}>
+        Join
+      </button>
+    );
+  return (
+    <span className={`${base} inline-flex items-center justify-center border border-[#dddddd] bg-white text-[#666666]`}>{st.label}</span>
+  );
+};
+
 // --- Components ---
 
-const SessionModal = ({ session, isOpen, onClose, onAddToCalendar }: { 
-  session: Session | null, 
-  isOpen: boolean, 
+const SessionModal = ({ session, isOpen, onClose, now }: {
+  session: Session | null,
+  isOpen: boolean,
   onClose: () => void,
-  onAddToCalendar: (session: Session) => void
+  now: number
 }) => {
   if (!isOpen || !session) return null;
 
@@ -78,7 +136,8 @@ const SessionModal = ({ session, isOpen, onClose, onAddToCalendar }: {
             <MapPin className="mt-[2px] h-[19px] w-[19px] shrink-0 text-[#666666]" strokeWidth={1.8} />
             <div>
               <p className="text-[14px] font-normal leading-none text-[#666666]">Location</p>
-              <p className="mt-[13px] text-[16px] font-normal leading-none text-[#111111]">{session.location}</p>
+              <p className="mt-[13px] break-all text-[16px] font-normal leading-none text-[#111111]">{session.location}</p>
+              {session.joinUrl && <div className="mt-[12px] w-[120px]"><JoinButton session={session} now={now} wide /></div>}
             </div>
           </div>
 
@@ -107,9 +166,11 @@ const SessionModal = ({ session, isOpen, onClose, onAddToCalendar }: {
         <div className="shrink-0 border-t border-[#dddddd] bg-[#f4f4f4] px-[24px] py-[24px]">
           <div className="grid grid-cols-1 gap-[12px] sm:grid-cols-2">
             <button onClick={onClose} className="h-[49px] rounded-[9px] border border-[#dddddd] bg-white px-4 text-[16px] font-normal text-[#666666] transition hover:bg-[#fafafa]">Close</button>
-            <button 
-              onClick={() => onAddToCalendar(session)}
-              className="flex h-[49px] items-center justify-center gap-[4px] rounded-[9px] bg-[#ffa313] px-4 text-[16px] font-normal text-white transition hover:bg-[#f59a0d]"
+            <button
+              onClick={() => downloadIcs(session)}
+              disabled={!session.startIso}
+              title="Download an invite for Google, Apple or Outlook calendar"
+              className="flex h-[49px] items-center justify-center gap-[4px] rounded-[9px] bg-[#ffa313] px-4 text-[16px] font-normal text-white transition hover:bg-[#f59a0d] disabled:opacity-60"
             >
               <Plus size={20} strokeWidth={2} />
               Add to Calendar
@@ -129,7 +190,15 @@ const CalendarSection = () => {
   const [currentDate, setCurrentDate] = useState(() => { const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), 1); });
   const [selectedDay, setSelectedDay] = useState(() => new Date().getDate());
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
-  const [scheduledSessions, setScheduledSessions] = useState<Session[]>([]);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+  // Admin-created program events shared with students (read-only here).
+  const programEvents = useMyEvents();
+  const eventsOnDay = useMemo(() => eventsByDate(programEvents), [programEvents]);
+  const [openEvent, setOpenEvent] = useState<VisibleEvent | null>(null);
 
   useEffect(() => {
     getStudentCalendar()
@@ -147,7 +216,7 @@ const CalendarSection = () => {
     const month = currentDate.getMonth();
     const firstDay = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
-    
+
     const days = [];
     for (let i = 0; i < firstDay; i++) days.push(null);
     for (let i = 1; i <= daysInMonth; i++) days.push(i);
@@ -188,12 +257,12 @@ const CalendarSection = () => {
       .map(s => parseInt(s.date.split('-')[2]));
   }, [sessions, currentDate]);
 
-  const handleAddToCalendar = (session: Session) => {
-    if (!scheduledSessions.find(s => s.id === session.id)) {
-      setScheduledSessions([...scheduledSessions, session]);
-    }
-    setSelectedSession(null);
-  };
+  const selectedYmd = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDay).padStart(2, '0')}`;
+  const todayYmd = (() => { const n = new Date(now); return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`; })();
+  const eventDaysInMonth = useMemo(() => {
+    const prefix = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
+    return programEvents.filter((e) => e.date.startsWith(prefix)).map((e) => parseInt(e.date.split('-')[2]));
+  }, [programEvents, currentDate]);
 
   return (
     <section className={`${poppins.variable} min-h-full w-full overflow-x-hidden bg-[#f5f5f5] px-4 pb-6 pt-6 font-sans md:px-6 md:pt-7`}>
@@ -234,15 +303,16 @@ const CalendarSection = () => {
             {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
               <div key={d} className="pb-[12px] text-center text-[14px] font-normal text-[#666666]">{d}</div>
             ))}
-            
+
             {calendarGrid.map((day, i) => {
               if (day === null) return <div key={`empty-${i}`} />;
               const isSelected = day === selectedDay;
               const hasDot = sessionDaysInMonth.includes(day);
-              
+              const hasEvent = eventDaysInMonth.includes(day);
+
               return (
                 <div key={day} className="flex justify-center">
-                  <button 
+                  <button
                     onClick={() => setSelectedDay(day)}
                     className={`relative flex aspect-square w-full max-w-[92px] items-center justify-center rounded-[9px] border text-[14px] font-normal transition-all ${
                       isSelected
@@ -251,7 +321,12 @@ const CalendarSection = () => {
                     }`}
                   >
                     {day}
-                    {hasDot && <span className={`absolute bottom-[8px] h-[4px] w-[4px] rounded-full ${isSelected ? 'bg-white' : 'bg-[#ffa313]'}`} />}
+                    {(hasDot || hasEvent) && (
+                      <span className="absolute bottom-[8px] flex gap-[3px]">
+                        {hasDot && <span className={`h-[4px] w-[4px] rounded-full ${isSelected ? 'bg-white' : 'bg-[#ffa313]'}`} />}
+                        {hasEvent && <span className="h-[4px] w-[4px] rounded-full" style={{ backgroundColor: isSelected ? '#ffffff' : EVENT_COLOR }} />}
+                      </span>
+                    )}
                   </button>
                 </div>
               );
@@ -292,8 +367,8 @@ const CalendarSection = () => {
                 const LocationIcon = locationIcon;
 
                 return (
-                  <button 
-                    key={s.id} 
+                  <button
+                    key={s.id}
                     onClick={() => setSelectedSession(s)}
                     className={`min-h-[88px] w-full rounded-[9px] border-l-[3px] px-[16px] py-[16px] text-left transition-transform active:scale-95 ${typeStyle[s.type].border} ${typeStyle[s.type].card}`}
                   >
@@ -334,8 +409,26 @@ const CalendarSection = () => {
       <div className="mt-[26px] rounded-[12px] border border-[#dddddd] bg-white px-[23px] py-[24px]">
         <div className="mb-[22px] flex items-center gap-[10px]">
           <div className="h-[32px] w-[3px] bg-[#ffa313]" />
-          <h4 className="text-[20px] font-normal leading-none text-[#111111]">Today&apos;s Schedule</h4>
+          <h4 className="text-[20px] font-normal leading-none text-[#111111]">
+            {selectedYmd === todayYmd ? <>Today&apos;s Schedule</> : `Schedule for ${new Date(currentDate.getFullYear(), currentDate.getMonth(), selectedDay).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}`}
+          </h4>
         </div>
+
+        {(eventsOnDay.get(selectedYmd) ?? []).map((ev) => (
+          <button
+            type="button"
+            key={ev.id}
+            onClick={() => setOpenEvent(ev)}
+            className="mb-[10px] flex w-full items-center justify-between gap-4 rounded-[9px] border-l-[3px] bg-[#f5f0ff] px-[17px] py-[14px] text-left"
+            style={{ borderLeftColor: EVENT_COLOR }}
+          >
+            <span>
+              <span className="block text-[16px] text-[#111111]">{ev.title}</span>
+              <span className="mt-[6px] block text-[12px] text-[#666666]">Program event · {ev.type}{ev.time ? ` · ${ev.time}` : ''}</span>
+            </span>
+            <span className="text-[13px] font-medium" style={{ color: EVENT_COLOR }}>Details</span>
+          </button>
+        ))}
 
         <div>
           {filteredSessions.length > 0 ? (
@@ -344,7 +437,7 @@ const CalendarSection = () => {
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-[18px]">
                   <div className="min-w-[74px]">
                     <p className="text-[16px] font-normal leading-none text-[#ffa313]">{session.time}</p>
-                    <p className="mt-[8px] text-[12px] font-normal leading-none text-[#666666]">1h 30m</p>
+                    <p className="mt-[8px] text-[12px] font-normal leading-none text-[#666666]">{session.duration}</p>
                   </div>
                   <div>
                     <h5 className="text-[16px] font-normal leading-none text-[#111111]">{session.title}</h5>
@@ -355,23 +448,26 @@ const CalendarSection = () => {
                     </div>
                   </div>
                 </div>
-                <button className="h-[35px] w-full rounded-[9px] bg-[#ffa313] px-[20px] text-[14px] font-normal text-white transition-transform hover:scale-105 sm:w-[60px]">Join</button>
+                <JoinButton session={session} now={now} />
               </div>
             ))
           ) : (
             <div className="py-[24px] text-center">
-              <p className="text-[15px] font-normal text-[#666666]">No sessions scheduled for this day.</p>
+              <p className="text-[15px] font-normal text-[#666666]">{(eventsOnDay.get(selectedYmd) ?? []).length ? 'No class sessions this day.' : 'No sessions scheduled for this day.'}</p>
             </div>
           )}
         </div>
       </div>
 
-      <SessionModal 
-        isOpen={!!selectedSession} 
-        session={selectedSession} 
-        onClose={() => setSelectedSession(null)} 
-        onAddToCalendar={handleAddToCalendar}
+      <SessionModal
+        isOpen={!!selectedSession}
+        session={selectedSession}
+        onClose={() => setSelectedSession(null)}
+        now={now}
       />
+
+      <UpcomingEventsList events={programEvents} today={todayYmd} onOpen={setOpenEvent} />
+      <EventDetailsModal event={openEvent} onClose={() => setOpenEvent(null)} />
 
       <style jsx global>{`
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }

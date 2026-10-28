@@ -48,16 +48,21 @@ export async function middleware(request: NextRequest) {
 
   const isAuthRoute = AUTH_EXEMPT.some((p) => matches(path, p))
   const isPublicRoute = PUBLIC_EXEMPT.some((p) => matches(path, p))
+  const panel = PANELS.find((p) => matches(path, p.prefix))
+  const roleFitsPanel = !!(panel && role && PORTAL_ROLES[panel.portal].includes(role))
 
-  // Signed-in users shouldn't sit on a login page — send them to their home.
-  if (isAuthRoute && user) {
+  // Only someone already signed in FOR THIS PORTAL is bounced off its login
+  // page. Previously any signed-in user was sent to their own home, so with an
+  // admin session every portal link (mentor, student, sponsor) opened the admin
+  // dashboard until they logged out. Now another portal's login page shows,
+  // and signing in there switches the account.
+  if (isAuthRoute && user && roleFitsPanel) {
     return redirectWithCookies(
       new URL(homeForRole(role), request.url),
       supabaseResponse,
     )
   }
 
-  const panel = PANELS.find((p) => matches(path, p.prefix))
   if (!panel || isAuthRoute || isPublicRoute) return supabaseResponse
 
   // Protected panel route.
@@ -67,10 +72,11 @@ export async function middleware(request: NextRequest) {
       supabaseResponse,
     )
   }
-  if (!role || !PORTAL_ROLES[panel.portal].includes(role)) {
-    // Authenticated but wrong role for this panel → their own home.
+  if (!roleFitsPanel) {
+    // Signed in, but as a different role → this portal's login page (where
+    // they can sign in with the right account), not their own dashboard.
     return redirectWithCookies(
-      new URL(homeForRole(role), request.url),
+      new URL(LOGIN_ROUTE[panel.portal], request.url),
       supabaseResponse,
     )
   }
