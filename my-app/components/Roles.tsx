@@ -71,9 +71,9 @@ function RoleCard({
   onDelete: () => void;
 }) {
   return (
-    <article className="flex min-h-[350px] flex-col rounded-[8px] border border-[#d9d9d9] bg-white px-[24px] pb-[18px] pt-[24px]">
-      <div className="flex items-start justify-between">
-        <img src={role.icon} alt="" aria-hidden="true" className="h-[40px] w-[40px]" />
+    <article className="flex h-full min-w-0 flex-col rounded-[8px] border border-[#d9d9d9] bg-white p-[24px]">
+      <div className="flex items-start justify-between gap-[12px]">
+        <img src={role.icon} alt="" aria-hidden="true" className="h-[40px] w-[40px] shrink-0" />
         <div className="flex items-center gap-[12px] pt-[6px]">
           <ActionButton icon="/images/roles-icon-edit.svg" label={`Edit ${role.name}`} onClick={onEdit} />
           {!role.isSystem && (
@@ -82,37 +82,37 @@ function RoleCard({
         </div>
       </div>
 
-      <h2 className="mt-[18px] text-[18px] font-medium leading-none text-[#111111]">{role.name}</h2>
-      <p className="mt-[19px] min-h-[44px] max-w-[220px] text-[15px] font-normal leading-[20px] text-[#666666]">{role.description}</p>
+      <h2 className="mt-[16px] truncate text-[18px] font-medium leading-[24px] text-[#111111]" title={role.name}>
+        {role.name}
+      </h2>
+      <p className="mt-[8px] line-clamp-2 min-h-[40px] text-[14px] font-normal leading-[20px] text-[#666666]" title={role.description}>
+        {role.description}
+      </p>
 
-      <div className="mt-[13px] flex items-start gap-[8px] border-b border-[#e3e3e3] pb-[8px]">
+      <div className="mt-[14px] flex items-center gap-[8px] border-b border-[#e3e3e3] pb-[14px] text-[14px] leading-[18px] text-[#666666]">
         <UsersGlyph />
-        <div className="text-[14px] font-normal leading-[18px] text-[#666666]">
-          <p>{role.users}</p>
-          <p>users</p>
-        </div>
+        <span>
+          <span className="font-medium text-[#111111]">{role.users}</span> {role.users === 1 ? "user" : "users"}
+        </span>
       </div>
 
-      <div className="mt-[12px] flex-1 text-[12px] font-normal leading-[15px] text-[#666666]">
-        <div>
-          <p>Permissions</p>
-          <p>({role.permissions.length + role.remaining})</p>
-        </div>
+      <div className="mt-[14px] flex-1">
+        <p className="text-[13px] font-medium leading-[16px] text-[#666666]">
+          Permissions <span className="font-normal text-[#999999]">({role.permissions.length + role.remaining})</span>
+        </p>
 
-        <div className="mt-[5px] flex max-w-[220px] flex-wrap gap-[5px]">
+        <div className="mt-[10px] flex flex-wrap items-center gap-[6px]">
           {role.permissions.map((permission, index) => (
-            <span key={`${permission}-${index}`} className="rounded-[4px] bg-[#fff3df] px-[8px] py-[4px] text-[12px] font-normal leading-none text-[#f9a618]">
+            <span key={`${permission}-${index}`} className="rounded-[4px] bg-[#fff3df] px-[8px] py-[5px] text-[12px] font-normal leading-none text-[#f9a618]">
               {permission}
             </span>
           ))}
+          {role.remaining > 0 && (
+            <span className="rounded-[4px] bg-[#f2f2f2] px-[8px] py-[5px] text-[12px] font-normal leading-none text-[#666666]">
+              +{role.remaining} more
+            </span>
+          )}
         </div>
-        {role.remaining > 0 ? (
-          <p className="ml-[8px] mt-[8px] text-[12px] font-normal leading-[16px] text-[#666666]">
-            +{role.remaining}
-            <br />
-            more
-          </p>
-        ) : null}
       </div>
     </article>
   );

@@ -118,6 +118,17 @@ export default function ActivityLogs() {
     });
   }, [logs, searchQuery, selectedAction, selectedRole, selectedStatus]);
 
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const totalPages = Math.max(1, Math.ceil(filteredLogs.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const pagedLogs = filteredLogs.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  // Go back to the first page whenever the filters change.
+  useEffect(() => {
+    setPage(1);
+  }, [searchQuery, selectedAction, selectedRole, selectedStatus, pageSize]);
+
   const handleExport = async () => {
     if (typeof window === "undefined") return;
 
@@ -220,7 +231,7 @@ export default function ActivityLogs() {
                   </td>
                 </tr>
               ) : filteredLogs.length > 0 ? (
-                filteredLogs.map((log) => (
+                pagedLogs.map((log) => (
                   <tr key={log.id} className="h-[70px] text-[15px] transition hover:bg-[#fafafa]">
                     <td className="px-[24px] py-[14px] font-normal text-[#666666]">{log.time}</td>
                     <td className="px-[24px] py-[14px]">
@@ -250,7 +261,106 @@ export default function ActivityLogs() {
             </tbody>
           </table>
         </div>
+        {!loading && filteredLogs.length > 0 && (
+          <Pagination
+            page={currentPage}
+            totalPages={totalPages}
+            pageSize={pageSize}
+            total={filteredLogs.length}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
+        )}
       </div>
     </section>
+  );
+}
+
+const PAGE_SIZES = [10, 25, 50, 100];
+
+// Page numbers with ellipses, e.g. 1 … 4 5 6 … 20
+const pageList = (page: number, total: number): (number | "…")[] => {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const pages: (number | "…")[] = [1];
+  const start = Math.max(2, page - 1);
+  const end = Math.min(total - 1, page + 1);
+  if (start > 2) pages.push("…");
+  for (let i = start; i <= end; i++) pages.push(i);
+  if (end < total - 1) pages.push("…");
+  pages.push(total);
+  return pages;
+};
+
+function Pagination({
+  page,
+  totalPages,
+  pageSize,
+  total,
+  onPageChange,
+  onPageSizeChange,
+}: {
+  page: number;
+  totalPages: number;
+  pageSize: number;
+  total: number;
+  onPageChange: (page: number) => void;
+  onPageSizeChange: (size: number) => void;
+}) {
+  const from = (page - 1) * pageSize + 1;
+  const to = Math.min(page * pageSize, total);
+  const navButton =
+    "flex h-[34px] min-w-[34px] items-center justify-center rounded-[8px] border border-[#dddddd] bg-white px-[10px] text-[14px] text-[#666666] transition hover:border-[#ffa313] hover:text-[#ffa313] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-[#dddddd] disabled:hover:text-[#666666]";
+
+  return (
+    <div className="flex flex-col gap-[12px] border-t border-[#e5e5e5] px-[24px] py-[16px] text-[14px] text-[#666666] md:flex-row md:items-center md:justify-between">
+      <div className="flex flex-wrap items-center gap-[12px]">
+        <span>
+          Showing <span className="text-[#111111]">{from}–{to}</span> of <span className="text-[#111111]">{total}</span> logs
+        </span>
+        <label className="flex items-center gap-[8px]">
+          <span>Rows per page</span>
+          <select
+            value={pageSize}
+            onChange={(event) => onPageSizeChange(Number(event.target.value))}
+            className="h-[34px] cursor-pointer rounded-[8px] border border-[#dddddd] bg-white px-[8px] text-[14px] text-[#111111] outline-none focus:border-[#ffa313]"
+          >
+            {PAGE_SIZES.map((size) => (
+              <option key={size} value={size}>
+                {size}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <nav className="flex flex-wrap items-center gap-[6px]" aria-label="Activity log pages">
+        <button type="button" className={navButton} disabled={page === 1} onClick={() => onPageChange(page - 1)}>
+          Previous
+        </button>
+        {pageList(page, totalPages).map((item, i) =>
+          item === "…" ? (
+            <span key={`gap-${i}`} className="px-[4px] text-[#999999]">
+              …
+            </span>
+          ) : (
+            <button
+              key={item}
+              type="button"
+              aria-current={item === page ? "page" : undefined}
+              onClick={() => onPageChange(item)}
+              className={
+                item === page
+                  ? "flex h-[34px] min-w-[34px] items-center justify-center rounded-[8px] bg-[#ffa313] px-[10px] text-[14px] text-white"
+                  : `${navButton} hidden sm:flex`
+              }
+            >
+              {item}
+            </button>
+          ),
+        )}
+        <button type="button" className={navButton} disabled={page === totalPages} onClick={() => onPageChange(page + 1)}>
+          Next
+        </button>
+      </nav>
+    </div>
   );
 }

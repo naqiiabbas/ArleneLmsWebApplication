@@ -49,7 +49,8 @@ export default function Calendaradmin() {
   const [form, setForm] = useState({
     title: "",
     date: "",
-    time: "",
+    startTime: "",
+    endTime: "",
     type: "Session" as EventType,
     participants: "",
     description: "",
@@ -87,11 +88,15 @@ export default function Calendaradmin() {
     const participants = form.participants
       ? form.participants.split(",").map((p) => p.trim()).filter(Boolean)
       : [];
+    if (form.endTime <= form.startTime) {
+      setNotice({ type: "error", msg: "End time must be after start time." });
+      return;
+    }
     setSubmitting(true);
     const res = await createEvent({
       title: form.title,
       date: form.date,
-      time: form.time,
+      time: `${formatTime(form.startTime)} - ${formatTime(form.endTime)}`,
       type: form.type,
       participants,
       description: form.description,
@@ -104,7 +109,7 @@ export default function Calendaradmin() {
     }
     setNotice({ type: "success", msg: "Event added." });
     setShowModal(false);
-    setForm({ title: "", date: "", time: "", type: "Session", participants: "", description: "", audience: "Everyone" });
+    setForm({ title: "", date: "", startTime: "", endTime: "", type: "Session", participants: "", description: "", audience: "Everyone" });
     await refresh();
   };
 
@@ -290,20 +295,41 @@ export default function Calendaradmin() {
               </Field>
               <Field label="Date *">
                 <input
+                  type="date"
                   required
                   value={form.date}
+                  onClick={(event) => event.currentTarget.showPicker?.()}
                   onChange={(event) => setForm((previous) => ({ ...previous, date: event.target.value }))}
-                  placeholder="MM/DD/YYYY"
                 />
               </Field>
-              <Field label="Time *">
-                <input
-                  required
-                  value={form.time}
-                  onChange={(event) => setForm((previous) => ({ ...previous, time: event.target.value }))}
-                  placeholder="e.g., 09:00 AM - 10:00 AM"
-                />
-              </Field>
+              <div className="mb-[17px]">
+                <span className="mb-[11px] block text-[15px] font-semibold leading-none text-[#666666]">Time *</span>
+                <div className="grid grid-cols-2 gap-[12px]">
+                  <label className="block">
+                    <span className="mb-[6px] block text-[12px] font-medium text-[#888888]">Start</span>
+                    <input
+                      type="time"
+                      required
+                      value={form.startTime}
+                      onClick={(event) => event.currentTarget.showPicker?.()}
+                      onChange={(event) => setForm((previous) => ({ ...previous, startTime: event.target.value }))}
+                      className={`${inputClass} cursor-pointer`}
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="mb-[6px] block text-[12px] font-medium text-[#888888]">End</span>
+                    <input
+                      type="time"
+                      required
+                      min={form.startTime || undefined}
+                      value={form.endTime}
+                      onClick={(event) => event.currentTarget.showPicker?.()}
+                      onChange={(event) => setForm((previous) => ({ ...previous, endTime: event.target.value }))}
+                      className={`${inputClass} cursor-pointer`}
+                    />
+                  </label>
+                </div>
+              </div>
               <Field label="Event Type *">
                 <select
                   value={form.type}
@@ -373,14 +399,24 @@ const Legend = ({ label, color }: { label: string; color: string }) => (
   </div>
 );
 
+const inputClass =
+  "h-[42px] w-full rounded-[8px] border border-[#d6d6d6] bg-white px-[15px] text-[16px] font-semibold text-[#111111] outline-none placeholder:text-[#777777]";
+
+// "14:30" -> "02:30 PM"
+const formatTime = (value: string) => {
+  const [h, m] = value.split(":").map(Number);
+  return `${String(h % 12 || 12).padStart(2, "0")}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`;
+};
+
 const Field = ({ label, children }: { label: string; children: React.ReactElement<{ className?: string }> }) => {
   const isTextarea = children.type === "textarea";
   return (
     <label className="mb-[17px] block">
       <span className="mb-[11px] block text-[15px] font-semibold leading-none text-[#666666]">{label}</span>
       {React.cloneElement(children, {
-        className:
-          `${isTextarea ? "h-[90px] resize-none py-[14px]" : "h-[42px]"} w-full rounded-[8px] border border-[#d6d6d6] bg-white px-[15px] text-[16px] font-semibold text-[#111111] outline-none placeholder:text-[#777777]`,
+        className: isTextarea
+          ? inputClass.replace("h-[42px]", "h-[90px] resize-none py-[14px]")
+          : inputClass,
       })}
     </label>
   );

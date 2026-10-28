@@ -5,6 +5,7 @@ import {
   Plus,
   Search,
   Trash2,
+  ChevronDown,
 } from "lucide-react";
 import {
   listUsers,
@@ -408,7 +409,7 @@ export default function UserManagement() {
             </div>
 
             <div className="flex flex-col gap-[16px] rounded-t-[8px] border border-b-0 border-[#d6d6d6] bg-white px-[24px] py-[25px] md:flex-row md:items-center">
-              <div className="relative flex-1">
+              <div className="relative min-w-0 flex-1">
                 <Search className="absolute left-[16px] top-1/2 -translate-y-1/2 text-[#666666]" size={19} />
                 <input
                   value={search}
@@ -417,27 +418,37 @@ export default function UserManagement() {
                 className="h-[47px] w-full rounded-[8px] border border-[#d6d6d6] bg-white pl-[52px] pr-3 text-[16px] font-semibold text-[#666666] outline-none placeholder:text-[#777777] focus:border-[#ffa313]"
               />
             </div>
-            <select
-                value={roleFilter}
-                onChange={(e) => setRoleFilter(e.target.value as Role | "All")}
-                className="h-[47px] w-full rounded-[8px] border border-[#d6d6d6] bg-white px-[12px] text-[16px] font-semibold text-[#666666] outline-none md:w-[118px]"
-              >
-                <option value="All">All Roles</option>
-                <option value="Admin">Admin</option>
-                <option value="Mentor">Mentor</option>
-                <option value="Student">Student</option>
-                <option value="Manager">Manager</option>
-              <option value="Sponsor">Sponsor</option>
-              </select>
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as Status | "All")}
-                className="h-[47px] w-full rounded-[8px] border border-[#d6d6d6] bg-white px-[12px] text-[16px] font-semibold text-[#666666] outline-none md:w-[134px]"
-              >
-                <option value="All">All Status</option>
-                <option value="Active">Active</option>
-                <option value="Suspended">Suspended</option>
-              </select>
+            <div className="grid grid-cols-2 gap-[12px] md:flex md:shrink-0">
+              <div className="relative md:w-[150px]">
+                <select
+                  value={roleFilter}
+                  onChange={(e) => setRoleFilter(e.target.value as Role | "All")}
+                  aria-label="Filter by role"
+                  className="h-[47px] w-full cursor-pointer appearance-none truncate rounded-[8px] border border-[#d6d6d6] bg-white pl-[14px] pr-[40px] text-[16px] font-semibold text-[#666666] outline-none focus:border-[#ffa313]"
+                >
+                  <option value="All">All Roles</option>
+                  <option value="Admin">Admin</option>
+                  <option value="Mentor">Mentor</option>
+                  <option value="Student">Student</option>
+                  <option value="Manager">Manager</option>
+                  <option value="Sponsor">Sponsor</option>
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-[14px] top-1/2 -translate-y-1/2 text-[#666666]" size={18} />
+              </div>
+              <div className="relative md:w-[150px]">
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value as Status | "All")}
+                  aria-label="Filter by status"
+                  className="h-[47px] w-full cursor-pointer appearance-none truncate rounded-[8px] border border-[#d6d6d6] bg-white pl-[14px] pr-[40px] text-[16px] font-semibold text-[#666666] outline-none focus:border-[#ffa313]"
+                >
+                  <option value="All">All Status</option>
+                  <option value="Active">Active</option>
+                  <option value="Suspended">Suspended</option>
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-[14px] top-1/2 -translate-y-1/2 text-[#666666]" size={18} />
+              </div>
+            </div>
             </div>
 
             <div className="min-h-[790px] overflow-x-auto rounded-b-[8px] border border-[#d6d6d6] bg-white">

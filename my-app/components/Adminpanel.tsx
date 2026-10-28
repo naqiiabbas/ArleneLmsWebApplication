@@ -179,17 +179,17 @@ export default function AdminDashboard({ data, error }: { data: DashboardData | 
       {/* 1. Top stats */}
       <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-4 md:gap-5">
         {(data ? stats : Array.from({ length: 4 }, () => ({ label: "", value: 0, sub: "", icon: "" }))).map((stat, i) => (
-          <div key={i} className="relative h-[126px] overflow-hidden rounded-[8px] border border-[#dddddd] bg-white px-[18px] py-[18px]">
-            <div className="mb-[18px] flex items-start justify-between">
+          <div key={i} className="relative flex min-h-[126px] min-w-0 flex-col rounded-[8px] border border-[#dddddd] bg-white px-[18px] py-[16px]">
+            <div className="mb-[14px] flex items-start justify-between">
               <div className="flex h-[34px] w-[34px] items-center justify-center rounded-[8px] bg-[#fff7e8]">
                 {stat.icon && <img src={stat.icon} alt="" aria-hidden="true" className="h-5 w-5" />}
               </div>
             </div>
             <div className="h-px w-full bg-[#ffa313]" />
-            <div className="mt-[12px] text-[12px] font-medium leading-none text-[#666666]">{stat.label || "—"}</div>
-            <div className="mt-[12px] flex items-baseline justify-between gap-2">
-              <span className="text-[18px] font-semibold leading-none text-[#242424]">{data ? stat.value.toLocaleString() : "—"}</span>
-              <span className="truncate text-[11px] font-medium leading-none text-[#9b9b9b]">{stat.sub}</span>
+            <div className="mt-[12px] truncate text-[12px] font-medium leading-[16px] text-[#666666]" title={stat.label}>{stat.label || "—"}</div>
+            <div className="mt-auto flex min-w-0 items-baseline justify-between gap-2 pt-[8px]">
+              <span className="shrink-0 text-[18px] font-semibold leading-[24px] text-[#242424]">{data ? stat.value.toLocaleString() : "—"}</span>
+              <span className="min-w-0 truncate text-right text-[11px] font-medium leading-[16px] text-[#9b9b9b]" title={stat.sub}>{stat.sub}</span>
             </div>
           </div>
         ))}

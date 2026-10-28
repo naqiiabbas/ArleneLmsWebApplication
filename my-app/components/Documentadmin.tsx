@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { FileText, Upload } from "lucide-react";
 import {
   listDocuments,
   uploadDocument,
@@ -364,6 +365,24 @@ function UploadModal({
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
   submitting?: boolean;
 }) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [file, setFile] = useState<File | null>(null);
+  const [dragging, setDragging] = useState(false);
+
+  const [fileError, setFileError] = useState("");
+
+  const pickFile = (picked: File | null) => {
+    if (picked && picked.size > MAX_UPLOAD_BYTES) {
+      setFileError("File is larger than 15 MB. Please choose a smaller file.");
+      setFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+    setFileError("");
+    setFile(picked);
+    if (picked) setForm((previous) => ({ ...previous, name: previous.name || picked.name.replace(/\.[^.]+$/, "") }));
+  };
+
   return (
     <ModalFrame width="max-w-[447px]" onClose={onClose}>
       <h2 className="mb-[25px] text-[18px] font-normal leading-none text-[#111111]">Upload Document</h2>
@@ -386,19 +405,51 @@ function UploadModal({
             placeholder="Reports"
           />
         </Field>
-        <Field label="File *">
-          <input
-            required
-            type="file"
-            name="file"
-            onChange={(event) =>
-              setForm((previous) => ({
-                ...previous,
-                name: previous.name || event.target.value.replace(/^.*[\\/]/, ""),
-              }))
-            }
-          />
-        </Field>
+        <div className="mb-[17px]">
+          <span className="mb-[11px] block text-[15px] font-normal leading-none text-[#666666]">File *</span>
+          <label
+            onDragOver={(event) => {
+              event.preventDefault();
+              setDragging(true);
+            }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={(event) => {
+              event.preventDefault();
+              setDragging(false);
+              const dropped = event.dataTransfer.files;
+              if (dropped.length && fileInputRef.current) {
+                fileInputRef.current.files = dropped;
+                pickFile(dropped[0]);
+              }
+            }}
+            className={`relative flex cursor-pointer items-center gap-[12px] rounded-[8px] border border-dashed px-[14px] py-[14px] transition-colors ${
+              dragging ? "border-[#ffa313] bg-[#fff7e8]" : "border-[#d6d6d6] bg-white hover:border-[#ffa313] hover:bg-[#fffaf1]"
+            }`}
+          >
+            <span className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[8px] bg-[#fff3df]">
+              {file ? <FileText className="h-5 w-5 text-[#ffa313]" /> : <Upload className="h-5 w-5 text-[#ffa313]" />}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[14px] font-medium text-[#111111]" title={file?.name}>
+                {file ? file.name : "Click to choose a file or drag it here"}
+              </span>
+              <span className="mt-[3px] block text-[12px] text-[#888888]">
+                {file ? formatBytes(file.size) : "PDF, Word, Excel, PowerPoint, images · max 15 MB"}
+              </span>
+            </span>
+            {file && <span className="shrink-0 text-[13px] font-medium text-[#ffa313]">Change</span>}
+            <input
+              ref={fileInputRef}
+              required
+              type="file"
+              name="file"
+              accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.png,.jpg,.jpeg"
+              onChange={(event) => pickFile(event.target.files?.[0] ?? null)}
+              className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+            />
+          </label>
+          {fileError && <p className="mt-[6px] text-[12px] text-red-600">{fileError}</p>}
+        </div>
         <div className="mt-[33px] grid grid-cols-[1fr_82px] gap-[13px]">
           <button type="submit" disabled={submitting} className="h-[42px] rounded-[8px] bg-[#ffa313] text-[16px] font-normal text-white hover:bg-[#ef970d] disabled:cursor-not-allowed disabled:opacity-70">
             {submitting ? "Uploading..." : "Upload Document"}
@@ -748,3 +799,9 @@ const initials = (name: string) =>
     .join("")
     .slice(0, 3)
     .toUpperCase();
+
+// Matches serverActions.bodySizeLimit in next.config
+const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
+
+const formatBytes = (bytes: number) =>
+  bytes < 1024 ? `${bytes} B` : bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`;

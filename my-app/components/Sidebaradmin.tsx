@@ -25,7 +25,7 @@ const defaultItems: NavItem[] = [
     { id: '/adminpanel/usermanagment', label: 'User Management', icon: 'userManagement', permission: 'users.view' },
     { id: '/adminpanel/mentormanagment', label: 'Mentor Management', icon: 'mentorManagement', permission: 'mentors.view' },
     { id: '/adminpanel/studentmanagment', label: 'Student Management', icon: 'studentManagement', permission: 'students.view' },
-    { id: '/adminpanel/organization', label: 'Organizations/Pro..', icon: 'organizations', adminOnly: true },
+    { id: '/adminpanel/organization', label: 'Organizations / Programs', icon: 'organizations', adminOnly: true },
     { id: '/adminpanel/attencont', label: 'Attendance Control', icon: 'attendance', permission: 'attendance.view' },
     { id: '/adminpanel/notesmod', label: 'Notes Moderation', icon: 'notes', adminOnly: true },
     { id: '/adminpanel/message', label: 'Messaging System', icon: 'messaging', adminOnly: true },
@@ -83,13 +83,13 @@ const SidebarItem = ({ item }: { item: any }) => {
 
   return (
     <Link href={item.id}>
-      <div className={`flex h-[56px] items-center gap-[18px] border-b border-[#d6d6d6] border-r-[3px] px-[24px] cursor-pointer transition-all ${
-        isActive ? 'border-r-[#ffa313] bg-[#fff1d9] text-[#ff9f0f]' : 'border-r-transparent bg-white text-[#666666] hover:bg-[#fff8ef] hover:text-[#ff9f0f]'
+      <div className={`flex min-h-[56px] items-center gap-[18px] py-[8px] border-b border-[#d6d6d6] border-r-[3px] px-[24px] cursor-pointer transition-all ${
+        isActive ? 'border-r-[#ffa313] bg-[#fff1d9] text-[#ff9f0f]' : 'border-r-transparent bg-white text-[#2b2b2b] hover:bg-[#fff8ef] hover:text-[#ff9f0f]'
       }`}>
         <span className="flex h-[24px] w-[24px] shrink-0 items-center justify-center leading-none">
           <MaskIcon src={icons[item.icon]} />
         </span>
-        <span className="truncate text-[16px] font-medium leading-none">{item.label}</span>
+        <span className="min-w-0 break-words py-[2px] text-[16px] font-medium leading-[1.3]">{item.label}</span>
       </div>
     </Link>
   );
@@ -131,7 +131,7 @@ const Sidebar = ({ sidebarItems = defaultItems, isMobileDrawer = false }: Sideba
 
   return (
     <>
-      <aside className={`${isMobileDrawer ? 'flex' : 'hidden lg:flex'} sticky top-0 h-screen w-[260px] shrink-0 flex-col overflow-hidden border-r border-[#d6d6d6] bg-white`}>
+      <aside className={`${isMobileDrawer ? 'flex' : 'hidden lg:flex'} sticky top-0 h-[100dvh] ${isMobileDrawer ? 'w-[310px] max-w-[88vw]' : 'w-[260px]'} shrink-0 flex-col overflow-hidden border-r border-[#d6d6d6] bg-white`}>
 
         <div className="flex h-[104px] items-center justify-center border-b border-[#d6d6d6] bg-[#ffa313]">
           <img src="/images/admin-sidebar-logo.svg" alt="100 Black Men of Orange County" className="h-[92px] w-auto object-contain" />
@@ -144,19 +144,19 @@ const Sidebar = ({ sidebarItems = defaultItems, isMobileDrawer = false }: Sideba
             ))}
           </nav>
 
-          <div className="bg-white pt-[210px]">
+          <div className="bg-white pt-[40px] pb-[env(safe-area-inset-bottom)]">
             <button 
               ref={logoutButtonRef}
               onClick={() => setShowLogoutModal(true)}
-              className="group flex h-[56px] w-full items-center justify-center gap-[14px] border-y border-[#d6d6d6] text-[16px] font-medium text-[#666666] transition-all hover:bg-[#fff8ef] hover:text-[#ff9f0f]"
+              className="group flex h-[56px] w-full items-center justify-center gap-[14px] border-y border-[#d6d6d6] text-[16px] font-medium text-[#2b2b2b] transition-all hover:bg-[#fff8ef] hover:text-[#ff9f0f]"
             >
               <img src="/images/logout-round.svg" alt="" aria-hidden="true" className="h-[22px] w-[22px] shrink-0 object-contain" />
               Logout
             </button>
 
             <div className="space-y-[5px] py-[18px] text-center">
-              <p className="text-[12px] font-normal leading-none text-[#9a9a9a]">Version 1.0.0</p>
-              <p className="text-[12px] font-normal leading-none text-[#9a9a9a]">(c) 2025 Mentorship</p>
+              <p className="text-[12px] font-normal leading-[1.4] text-[#9a9a9a]">Version 1.0.0</p>
+              <p className="text-[12px] font-normal leading-[1.4] text-[#9a9a9a]">(c) 2025 Mentorship</p>
             </div>
           </div>
         </div>

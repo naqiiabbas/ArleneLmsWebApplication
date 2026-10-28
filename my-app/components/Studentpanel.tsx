@@ -256,11 +256,12 @@ function ReportAbsenceModal({
               Date of Absence <span className="text-[#ff5f64]">*</span>
             </label>
             <input
-              type="text"
-              placeholder="MM/DD/YYYY"
+              type="date"
+              required
               value={form.date}
+              onClick={(e) => e.currentTarget.showPicker?.()}
               onChange={(e) => setForm({ ...form, date: e.target.value })}
-              className="h-[44px] w-full rounded-[9px] border border-[#dddddd] bg-white px-[10px] text-[16px] font-normal text-[#111111] outline-none transition placeholder:text-[#8a8a8a] focus:border-[#ff5f64]"
+              className="h-[44px] w-full cursor-pointer rounded-[9px] border border-[#dddddd] bg-white px-[12px] text-[16px] font-normal text-[#111111] outline-none transition placeholder:text-[#8a8a8a] focus:border-[#ff5f64]"
             />
           </div>
           <div>

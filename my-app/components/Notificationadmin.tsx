@@ -54,7 +54,7 @@ const VISUALS: Record<string, { Icon: React.ComponentType<{ size?: number; class
 const FilterButton = ({ filter, count, active, onClick }: { filter: any; count: number; active: boolean; onClick: () => void }) => (
   <button
     onClick={onClick}
-    className={`flex h-[38px] items-center gap-[10px] rounded-[9px] border px-[15px] text-[14px] font-medium transition-all ${
+    className={`flex h-[38px] shrink-0 items-center gap-[10px] whitespace-nowrap rounded-[9px] border px-[15px] text-[14px] font-medium transition-all ${
       active
       ? 'border-[#F9A618] bg-[#F9A618] text-white'
       : 'border-[#d8dde3] bg-white text-[#243041] hover:border-[#F9A618]'
@@ -73,44 +73,47 @@ const NotificationItem = ({ item, onDelete, onRead }: { item: UINotification; on
   const v = VISUALS[item.type] ?? VISUALS.default;
   const borderColor = item.unread ? 'border-[#F9A618]' : 'border-[#d8dde3]';
   return (
-  <div className={`relative mb-[12px] flex min-h-[105px] items-start gap-[16px] rounded-[8px] border bg-white px-[17px] py-[17px] transition-all hover:shadow-sm ${borderColor}`}>
+  <div className={`relative mb-[12px] flex items-start gap-[12px] rounded-[8px] border bg-white p-[14px] transition-all hover:shadow-sm sm:gap-[16px] sm:p-[17px] ${borderColor}`}>
 
-    <div className={`flex h-[48px] min-w-[48px] items-center justify-center rounded-[8px] ${v.bg}`}>
+    <div className={`flex h-[40px] w-[40px] shrink-0 items-center justify-center rounded-[8px] sm:h-[48px] sm:w-[48px] ${v.bg}`}>
       <v.Icon size={18} className={v.color} />
     </div>
 
-    <div className="min-w-0 flex-1 pt-[1px]">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <h3 className="truncate text-[19px] font-semibold leading-none text-[#243041]">{item.title}</h3>
-          <p className="mt-[10px] line-clamp-1 text-[14px] text-[#667085]">{item.description}</p>
-          <div className="mt-[8px] flex items-center gap-[9px] text-[13px] text-[#667085]">
-            <span>{item.time}</span>
-            {item.sender && (
-              <>
-                <span className="h-[4px] w-[4px] rounded-full bg-[#667085]" />
-                <span>{item.sender}</span>
-              </>
-            )}
-          </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-[24px] pt-[7px]">
-          
-          {item.unread && (
-            <Check 
-              size={17} 
-              onClick={() => onRead(item.id)}
-              className="cursor-pointer text-[#00a63e] transition-transform hover:scale-110" 
-            />
-          )}
-
-          <Trash2 
-            size={17} 
-            onClick={() => onDelete(item.id)}
-            className="cursor-pointer text-[#ff1f2d] transition-transform hover:scale-110" 
-          />
-        </div>
+    <div className="min-w-0 flex-1">
+      <h3 className="break-words text-[16px] font-semibold leading-[22px] text-[#243041] sm:text-[18px] sm:leading-[26px]">{item.title}</h3>
+      <p className="mt-[4px] break-words text-[14px] leading-[20px] text-[#667085]">{item.description}</p>
+      <div className="mt-[6px] flex flex-wrap items-center gap-x-[9px] gap-y-[2px] text-[13px] leading-[18px] text-[#667085]">
+        <span>{item.time}</span>
+        {item.sender && (
+          <>
+            <span className="h-[4px] w-[4px] rounded-full bg-[#667085]" aria-hidden="true" />
+            <span className="break-words">{item.sender}</span>
+          </>
+        )}
       </div>
+    </div>
+
+    <div className="flex shrink-0 items-center gap-[4px] sm:gap-[8px]">
+      {item.unread && (
+        <button
+          type="button"
+          onClick={() => onRead(item.id)}
+          aria-label="Mark as read"
+          title="Mark as read"
+          className="flex h-[32px] w-[32px] items-center justify-center rounded-[6px] text-[#00a63e] transition-colors hover:bg-[#ecfdf3]"
+        >
+          <Check size={17} />
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={() => onDelete(item.id)}
+        aria-label="Delete notification"
+        title="Delete"
+        className="flex h-[32px] w-[32px] items-center justify-center rounded-[6px] text-[#ff1f2d] transition-colors hover:bg-[#fff1f2]"
+      >
+        <Trash2 size={17} />
+      </button>
     </div>
   </div>
   );
@@ -175,22 +178,24 @@ const NotificationPanel = () => {
   return (
     <section className={`${poppins.variable} min-h-full bg-[#f4f4f4] px-4 pb-[28px] pt-[28px] font-sans md:px-6 lg:px-[24px]`}>
       
-      <div className="mb-[8px] flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-[30px] font-bold leading-none tracking-[-0.02em] text-[#243041]">Notifications</h1>
-          <p className="mt-[8px] max-w-[120px] text-[15px] leading-[1.3] text-[#667085]">{unreadCount} unread notifications</p>
+      <div className="mb-[16px] flex flex-wrap items-start justify-between gap-[12px]">
+        <div className="min-w-0">
+          <h1 className="text-[26px] font-bold leading-[34px] tracking-[-0.02em] text-[#243041] sm:text-[30px] sm:leading-[38px]">Notifications</h1>
+          <p className="mt-[4px] text-[15px] leading-[20px] text-[#667085]">
+            {unreadCount} unread {unreadCount === 1 ? "notification" : "notifications"}
+          </p>
         </div>
 
         <button 
           onClick={markAllRead}
-          className="mt-[6px] flex h-[40px] items-center gap-2 rounded-[8px] border border-[#d8dde3] bg-transparent px-[15px] text-[14px] font-semibold text-[#243041] transition-colors hover:bg-white"
+          className="mt-[2px] flex h-[40px] shrink-0 items-center gap-2 whitespace-nowrap rounded-[8px] border border-[#d8dde3] bg-transparent px-[15px] text-[14px] font-semibold text-[#243041] transition-colors hover:bg-white"
         >
           <Check size={16} />
           Mark All as Read
         </button>
       </div>
 
-      <div className="mb-[24px] flex min-h-[74px] items-center gap-[8px] overflow-x-auto rounded-[8px] border border-[#d8dde3] bg-white px-[17px] py-[12px] [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+      <div className="mb-[20px] flex min-h-[64px] items-center gap-[8px] overflow-x-auto rounded-[8px] border border-[#d8dde3] bg-white px-[14px] py-[12px] sm:px-[17px] [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
         <div className="mr-[2px] shrink-0 text-[#667085]">
           <SlidersHorizontal size={18} />
         </div>

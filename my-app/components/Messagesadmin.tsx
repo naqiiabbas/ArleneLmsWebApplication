@@ -171,7 +171,7 @@ export default function Messagesadmin() {
         </div>
       )}
 
-      <div className="grid h-[1100px] grid-cols-[363px_minmax(0,1fr)] gap-[16px]">
+      <div className="grid h-[calc(100dvh-210px)] min-h-[460px] grid-cols-1 gap-[16px] md:grid-cols-[300px_minmax(0,1fr)] lg:grid-cols-[363px_minmax(0,1fr)]">
         <aside className="overflow-hidden rounded-[8px] border border-[#d6d6d6] bg-white">
           <div className="border-b border-[#d6d6d6] px-[16px] py-[17px]">
             <div className="flex h-[42px] items-center rounded-[8px] border border-[#d6d6d6] bg-white px-[13px]">
@@ -230,7 +230,7 @@ export default function Messagesadmin() {
             </div>
           ) : (
             <>
-              <div className="flex h-[73px] items-center border-b border-[#d6d6d6] px-[16px]">
+              <div className="flex h-[73px] shrink-0 items-center border-b border-[#d6d6d6] px-[16px]">
                 <Avatar conversation={activeChat} size="small" />
                 <div className="ml-[12px]">
                   <h2 className="text-[16px] font-normal leading-none text-[#111111]">{activeChat.name}</h2>
@@ -243,7 +243,7 @@ export default function Messagesadmin() {
 
               <div
                 ref={scrollRef}
-                className="flex-1 overflow-y-auto px-[16px] py-[16px] [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+                className="min-h-0 flex-1 overflow-y-auto px-[16px] py-[16px] [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
               >
                 {messages.length === 0 && (
                   <p className="mt-[8px] text-center text-[14px] text-[#999999]">No messages yet. Say hello!</p>
@@ -267,7 +267,7 @@ export default function Messagesadmin() {
                 })}
               </div>
 
-              <form onSubmit={handleSendMessage} className="flex h-[77px] items-center gap-[10px] border-t border-[#d6d6d6] px-[16px]">
+              <form onSubmit={handleSendMessage} className="flex h-[77px] shrink-0 items-center gap-[10px] border-t border-[#d6d6d6] px-[16px]">
                 <label className="relative flex h-[34px] w-[34px] cursor-pointer items-center justify-center text-[#666666]">
                   <PaperclipIcon />
                   <input type="file" className="hidden" onChange={handleFileUpload} />

@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useRouter } from "next/navigation";
 import { Bell, Menu, Search, X } from 'lucide-react';
 import Sidebarmentor from './Sidebarmentor';
+import ProfileMenu from './ProfileMenu';
 import { HeaderAvatar, HeaderName, NotificationDot, useHeaderInfo } from './HeaderProfile';
 
 type NavbarProps = {
@@ -133,7 +134,7 @@ const Navbar = ({ isSidebarOpen = false, onMenuClick }: NavbarProps) => {
         </div>
 
         {/* User Profile Card - Styled exactly like the screenshot */}
-        <div className="bg-transparent p-1 px-3 rounded-xl flex items-center gap-3 border border-white/40 shadow-sm min-w-[140px]">
+        <ProfileMenu portal="mentor" className="bg-transparent p-1 px-3 rounded-xl flex items-center gap-3 border border-white/40 shadow-sm min-w-[140px]">
           <div className="w-9 h-9 rounded-lg overflow-hidden relative border border-white/30 shrink-0">
             <HeaderAvatar info={me} />
           </div>
@@ -141,7 +142,7 @@ const Navbar = ({ isSidebarOpen = false, onMenuClick }: NavbarProps) => {
             <HeaderName info={me} className="text-[13px] font-bold leading-none mb-1" />
             <p className="text-[9px] font-medium opacity-90 uppercase tracking-wider">Online</p>
           </div>
-        </div>
+        </ProfileMenu>
       </div>
 
     </header>

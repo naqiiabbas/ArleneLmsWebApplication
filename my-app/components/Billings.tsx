@@ -307,26 +307,44 @@ const Plans = ({ data, loading, onChoose }: { data: BillingData; loading: boolea
   if (loading) return <p className="py-10 text-center text-[14px] text-[#777777]">Loading plans...</p>;
   if (!plans.length) return <p className="py-10 text-center text-[14px] text-[#777777]">No plans are configured yet.</p>;
   return (
-    <div className="grid grid-cols-1 gap-[18px] lg:grid-cols-3">
+    <div className="grid grid-cols-1 gap-[18px] md:grid-cols-2 xl:grid-cols-3">
       {plans.map((plan) => {
         const isCurrent = data.currentPlan?.planId === plan.id;
         return (
-          <article key={plan.name} className={`rounded-[8px] border p-[24px] ${isCurrent ? "border-[#f9a313] bg-[#fffaf1]" : "border-[#d9d9d9] bg-white"}`}>
-            <h2 className="text-[20px] font-semibold">{plan.name}</h2>
-            <p className="mt-[12px] text-[30px] font-semibold text-[#f9a313]">{money(plan.price)}</p>
-            <p className="mt-[4px] text-[14px] text-[#666666]">per month</p>
-            {plan.features.length > 0 && (
-              <ul className="mt-[14px] space-y-[6px] text-[13px] text-[#666666]">
-                {plan.features.map((f) => (
-                  <li key={f}>• {f}</li>
-                ))}
-              </ul>
-            )}
+          <article
+            key={plan.name}
+            className={`flex h-full min-w-0 flex-col rounded-[8px] border p-[24px] ${isCurrent ? "border-[#f9a313] bg-[#fffaf1]" : "border-[#d9d9d9] bg-white"}`}
+          >
+            <div className="flex min-h-[28px] items-center justify-between gap-[10px]">
+              <h2 className="truncate text-[20px] font-semibold leading-[28px] text-[#111111]">{plan.name}</h2>
+              {isCurrent && (
+                <span className="shrink-0 rounded-full bg-[#f9a313] px-[10px] py-[3px] text-[11px] font-medium text-white">Current</span>
+              )}
+            </div>
+            <p className="mt-[12px] flex items-baseline gap-[6px]">
+              <span className="text-[30px] font-semibold leading-none text-[#f9a313]">{money(plan.price)}</span>
+              <span className="text-[14px] text-[#666666]">/ month</span>
+            </p>
+            <div className="my-[18px] h-px w-full bg-[#eeeeee]" />
+            <div className="flex-1 pb-[22px]">
+              {plan.features.length > 0 ? (
+                <ul className="space-y-[10px] text-[13px] leading-[18px] text-[#555555]">
+                  {plan.features.map((f) => (
+                    <li key={f} className="flex items-start gap-[8px]">
+                      <span className="mt-[6px] h-[6px] w-[6px] shrink-0 rounded-full bg-[#f9a313]" aria-hidden="true" />
+                      <span className="min-w-0 break-words">{f}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-[13px] text-[#999999]">No features listed.</p>
+              )}
+            </div>
             <button
               type="button"
               disabled={isCurrent}
               onClick={() => onChoose(plan)}
-              className={`mt-[22px] h-[42px] w-full rounded-[8px] text-[15px] font-medium transition-colors ${isCurrent ? "cursor-default bg-[#f9a313] text-white" : "border border-[#d9d9d9] text-[#666666] hover:border-[#f9a313] hover:text-[#f9a313]"}`}
+              className={`h-[42px] w-full shrink-0 rounded-[8px] text-[15px] font-medium transition-colors ${isCurrent ? "cursor-default bg-[#f9a313] text-white" : "border border-[#d9d9d9] text-[#666666] hover:border-[#f9a313] hover:text-[#f9a313]"}`}
             >
               {isCurrent ? "Current Plan" : data.currentPlan ? `Switch to ${plan.name}` : "Choose Plan"}
             </button>

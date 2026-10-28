@@ -15,9 +15,12 @@ function formatSize(bytes: number | null): string {
 
 function extOf(url: string | null): string | null {
   if (!url) return null
-  const clean = url.split("?")[0]
-  if (!clean.includes(".")) return null
-  return clean.split(".").pop()!.toLowerCase()
+  // Only look at the last path segment, so a domain like ".co" is never read as an extension.
+  const name = url.split(/[?#]/)[0].split("/").pop() ?? ""
+  const dot = name.lastIndexOf(".")
+  if (dot <= 0 || dot === name.length - 1) return null
+  const ext = name.slice(dot + 1).toLowerCase()
+  return /^[a-z0-9]{1,5}$/.test(ext) ? ext : null
 }
 
 function formatRole(r: string | null): string {

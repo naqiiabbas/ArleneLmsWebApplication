@@ -787,9 +787,11 @@ export async function submitAbsenceReport(
   const reason = input.reason.trim()
   if (!reason) return { error: "Please select a reason for your absence." }
 
-  const parsed = new Date(input.date.trim())
-  if (isNaN(parsed.getTime())) return { error: "Please enter a valid date (MM/DD/YYYY)." }
-  const absenceDate = ymd(parsed)
+  // Date pickers send YYYY-MM-DD; keep it as-is so the server timezone can't shift the day.
+  const rawDate = input.date.trim()
+  const parsed = new Date(rawDate)
+  if (!rawDate || isNaN(parsed.getTime())) return { error: "Please select the date of your absence." }
+  const absenceDate = /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : ymd(parsed)
 
   const admin = createAdminClient()
   const fullReason = input.notes.trim() ? `${reason} — ${input.notes.trim()}` : reason

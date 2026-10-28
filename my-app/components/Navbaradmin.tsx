@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useRouter } from "next/navigation";
 import { Bell, Menu, Search, X } from 'lucide-react';
 import Sidebaradmin from './Sidebaradmin';
+import ProfileMenu from './ProfileMenu';
 import { HeaderAvatar, HeaderName, NotificationDot, useHeaderInfo } from './HeaderProfile';
 
 type NavbarProps = {
@@ -140,7 +141,7 @@ const Navbar = ({ isSidebarOpen = false, onMenuClick }: NavbarProps) => {
         </div>
 
         {/* User Profile Card — the signed-in user */}
-        <div className="bg-transparent p-1 px-3 rounded-xl flex items-center gap-3 border border-white/40 shadow-sm min-w-[140px]">
+        <ProfileMenu portal="admin" className="bg-transparent p-1 px-3 rounded-xl flex items-center gap-3 border border-white/40 shadow-sm min-w-[140px]">
           <div className="w-9 h-9 rounded-lg overflow-hidden relative border border-white/30 shrink-0">
             <HeaderAvatar info={me} textClass="text-[13px]" />
           </div>
@@ -148,7 +149,7 @@ const Navbar = ({ isSidebarOpen = false, onMenuClick }: NavbarProps) => {
             <HeaderName info={me} className="text-[13px] font-bold leading-none mb-1" />
             <p className="text-[9px] font-medium opacity-90 uppercase tracking-wider">Online</p>
           </div>
-        </div>
+        </ProfileMenu>
       </div>
 
     </header>
@@ -162,7 +163,7 @@ const Navbar = ({ isSidebarOpen = false, onMenuClick }: NavbarProps) => {
       />
     )}
     {!onMenuClick && (
-      <div className={`fixed left-0 top-0 z-[200] h-screen transition-transform duration-300 ease-out lg:hidden ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+      <div className={`fixed left-0 top-0 z-[200] h-[100dvh] transition-transform duration-300 ease-out lg:hidden ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <Sidebaradmin isMobileDrawer />
       </div>
     )}

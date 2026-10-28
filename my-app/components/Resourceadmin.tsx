@@ -192,11 +192,11 @@ export default function Resourceadmin() {
         <aside className="rounded-[8px] bg-white px-[25px] py-[27px]">
           {selected ? (
             <>
-              <div className="flex items-start gap-[12px]">
+              <div className="mb-[20px] flex items-start gap-[12px]">
                 <ResourceIcon type={selected.iconType} />
                 <div className="min-w-0 flex-1">
-                  <h2 className="text-[17px] font-normal leading-[21px] text-[#111111]">{selected.title}</h2>
-                  <div className="mt-[10px] flex flex-wrap items-center gap-x-[8px] gap-y-[7px]">
+                  <h2 className="break-words text-[17px] font-normal leading-[21px] text-[#111111]">{selected.title}</h2>
+                  <div className="mt-[12px] flex flex-wrap items-center gap-x-[8px] gap-y-[7px]">
                     <StatusBadge status={selected.status} />
                     <Tag color="blue">{selected.category}</Tag>
                     <Tag color="purple">{selected.type}</Tag>
@@ -448,7 +448,7 @@ const Select = ({ value, onChange, options, label }: { value: string; onChange: 
 );
 
 const StatusBadge = ({ status }: { status: ResourceStatus }) => (
-  <span className={`inline-flex min-h-[26px] items-center rounded-full px-[11px] py-[4px] text-[12px] font-normal leading-none ${statusStyle[status]}`}>
+  <span className={`inline-flex min-h-[26px] shrink-0 items-center whitespace-nowrap rounded-full px-[11px] py-[4px] text-[12px] font-normal leading-none ${statusStyle[status]}`}>
     {status}
   </span>
 );
@@ -460,7 +460,7 @@ const Tag = ({ children, color = "orange", icon }: { children: React.ReactNode; 
     purple: "bg-[#edd7ff] text-[#7a22bd]",
   };
   return (
-    <span className={`inline-flex min-h-[24px] items-center gap-[5px] rounded-[5px] px-[9px] py-[4px] text-[12px] font-normal leading-none ${styles[color]}`}>
+    <span className={`inline-flex min-h-[24px] max-w-full shrink-0 items-center gap-[5px] truncate whitespace-nowrap rounded-[5px] px-[9px] py-[4px] text-[12px] font-normal leading-none ${styles[color]}`}>
       {icon === "star" && <StarGlyph small />}
       {children}
     </span>
