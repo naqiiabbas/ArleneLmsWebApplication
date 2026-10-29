@@ -887,6 +887,11 @@ self-host rather than plain Postgres, because the app uses Supabase Auth ~33 cal
   super_admin the same, but `roleRank` stops admins creating/promoting a super_admin, and the
   `system_backups` RLS policy is super-admin-only. To make one, on the server:
   `docker exec supabase-db psql -U postgres -d postgres -c "update public.profiles set role='super_admin' where email='…'"`.
+- **Data wiped 2026-10-29 (user request):** all accounts except the admin, all business data and their
+  uploaded files deleted (one transaction, dry-run first; files via the Storage API). Kept: the admin
+  (+ photo, notification prefs) and config tables `custom_roles`, `permissions`, `role_permissions`,
+  `billing_plans`, `document_categories`, `system_settings`. Pre-wipe backup on the server:
+  `~/backups/pre-wipe-20261029-051056/` (`db.sql.gz` incl. auth users, `storage.tar.gz`).
 - **Verified:** auth health, admin-API user creation, password sign-in through the public hostname
   from the app container, RLS self-read, anon denied on `profiles`, storage upload → signed URL →
   download → delete, recovery-link shape, app pages + middleware redirect, `tsc` clean.
