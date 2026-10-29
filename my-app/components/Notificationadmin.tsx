@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { Poppins } from 'next/font/google';
 import {
   Check,
@@ -91,6 +92,15 @@ const NotificationItem = ({ item, onDelete, onRead }: { item: UINotification; on
           </>
         )}
       </div>
+      {item.href && (
+        <Link
+          href={item.href}
+          onClick={() => item.unread && onRead(item.id)}
+          className="mt-[8px] inline-block text-[14px] font-semibold text-[#F9A618] hover:underline"
+        >
+          View request →
+        </Link>
+      )}
     </div>
 
     <div className="flex shrink-0 items-center gap-[4px] sm:gap-[8px]">

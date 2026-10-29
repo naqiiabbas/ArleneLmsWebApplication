@@ -982,6 +982,8 @@ create table if not exists public.sponsorship_requests (
   status          request_status not null default 'pending',
   reviewed_by     uuid references public.profiles(id) on delete set null,
   reviewed_at     timestamptz,
+  review_notes    text,           -- admin's note / rejection reason, shown to the sponsor
+  program_id      uuid references public.sponsorship_programs(id) on delete set null, -- created on approval
   submitted_at    timestamptz not null default now()
 );
 
@@ -1144,6 +1146,8 @@ create index if not exists idx_resources_status         on public.resources(stat
 create index if not exists idx_blog_status              on public.blog_posts(status);
 create index if not exists idx_sponsors_status          on public.sponsors(status, is_public);
 create index if not exists idx_spr_status               on public.sponsorship_requests(status);
+create index if not exists idx_spr_program              on public.sponsorship_requests(program_id);
+create index if not exists idx_spr_submitted            on public.sponsorship_requests(submitted_at desc);
 create index if not exists idx_invoices_status          on public.invoices(status);
 create index if not exists idx_invoices_org             on public.invoices(organization_id);
 create index if not exists idx_payments_invoice         on public.payments(invoice_id);

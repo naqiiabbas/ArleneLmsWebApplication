@@ -33,7 +33,20 @@ type NotifRow = {
   body: string | null
   is_read: boolean
   created_at: string | null
+  entity_type: string | null
+  entity_id: string | null
   sender: { full_name: string | null } | null
+}
+
+const ADMIN_TIER = ["super_admin", "admin"]
+
+/** Deep link for a notification about a record, as seen by a user with `role`. */
+function linkFor(entityType: string | null, entityId: string | null, role: string | null): string | undefined {
+  if (entityType === "sponsorship_request" && entityId) {
+    if (role && ADMIN_TIER.includes(role)) return `/adminpanel/sponsorships?id=${entityId}`
+    if (role === "sponsor") return "/sponsorshippanel/request"
+  }
+  return undefined
 }
 
 /** The current user's notifications (newest first). */
@@ -42,14 +55,17 @@ export async function listMyNotifications(): Promise<UINotification[]> {
   if (!userId) return []
   const admin = createAdminClient()
 
-  const { data, error } = await admin
-    .from("notifications")
-    // notifications has two FKs to profiles (recipient_id, sender_id) → hint sender.
-    .select(
-      "id, type, title, body, is_read, created_at, sender:profiles!notifications_sender_id_fkey ( full_name )",
-    )
-    .eq("recipient_id", userId)
-    .order("created_at", { ascending: false })
+  const [{ data, error }, { data: me }] = await Promise.all([
+    admin
+      .from("notifications")
+      // notifications has two FKs to profiles (recipient_id, sender_id) → hint sender.
+      .select(
+        "id, type, title, body, is_read, created_at, entity_type, entity_id, sender:profiles!notifications_sender_id_fkey ( full_name )",
+      )
+      .eq("recipient_id", userId)
+      .order("created_at", { ascending: false }),
+    admin.from("profiles").select("role").eq("id", userId).maybeSingle(),
+  ])
   if (error) throw new Error(error.message)
 
   return ((data ?? []) as unknown as NotifRow[]).map((n) => ({
@@ -60,6 +76,7 @@ export async function listMyNotifications(): Promise<UINotification[]> {
     time: formatRelative(n.created_at),
     sender: n.sender?.full_name ?? null,
     unread: !n.is_read,
+    href: linkFor(n.entity_type, n.entity_id, me?.role ?? null),
   }))
 }
 

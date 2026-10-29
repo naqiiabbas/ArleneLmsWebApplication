@@ -794,6 +794,25 @@ removed; real records/stats/recharts, detail modal loads the photo via signed UR
 + 5 attendance records. **iPad check-in flow** (4-digit code entry + photo capture on the kiosk) +
 mentor marking are the student/mentor-side pieces, still to build.
 
+**Admin → Sponsorship Requests** (18th slice, 2026-10-29 — was missing: sponsors could submit requests
+and admins got a notification, but nothing could approve/reject them): route **`/adminpanel/sponsorships`**
+(sidebar "Sponsorship Requests", `adminOnly`; also in the header quick-search), component
+**`components/SponsorshipRequestsAdmin.tsx`**, data **`lib/data/sponsorship-requests.ts`** (`assertAdmin`):
+`listSponsorshipRequests()` (all requests + counts; embeds `sponsor:sponsors` and
+`reviewer:profiles!sponsorship_requests_reviewed_by_fkey`) and `reviewSponsorshipRequest(id, approve|reject|under_review, notes)`.
+Approve/reject are **final**: the status change is claimed atomically (`.in("status", [pending, under_review])`)
+before anything else, so a request can never create two programs. **Approve** inserts an active
+`sponsorship_programs` row (name/tier/amount/benefits→deliverables, start = request start or today,
+end = start + duration) and stores its id in `program_id`; failure rolls the request back. **Reject**
+requires a reason in the UI. Every decision notifies the sponsor (`entity_type='sponsorship_request'`)
+and writes `activity_logs`. **Migration `sponsorship_request_review`** added `sponsorship_requests.review_notes`
++ `program_id` (FK → sponsorship_programs, set null) + 2 indexes (init.sql + types synced).
+Notifications now carry an **`href`** (`listMyNotifications` → `linkFor`): sponsorship-request
+notifications open `/adminpanel/sponsorships?id=…` for admins and `/sponsorshippanel/request` for sponsors
+("View request →" in `Notificationadmin` / `Notifispon`). Sponsor's request detail banner is now
+status-aware (was hard-coded "approved") and shows the admin's note / rejection reason.
+Still not built: approval of public "Become a Sponsor" sign-ups (`sponsors.status`).
+
 **Pattern for the next modules:** `lib/data/<module>.ts` (`"use server"` + `assertAdmin()` from
 `lib/data/guards.ts` + service role for privileged ops, or the RLS server client for user-scoped
 reads) → wire the existing `components/*.tsx` (load on mount, mutate + refetch, notice/loading

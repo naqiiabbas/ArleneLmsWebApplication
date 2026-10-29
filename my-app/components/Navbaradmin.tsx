@@ -26,6 +26,7 @@ const searchItems = [
   { label: "Resource", path: "/adminpanel/resource", keywords: "resources learning" },
   { label: "Blogs", path: "/adminpanel/blogsad", keywords: "blog posts articles" },
   { label: "Reports & Analytics", path: "/adminpanel/reports", keywords: "reports analytics charts" },
+  { label: "Sponsorship Requests", path: "/adminpanel/sponsorships", keywords: "sponsor sponsorship requests approve reject donate" },
   { label: "Billing and Plans", path: "/adminpanel/billing", keywords: "billing plans payments" },
   { label: "Settings", path: "/adminpanel/settings", keywords: "settings account preferences" },
   { label: "Roles and Permissions", path: "/adminpanel/roles", keywords: "roles permissions access" },

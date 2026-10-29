@@ -42,6 +42,13 @@ const statusBadge = (status: ReqStatus) => {
   return "border-[#93c5fd] bg-[#dbeafe] text-[#2f80ff]";
 };
 
+const statusMessage = (status: ReqStatus) => {
+  if (status === "Approved") return "Your sponsorship request has been approved and is now an active sponsorship.";
+  if (status === "Under review") return "An administrator is reviewing your request.";
+  if (status === "Rejected") return "Your sponsorship request was not approved.";
+  return "Your request has been submitted and is waiting for review.";
+};
+
 const statusIcon = (status: ReqStatus) => {
   if (status === "Approved") return "/images/request-icon-3.svg";
   if (status === "Under review") return "/images/request-icon-4.svg";
@@ -498,15 +505,21 @@ function DetailView({ selected, setView }: { selected: RequestItem; setView: (vi
       <h1 className="mt-[18px] text-[28px] font-semibold leading-none text-[#1f2937]">Request Details</h1>
       <p className="mt-[16px] text-[15px] font-normal leading-none text-[#667085]">View your sponsorship request information</p>
 
-      <div className="mt-[22px] flex items-center justify-between rounded-[8px] border border-[#86efac] bg-[#ecfdf5] px-[24px] py-[24px]">
+      <div className={`mt-[22px] flex items-center justify-between gap-4 rounded-[8px] border px-[24px] py-[24px] ${statusBadge(selected.status)}`}>
         <div className="flex items-center gap-[18px]">
-          <img src="/images/request-icon-3.svg" alt="" aria-hidden="true" className="h-[18px] w-[18px]" />
+          <img src={statusIcon(selected.status)} alt="" aria-hidden="true" className="h-[18px] w-[18px]" />
           <div>
-            <p className="text-[14px] font-semibold leading-[22px] text-[#00a63e]">Request<br />{selected.status}</p>
-            <p className="mt-[6px] text-[14px] font-normal leading-none text-[#667085]">Your sponsorship request has been approved. You will receive a confirmation email shortly.</p>
+            <p className="text-[14px] font-semibold leading-[22px]">Request<br />{selected.status}</p>
+            <p className="mt-[6px] text-[14px] font-normal leading-[20px] text-[#667085]">{statusMessage(selected.status)}</p>
+            {selected.reviewNotes && (
+              <p className="mt-[8px] text-[14px] leading-[20px] text-[#1f2937]">
+                <span className="font-semibold">{selected.status === "Rejected" ? "Reason: " : "Note from admin: "}</span>
+                {selected.reviewNotes}
+              </p>
+            )}
           </div>
         </div>
-        <span className="rounded-[10px] border border-[#86efac] px-[12px] py-[7px] text-[13px] font-semibold text-[#00a63e]">{selected.ref}</span>
+        <span className="shrink-0 rounded-[10px] border border-current px-[12px] py-[7px] text-[13px] font-semibold">{selected.ref}</span>
       </div>
 
       <div className="mt-[16px] grid grid-cols-1 gap-[16px] md:grid-cols-2">

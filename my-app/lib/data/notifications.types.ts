@@ -10,6 +10,7 @@ export type UINotification = {
   time: string
   sender: string | null
   unread: boolean
+  href?: string // where the notification's "View" action goes, when it is about a record
 }
 
 export type NotificationInput = {

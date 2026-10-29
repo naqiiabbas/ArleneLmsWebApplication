@@ -34,6 +34,7 @@ const defaultItems: NavItem[] = [
     { id: '/adminpanel/resource', label: 'Resource', icon: 'resource', adminOnly: true },
     { id: '/adminpanel/blogsad', label: 'Blogs', icon: 'blogs', adminOnly: true },
     { id: '/adminpanel/reports', label: 'Reports & Analytics', icon: 'reports', permission: 'reports.view' },
+    { id: '/adminpanel/sponsorships', label: 'Sponsorship Requests', icon: 'sponsorships', adminOnly: true },
     { id: '/adminpanel/billing', label: 'Billing and Plans', icon: 'billing', permission: 'billing.manage' },
     { id: '/adminpanel/settings', label: 'Settings', icon: 'settings', adminOnly: true },
     { id: '/adminpanel/roles', label: 'Roles and Permissions', icon: 'roles', permission: 'roles.manage' },
@@ -78,7 +79,8 @@ const SidebarItem = ({ item }: { item: any }) => {
     billing: "/images/admin-icon-13.svg",
     settings: "/images/admin-icon-14.svg",
     roles: "/images/admin-icon-15.svg",
-    activity: "/images/admin-icon-16.svg"
+    activity: "/images/admin-icon-16.svg",
+    sponsorships: "/images/sponsor-sidebar-sponsorships.svg"
   };
 
   return (

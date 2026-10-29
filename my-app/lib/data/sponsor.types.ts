@@ -103,6 +103,7 @@ export interface SponsorRequest {
   durationMonths: number
   startDate: string
   benefits: string[]
+  reviewNotes: string // admin's note / rejection reason ("" if none)
 }
 
 export interface SponsorRequestsData {

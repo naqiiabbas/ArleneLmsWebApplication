@@ -2303,7 +2303,9 @@ export type Database = {
           email: string | null
           id: string
           phone: string | null
+          program_id: string | null
           program_name: string | null
+          review_notes: string | null
           reviewed_at: string | null
           reviewed_by: string | null
           sponsor_id: string | null
@@ -2322,7 +2324,9 @@ export type Database = {
           email?: string | null
           id?: string
           phone?: string | null
+          program_id?: string | null
           program_name?: string | null
+          review_notes?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
           sponsor_id?: string | null
@@ -2340,7 +2344,9 @@ export type Database = {
           email?: string | null
           id?: string
           phone?: string | null
+          program_id?: string | null
           program_name?: string | null
+          review_notes?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
           sponsor_id?: string | null
@@ -2350,6 +2356,12 @@ export type Database = {
           tier?: Database["public"]["Enums"]["sponsorship_tier"] | null
         }
         Relationships: [
+          {
+            foreignKeyName: "sponsorship_requests_program_id_fkey"
+            columns: ["program_id"]
+            referencedRelation: "sponsorship_programs"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "sponsorship_requests_reviewed_by_fkey"
             columns: ["reviewed_by"]

@@ -428,7 +428,7 @@ export async function getSponsorRequests(): Promise<SponsorRequestsData> {
 
   const { data, error } = await admin
     .from("sponsorship_requests")
-    .select("id, program_name, tier, amount, status, submitted_at, company_name, contact_name, email, phone, duration_months, start_date, benefits")
+    .select("id, program_name, tier, amount, status, submitted_at, company_name, contact_name, email, phone, duration_months, start_date, benefits, review_notes")
     .eq("sponsor_id", sponsor.id)
     .order("submitted_at", { ascending: false })
   if (error) throw new Error(error.message)
@@ -447,6 +447,7 @@ export async function getSponsorRequests(): Promise<SponsorRequestsData> {
     duration_months: number | null
     start_date: string | null
     benefits: string[] | null
+    review_notes: string | null
   }[]).map((r) => ({
     id: r.id,
     ref: `REQ-${r.id.slice(0, 6).toUpperCase()}`,
@@ -462,6 +463,7 @@ export async function getSponsorRequests(): Promise<SponsorRequestsData> {
     durationMonths: Number(r.duration_months ?? 0),
     startDate: r.start_date ?? "Not specified",
     benefits: r.benefits ?? [],
+    reviewNotes: r.review_notes ?? "",
   }))
 
   const stats = {
