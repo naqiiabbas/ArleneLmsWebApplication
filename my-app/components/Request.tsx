@@ -492,7 +492,7 @@ function ReviewStep({ form }: { form: any }) {
 
       <div className="mt-[24px] grid grid-cols-1 gap-[16px] md:grid-cols-3">
         <ReviewTile icon="/images/request-icon-8.svg" label="Sponsorship Amount" value={form.amount || "30000"} className="border-[#fcd9a0] bg-[#fffaf0] text-[#00a63e]" />
-        <ReviewTile icon="/images/request-container-7.svg" label="Duration" value={`${form.durationMonths || "3"}\nmonths`} className="border-[#fcd9a0] bg-[#fffaf0] text-[#1f2937]" />
+        <ReviewTile icon="/images/request-container-7.svg" label="Duration" value={`${form.durationMonths || "3"} months`} className="border-[#fcd9a0] bg-[#fffaf0] text-[#1f2937]" />
         <ReviewTile icon="/images/request-container-8.svg" label="Start Date" value={form.startDate || "Not specified"} className="border-[#fcd9a0] bg-[#fffaf0] text-[#1f2937]" />
       </div>
 
