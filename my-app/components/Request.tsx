@@ -491,9 +491,9 @@ function ReviewStep({ form }: { form: any }) {
       </div>
 
       <div className="mt-[24px] grid grid-cols-1 gap-[16px] md:grid-cols-3">
-        <ReviewTile icon="/images/request-icon-8.svg" label="Sponsorship Amount" value={form.amount || "30000"} className="border-[#86efac] bg-[#ecfdf5] text-[#008236]" />
-        <ReviewTile icon="/images/request-container-7.svg" label="Duration" value={`${form.durationMonths || "3"}\nmonths`} className="border-[#93c5fd] bg-[#eff6ff] text-[#155dfc]" />
-        <ReviewTile icon="/images/request-container-8.svg" label="Start Date" value={form.startDate || "Not specified"} className="border-[#e9d5ff] bg-[#faf5ff] text-[#9810fa]" />
+        <ReviewTile icon="/images/request-icon-8.svg" label="Sponsorship Amount" value={form.amount || "30000"} className="border-[#fcd9a0] bg-[#fffaf0] text-[#00a63e]" />
+        <ReviewTile icon="/images/request-container-7.svg" label="Duration" value={`${form.durationMonths || "3"}\nmonths`} className="border-[#fcd9a0] bg-[#fffaf0] text-[#1f2937]" />
+        <ReviewTile icon="/images/request-container-8.svg" label="Start Date" value={form.startDate || "Not specified"} className="border-[#fcd9a0] bg-[#fffaf0] text-[#1f2937]" />
       </div>
 
       <div className="mt-[24px] rounded-[16px] border border-[#d9d9d9] bg-white px-[24px] py-[28px]">
