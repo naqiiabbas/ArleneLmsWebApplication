@@ -43,7 +43,7 @@ function redirectWithCookies(url: URL, from: NextResponse) {
 }
 
 export async function middleware(request: NextRequest) {
-  const { supabaseResponse, user, role } = await updateSession(request)
+  const { supabaseResponse, user, role, roleLookupFailed } = await updateSession(request)
   const path = request.nextUrl.pathname
 
   const isAuthRoute = AUTH_EXEMPT.some((p) => matches(path, p))
@@ -72,6 +72,10 @@ export async function middleware(request: NextRequest) {
       supabaseResponse,
     )
   }
+  // Role couldn't be read this time (transient error): let the page load
+  // rather than redirecting. Pages and server actions still check permissions.
+  if (roleLookupFailed) return supabaseResponse
+
   if (!roleFitsPanel) {
     // Signed in, but as a different role → this portal's login page (where
     // they can sign in with the right account), not their own dashboard.

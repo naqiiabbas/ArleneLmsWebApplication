@@ -37,8 +37,9 @@ export async function updateSession(request: NextRequest) {
 
   let user = authUser
   let role: UserRole | null = null
+  let roleLookupFailed = false
   if (user) {
-    const { data: profile } = await supabase
+    const { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select("role, status")
       .eq("id", user.id)
@@ -54,8 +55,12 @@ export async function updateSession(request: NextRequest) {
       user = null
     } else {
       role = profile?.role ?? null
+      // A transient query failure (slow network, timeout) is not "no role".
+      // Treating it as one sent the user to the login page, which then bounced
+      // them to their dashboard — a random jump away from the page they clicked.
+      roleLookupFailed = !profile && !!profileError && profileError.code !== "PGRST116"
     }
   }
 
-  return { supabaseResponse, user, role }
+  return { supabaseResponse, user, role, roleLookupFailed }
 }

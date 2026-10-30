@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { signOut } from '@/lib/auth/actions';
 import { usePermissions } from '@/components/PermissionsProvider';
@@ -117,6 +117,23 @@ const Sidebar = ({ sidebarItems = defaultItems, isMobileDrawer = false }: Sideba
     setIsMounted(true);
   }, []);
 
+  // Each admin page renders its own Sidebar, so it remounts on every
+  // navigation and would jump back to the top. Keep the scroll position.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollKey = `adminSidebarScroll:${isMobileDrawer ? 'drawer' : 'desktop'}`;
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    try {
+      el.scrollTop = Number(sessionStorage.getItem(scrollKey)) || 0;
+    } catch {}
+  }, [scrollKey]);
+  const saveScroll = () => {
+    try {
+      sessionStorage.setItem(scrollKey, String(scrollRef.current?.scrollTop ?? 0));
+    } catch {}
+  };
+
   useEffect(() => {
     if (!showLogoutModal) return;
     const previousOverflow = document.body.style.overflow;
@@ -139,7 +156,7 @@ const Sidebar = ({ sidebarItems = defaultItems, isMobileDrawer = false }: Sideba
           <img src="/images/admin-sidebar-logo.svg" alt="100 Black Men of Orange County" className="h-[92px] w-auto object-contain" />
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+        <div ref={scrollRef} onScroll={saveScroll} className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
           <nav className="py-0">
             {visibleItems.map(item => (
               <SidebarItem key={item.id} item={item} />
