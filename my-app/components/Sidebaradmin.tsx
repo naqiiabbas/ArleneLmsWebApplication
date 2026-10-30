@@ -32,7 +32,7 @@ const defaultItems: NavItem[] = [
     { id: '/adminpanel/calendar', label: 'Calendar Systems', icon: 'calendar', adminOnly: true },
     { id: '/adminpanel/documents', label: 'Documents', icon: 'documents', permission: 'documents.view' },
     { id: '/adminpanel/resource', label: 'Resource', icon: 'resource', adminOnly: true },
-    { id: '/adminpanel/blogsad', label: 'Blogs', icon: 'blogs', adminOnly: true },
+    // { id: '/adminpanel/blogsad', label: 'Blogs', icon: 'blogs', adminOnly: true },
     { id: '/adminpanel/reports', label: 'Reports & Analytics', icon: 'reports', permission: 'reports.view' },
     { id: '/adminpanel/sponsorships', label: 'Sponsorship Requests', icon: 'sponsorships', adminOnly: true },
     { id: '/adminpanel/billing', label: 'Billing and Plans', icon: 'billing', permission: 'billing.manage' },
