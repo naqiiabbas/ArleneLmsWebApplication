@@ -459,8 +459,8 @@ export default function AssignedStudentsSection() {
             <thead>
               <tr className="border-b border-[#dddddd] bg-[#fbfbfb]">
                 <th className="px-[24px] py-[19px] text-[16px] font-semibold leading-none text-[#666666] md:px-[40px]">Student</th>
-                <th className="px-[20px] py-[19px] text-[16px] font-semibold leading-none text-[#666666]">School</th>
-                <th className="px-[20px] py-[19px] text-[16px] font-semibold leading-none text-[#666666]">Grade</th>
+                {/* <th className="px-[20px] py-[19px] text-[16px] font-semibold leading-none text-[#666666]">School</th>
+                <th className="px-[20px] py-[19px] text-[16px] font-semibold leading-none text-[#666666]">Grade</th> */}
                 <th className="px-[20px] py-[19px] text-[16px] font-semibold leading-none text-[#666666]">Risk Level</th>
                 <th className="px-[20px] py-[19px] text-[16px] font-semibold leading-none text-[#666666]">Attendance</th>
                 <th className="px-[34px] py-[19px] text-[16px] font-semibold leading-none text-[#666666]">Actions</th>
@@ -468,10 +468,10 @@ export default function AssignedStudentsSection() {
             </thead>
             <tbody>
               {loading && (
-                <tr><td colSpan={6} className="px-[24px] py-[40px] text-center text-[16px] text-[#666666]">Loading your students...</td></tr>
+                <tr><td colSpan={4} className="px-[24px] py-[40px] text-center text-[16px] text-[#666666]">Loading your students...</td></tr>
               )}
               {!loading && filteredStudents.length === 0 && (
-                <tr><td colSpan={6} className="px-[24px] py-[40px] text-center text-[16px] text-[#666666]">No students assigned to you yet.</td></tr>
+                <tr><td colSpan={4} className="px-[24px] py-[40px] text-center text-[16px] text-[#666666]">No students assigned to you yet.</td></tr>
               )}
               {!loading && filteredStudents.map((student) => (
                 <tr key={student.id} className="border-b border-[#e5e5e5] last:border-b-0">
@@ -481,8 +481,8 @@ export default function AssignedStudentsSection() {
                       <span className="text-[16px] font-normal leading-none text-[#111111]">{student.name}</span>
                     </button>
                   </td>
-                  <td className="px-[20px] py-[17px] text-[16px] font-normal leading-none text-[#666666]">{student.school}</td>
-                  <td className="px-[20px] py-[17px] text-[16px] font-normal leading-none text-[#111111]">{student.grade}</td>
+                  {/* <td className="px-[20px] py-[17px] text-[16px] font-normal leading-none text-[#666666]">{student.school}</td>
+                  <td className="px-[20px] py-[17px] text-[16px] font-normal leading-none text-[#111111]">{student.grade}</td> */}
                   <td className="px-[20px] py-[17px]"><RiskBadge level={student.riskLevel} /></td>
                   <td className="px-[20px] py-[17px]"><AttendanceText value={student.attendance} /></td>
                   <td className="relative px-[34px] py-[17px]">
