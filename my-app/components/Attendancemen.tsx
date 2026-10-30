@@ -150,7 +150,7 @@ export default function AttendanceManagement() {
           <h1 className="text-[30px] font-bold leading-none tracking-[-0.02em] text-[#111111]">Attendance Management</h1>
           <p className="mt-[10px] text-[14px] font-normal leading-none text-[#666666]">Track and manage session attendance</p>
         </div>
-        <div className="flex flex-col gap-[10px] sm:flex-row">
+        {/* <div className="flex flex-col gap-[10px] sm:flex-row">
           <div className="relative h-[41px] w-full sm:w-[149px]">
             <div className="pointer-events-none flex h-full w-full items-center gap-[8px] rounded-[10px] border border-[#d6d6d6] bg-white px-[16px] text-[14px] font-semibold text-[#666666]">
               <img
@@ -175,7 +175,7 @@ export default function AttendanceManagement() {
             <Download size={16} strokeWidth={2} />
             Export
           </button>
-        </div>
+        </div> */}
       </div>
 
       {notice && (
