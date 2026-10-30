@@ -171,7 +171,7 @@ export default function Documentadmin() {
           onClick={() => setShowUpload(true)}
           className="flex h-[48px] items-center gap-[8px] rounded-[8px] bg-[#ffa313] px-[22px] text-[16px] font-normal text-white transition-colors hover:bg-[#ef970d]"
         >
-          <UploadGlyph color="white" />
+          <Upload size={16} strokeWidth={1.8} />
           Upload Document
         </button>
       </div>
@@ -760,16 +760,6 @@ const ClockGlyph = ({ strong = false }: { strong?: boolean }) => (
     <circle cx="8" cy="8" r="6.3" stroke={strong ? "#ff4b00" : "#d6b15c"} strokeWidth="1.4" />
     <path d="M8 4.7v3.6l2.4 1.4" stroke={strong ? "#ff4b00" : "#d6b15c"} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
-);
-
-const UploadGlyph = ({ color = "#1976D2", rotate = false }: { color?: string; rotate?: boolean }) => (
-  <span className={rotate ? "rotate-180" : ""}>
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-      <path d="M8 10V2" stroke={color} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M14 10v2.7c0 .7-.6 1.3-1.3 1.3H3.3C2.6 14 2 13.4 2 12.7V10" stroke={color} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M4.7 6.7 8 10l3.3-3.3" stroke={color} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  </span>
 );
 
 const CloseGlyph = () => (
