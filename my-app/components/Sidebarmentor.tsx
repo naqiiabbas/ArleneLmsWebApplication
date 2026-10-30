@@ -107,8 +107,8 @@ const Sidebar = ({ sidebarItems = defaultItems, isMobileDrawer = false }: Sideba
     <>
       <aside className={`${isMobileDrawer ? 'flex' : 'hidden lg:flex'} sticky top-0 h-screen w-[260px] shrink-0 flex-col overflow-hidden border-r border-[#d6d6d6] bg-white`}>
 
-        <div className="bg-[#ffa313] px-[42px] py-0 flex items-center justify-center h-[104px] border-b border-[#d6d6d6]">
-          <div className="relative h-[88px] w-[132px]">
+        <div className="bg-[#ffa313] px-6 xl:px-[42px] py-0 flex shrink-0 items-center justify-center h-[104px] border-b border-[#d6d6d6]">
+          <div className="relative h-[64px] w-[96px]">
             <Image src="/images/mentor-sidebar-logo.svg" alt="Logo" fill className="object-contain" />
           </div>
         </div>

@@ -152,8 +152,8 @@ const Sidebar = ({ sidebarItems = defaultItems, isMobileDrawer = false }: Sideba
     <>
       <aside className={`${isMobileDrawer ? 'flex' : 'hidden lg:flex'} sticky top-0 h-[100dvh] ${isMobileDrawer ? 'w-[310px] max-w-[88vw]' : 'w-[260px]'} shrink-0 flex-col overflow-hidden border-r border-[#d6d6d6] bg-white`}>
 
-        <div className="flex h-[104px] items-center justify-center border-b border-[#d6d6d6] bg-[#ffa313]">
-          <img src="/images/admin-sidebar-logo.svg" alt="100 Black Men of Orange County" className="h-[92px] w-auto object-contain" />
+        <div className="flex h-[104px] shrink-0 px-6 items-center justify-center border-b border-[#d6d6d6] bg-[#ffa313]">
+          <img src="/images/admin-sidebar-logo.svg" alt="100 Black Men of Orange County" className="h-[64px] w-auto object-contain" />
         </div>
 
         <div ref={scrollRef} onScroll={saveScroll} className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">

@@ -60,24 +60,24 @@ export default function CreateNewPassword({
   }
 
   return (
-    <section className="h-dvh overflow-hidden bg-[#f4f4f4] px-4 py-3 font-sans text-[#242424] sm:px-6 sm:py-4 lg:px-8">
+    <section className="h-dvh overflow-y-auto bg-[#f4f4f4] px-4 py-3 font-sans text-[#242424] sm:px-6 sm:py-4 lg:px-8">
       <div className="mx-auto flex h-full w-full max-w-[520px] flex-col justify-center">
         <button
           type="button"
           onClick={handleBack}
-          className="mb-4 inline-flex w-fit items-center gap-2 text-[15px] font-medium text-[#666666] transition hover:text-[#242424]"
+          className="mb-4 inline-flex [@media(max-height:820px)]:mb-2 w-fit items-center gap-2 text-[15px] font-medium text-[#666666] transition hover:text-[#242424]"
         >
           <ArrowLeft className="h-4 w-4" />
           Back
         </button>
 
-        <div className="mb-3 flex h-[80px] w-full items-center justify-center rounded-[16px] bg-[#f9a514] px-8 shadow-sm sm:h-[96px]">
+        <div className="mb-3 flex h-[80px] w-full items-center justify-center rounded-[16px] bg-[#f9a514] px-8 shadow-sm sm:h-[96px] [@media(max-height:820px)]:h-[64px]">
           <div className="relative h-[58px] w-[174px]">
             <Image src={logoSrc} alt="100 Black Men of Orange County" fill priority className="object-contain" />
           </div>
         </div>
 
-        <div className="mb-4 text-center">
+        <div className="mb-4 text-center [@media(max-height:820px)]:mb-3">
           <h1 className="text-[24px] font-semibold leading-tight text-[#242424] sm:text-[28px]">Create New Password</h1>
           <p className="mx-auto mt-2 max-w-[360px] text-[14px] leading-5 text-[#666666] sm:text-[15px]">
             Your new password must be different from previously used passwords
@@ -117,9 +117,9 @@ export default function CreateNewPassword({
             </div>
           </div>
 
-          <div className="mt-4 rounded-[10px] bg-[#f1f1f1] px-4 py-3">
+          <div className="mt-4 rounded-[10px] bg-[#f1f1f1] px-4 py-3 [@media(max-height:820px)]:py-2">
             <p className="mb-2 text-[13px] font-medium text-[#666666]">Password must contain:</p>
-            <ul className="space-y-1.5 text-[13px] text-[#666666]">
+            <ul className="space-y-1.5 [@media(max-height:820px)]:space-y-1 text-[13px] text-[#666666]">
               {requirements.map((requirement) => (
                 <li key={requirement.id} className="flex items-center gap-3">
                   <span className={`h-1.5 w-1.5 rounded-full ${requirement.test(password) ? 'bg-[#10b981]' : 'bg-[#d9d9d9]'}`} />

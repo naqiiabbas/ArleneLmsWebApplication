@@ -75,7 +75,7 @@ const Navbar = ({ isSidebarOpen = false, onMenuClick }: NavbarProps) => {
 
   return (
     <>
-    <header className="fixed left-0 right-0 top-0 z-[100] bg-[#F4A11D] px-4 md:px-8 h-[104px] flex items-center justify-between text-white border-b border-white/10 lg:static">
+    <header className="shrink-0 fixed left-0 right-0 top-0 z-[100] bg-[#F4A11D] px-4 md:px-8 h-[104px] flex items-center justify-between text-white border-b border-white/10 lg:static">
       
       {/* Left: Search Bar - Flexible width with max limit to prevent crowding */}
       <div className="flex min-w-0 flex-1 items-center gap-3">
