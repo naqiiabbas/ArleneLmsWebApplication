@@ -9,6 +9,7 @@ import {
   markConversationRead,
   createDirectConversation,
 } from "@/lib/data/messaging";
+import { notifyMessagesChanged } from "@/components/HeaderProfile";
 import type { UIConversation, UIMessage } from "@/lib/data/messaging.types";
 
 const Modal = ({ isOpen, onClose, title, children }: { isOpen: boolean; onClose: () => void; title: string; children: React.ReactNode }) => {
@@ -105,10 +106,22 @@ export default function MessagesSection() {
       return;
     }
     loadMessages(activeId);
-    markConversationRead(activeId).then(() =>
-      setConversations((prev) => prev.map((c) => (c.id === activeId ? { ...c, unreadCount: 0 } : c)))
-    );
+    markConversationRead(activeId).then(() => {
+      setConversations((prev) => prev.map((c) => (c.id === activeId ? { ...c, unreadCount: 0 } : c)));
+      notifyMessagesChanged(); // sidebar "Messages" badge drops right away
+    });
   }, [activeId]);
+
+  // A message that arrives while this chat is OPEN is read already — mark it,
+  // or the sidebar badge / inbox would count something the user is looking at.
+  const activeUnread = conversations.find((c) => c.id === activeId)?.unreadCount ?? 0;
+  useEffect(() => {
+    if (!activeId || !activeUnread) return;
+    markConversationRead(activeId).then(() => {
+      setConversations((prev) => prev.map((c) => (c.id === activeId ? { ...c, unreadCount: 0 } : c)));
+      notifyMessagesChanged();
+    });
+  }, [activeId, activeUnread]);
 
   useEffect(() => {
     const timer = setInterval(() => {

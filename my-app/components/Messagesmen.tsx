@@ -17,6 +17,7 @@ import {
   markConversationRead,
   createDirectConversation,
 } from "@/lib/data/messaging";
+import { notifyMessagesChanged } from "@/components/HeaderProfile";
 import { useChatDeepLink } from "@/components/useChatDeepLink";
 import { getAssignedStudentOptions } from "@/lib/data/mentor";
 import type { UIConversation, UIMessage } from "@/lib/data/messaging.types";
@@ -157,10 +158,22 @@ export default function MessagesSection() {
       return;
     }
     loadMessages(activeChatId);
-    markConversationRead(activeChatId).then(() =>
-      setConversations((prev) => prev.map((c) => (c.id === activeChatId ? { ...c, unreadCount: 0 } : c)))
-    );
+    markConversationRead(activeChatId).then(() => {
+      setConversations((prev) => prev.map((c) => (c.id === activeChatId ? { ...c, unreadCount: 0 } : c)));
+      notifyMessagesChanged(); // sidebar "Messages" badge drops right away
+    });
   }, [activeChatId]);
+
+  // A message that arrives while this chat is OPEN is read already — mark it,
+  // or the sidebar badge / inbox would count something the user is looking at.
+  const activeUnread = conversations.find((c) => c.id === activeChatId)?.unreadCount ?? 0;
+  useEffect(() => {
+    if (!activeChatId || !activeUnread) return;
+    markConversationRead(activeChatId).then(() => {
+      setConversations((prev) => prev.map((c) => (c.id === activeChatId ? { ...c, unreadCount: 0 } : c)));
+      notifyMessagesChanged();
+    });
+  }, [activeChatId, activeUnread]);
 
   // Light polling for near-real-time updates.
   useEffect(() => {

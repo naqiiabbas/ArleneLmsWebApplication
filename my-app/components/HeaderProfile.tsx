@@ -18,35 +18,82 @@ export const notifyProfileChanged = () => {
   if (typeof window !== "undefined") window.dispatchEvent(new Event(PROFILE_CHANGED));
 };
 
-const REFRESH_MS = 60_000;
+/** Fire after a conversation is read or a message is sent so the Messages badge updates at once. */
+export const MESSAGES_CHANGED = "lms:messages-changed";
+export const notifyMessagesChanged = () => {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(MESSAGES_CHANGED));
+};
+
+// Short enough that a new message shows up on the sidebar badge within seconds.
+const REFRESH_MS = 20_000;
+
+// One shared poll per tab: the header and the sidebar both read this, so the
+// badge never costs a second round of requests.
+let shared: HeaderInfo | null = null;
+const subscribers = new Set<(i: HeaderInfo | null) => void>();
+let timer: ReturnType<typeof setInterval> | null = null;
+let inFlight = false;
+
+const load = () => {
+  if (inFlight) return;
+  inFlight = true;
+  getHeaderInfo()
+    .then((i) => {
+      shared = i;
+      subscribers.forEach((fn) => fn(i));
+    })
+    .catch(() => {
+      /* keep the last known value; the header must never break the page */
+    })
+    .finally(() => {
+      inFlight = false;
+    });
+};
+
+const EVENTS = ["focus", NOTIFICATIONS_CHANGED, PROFILE_CHANGED, MESSAGES_CHANGED] as const;
 
 export function useHeaderInfo(): HeaderInfo | null {
-  const [info, setInfo] = useState<HeaderInfo | null>(null);
+  const [info, setInfo] = useState<HeaderInfo | null>(shared);
 
   useEffect(() => {
-    let alive = true;
-    const load = () =>
-      getHeaderInfo()
-        .then((i) => alive && setInfo(i))
-        .catch(() => {
-          /* keep the last known value; the header must never break the page */
-        });
-
-    load();
-    const timer = setInterval(load, REFRESH_MS);
-    window.addEventListener("focus", load);
-    window.addEventListener(NOTIFICATIONS_CHANGED, load);
-    window.addEventListener(PROFILE_CHANGED, load);
+    subscribers.add(setInfo);
+    if (subscribers.size === 1) {
+      // First subscriber on this page starts the poll + listeners.
+      load();
+      timer = setInterval(load, REFRESH_MS);
+      EVENTS.forEach((e) => window.addEventListener(e, load));
+    } else if (shared) {
+      setInfo(shared);
+    }
     return () => {
-      alive = false;
-      clearInterval(timer);
-      window.removeEventListener("focus", load);
-      window.removeEventListener(NOTIFICATIONS_CHANGED, load);
-      window.removeEventListener(PROFILE_CHANGED, load);
+      subscribers.delete(setInfo);
+      if (subscribers.size === 0) {
+        if (timer) clearInterval(timer);
+        timer = null;
+        EVENTS.forEach((e) => window.removeEventListener(e, load));
+      }
     };
   }, []);
 
   return info;
+}
+
+/**
+ * Unread-message count next to "Messages" in a sidebar: 1, 2 … 99+. Hidden at
+ * zero; it updates with the shared poll and as soon as a chat is read.
+ */
+export function UnreadMessagesBadge({ className = "" }: { className?: string }) {
+  const info = useHeaderInfo();
+  const n = info?.unreadMessages ?? 0;
+  if (!n) return null;
+  return (
+    <span
+      className={`ml-auto inline-flex h-[20px] min-w-[20px] shrink-0 items-center justify-center rounded-full bg-red-500 px-[6px] text-[11px] font-semibold leading-none text-white ${className}`}
+      aria-label={`${n} unread message${n === 1 ? "" : "s"}`}
+    >
+      {n > 99 ? "99+" : n}
+    </span>
+  );
 }
 
 const initials = (name: string) =>

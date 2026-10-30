@@ -19,13 +19,14 @@ export async function getHeaderInfo(): Promise<HeaderInfo | null> {
   if (!user) return null
 
   const admin = createAdminClient()
-  const [{ data: profile }, { count }] = await Promise.all([
+  const [{ data: profile }, { count }, unreadMessages] = await Promise.all([
     admin.from("profiles").select("full_name, email, avatar_url, role").eq("id", user.id).single(),
     admin
       .from("notifications")
       .select("id", { count: "exact", head: true })
       .eq("recipient_id", user.id)
       .eq("is_read", false),
+    countUnreadMessages(admin, user.id),
   ])
 
   const email = profile?.email ?? user.email ?? ""
@@ -36,7 +37,33 @@ export async function getHeaderInfo(): Promise<HeaderInfo | null> {
     role: profile?.role ?? "",
     avatarUrl: profile?.avatar_url ?? "",
     unreadNotifications: count ?? 0,
+    unreadMessages,
   }
+}
+
+/**
+ * Same rule as the inbox (listConversations): a message is unread when someone
+ * else sent it after this user's last_read_at for that conversation — so the
+ * sidebar badge and the conversation list always agree.
+ */
+async function countUnreadMessages(admin: ReturnType<typeof createAdminClient>, userId: string): Promise<number> {
+  const { data: parts } = await admin
+    .from("conversation_participants")
+    .select("conversation_id, last_read_at")
+    .eq("profile_id", userId)
+  if (!parts?.length) return 0
+  const lastRead = new Map(parts.map((p) => [p.conversation_id, p.last_read_at ? new Date(p.last_read_at).getTime() : 0]))
+  // Only fetch what could be unread: newer than the oldest read marker.
+  const since = Math.min(...[...lastRead.values()])
+  let q = admin
+    .from("messages")
+    .select("conversation_id, created_at")
+    .in("conversation_id", [...lastRead.keys()])
+    .neq("sender_id", userId)
+    .limit(1000)
+  if (since > 0) q = q.gt("created_at", new Date(since).toISOString())
+  const { data: msgs } = await q
+  return (msgs ?? []).filter((m) => new Date(m.created_at).getTime() > (lastRead.get(m.conversation_id) ?? 0)).length
 }
 
 /**

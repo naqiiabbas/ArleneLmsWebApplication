@@ -5,6 +5,8 @@ export type HeaderInfo = {
   role: string
   avatarUrl: string
   unreadNotifications: number
+  /** Messages from others newer than the user last read each conversation (sidebar badge). */
+  unreadMessages: number
 }
 
 /** In-app (bell) notification switches — stored in notification_preferences.type_overrides. */

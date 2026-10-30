@@ -6,6 +6,7 @@ import { signOut } from '@/lib/auth/actions';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { UnreadMessagesBadge } from "@/components/HeaderProfile";
 
 interface SidebarProps {
   sidebarItems?: {
@@ -73,6 +74,8 @@ const SidebarItem = ({ item }: { item: any }) => {
           {iconSrc ? <MaskIcon src={iconSrc} /> : null}
         </span>
         <span className="text-[16px] font-medium leading-none">{item.label}</span>
+        {/* Unread messages (1, 2 … 99+) — clears once the chats are read. */}
+        {/\/messages?$/.test(item.id) && <UnreadMessagesBadge />}
       </div>
     </Link>
   );

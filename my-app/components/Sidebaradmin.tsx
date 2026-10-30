@@ -6,6 +6,7 @@ import { signOut } from '@/lib/auth/actions';
 import { usePermissions } from '@/components/PermissionsProvider';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { UnreadMessagesBadge } from "@/components/HeaderProfile";
 
 type NavItem = {
   id: string;
@@ -92,6 +93,8 @@ const SidebarItem = ({ item }: { item: any }) => {
           <MaskIcon src={icons[item.icon]} />
         </span>
         <span className="min-w-0 break-words py-[2px] text-[16px] font-medium leading-[1.3]">{item.label}</span>
+        {/* Unread messages (1, 2 … 99+) — clears once the chats are read. */}
+        {/\/messages?$/.test(item.id) && <UnreadMessagesBadge />}
       </div>
     </Link>
   );

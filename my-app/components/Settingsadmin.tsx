@@ -9,6 +9,7 @@ import {
   saveProfile,
 } from "@/lib/data/settings";
 import { notifyProfileChanged } from "@/components/HeaderProfile";
+import { changeMyPassword } from "@/lib/data/me";
 import type {
   GeneralData,
   NotificationData,
@@ -320,15 +321,127 @@ function SecuritySettings({
       />
       <p className="-mt-2 text-[13px] text-[#777777]">Auto logout after inactivity</p>
       <Divider />
-      <button
-        type="button"
-        className="h-[43px] rounded-[8px] border border-[#f9a313] bg-white px-4 text-[16px] text-[#f9a313]"
-      >
-        Change Password
-      </button>
+      <ChangePasswordPanel />
       <Divider />
       <Actions isLoading={isLoading} />
     </SettingsPanel>
+  );
+}
+
+/**
+ * "Change Password" used to be a button with no handler. It now opens three
+ * fields and saves through changeMyPassword (verifies the current password
+ * first). Self-contained: it sits inside the page's settings <form>, so its own
+ * button is type="button" and Enter is intercepted — neither may trigger the
+ * form's general "Save Changes".
+ */
+function ChangePasswordPanel() {
+  const empty = { current: "", next: "", confirm: "" };
+  const [open, setOpen] = useState(false);
+  const [pw, setPw] = useState(empty);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  const close = () => {
+    setOpen(false);
+    setPw(empty);
+  };
+
+  const save = async () => {
+    if (saving) return;
+    if (!pw.current || !pw.next || !pw.confirm) return setMsg({ type: "error", text: "Fill in all three password fields." });
+    if (pw.next.length < 8) return setMsg({ type: "error", text: "The new password must be at least 8 characters." });
+    if (pw.next !== pw.confirm) return setMsg({ type: "error", text: "The new passwords don't match." });
+    if (pw.next === pw.current) return setMsg({ type: "error", text: "The new password must be different from the current one." });
+    setSaving(true);
+    setMsg(null);
+    let res: { error?: string };
+    try {
+      res = await changeMyPassword(pw.current, pw.next);
+    } catch (e) {
+      res = { error: (e as Error).message || "Something went wrong. Please try again." };
+    } finally {
+      setSaving(false);
+    }
+    if (res.error) return setMsg({ type: "error", text: res.error });
+    close();
+    setMsg({ type: "success", text: "Password changed. Use the new password the next time you sign in." });
+  };
+
+  const onKey = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      e.preventDefault(); // don't submit the surrounding settings form
+      save();
+    }
+  };
+
+  const input = (label: string, key: keyof typeof empty, autoComplete: string) => (
+    <label className="block">
+      <span className="mb-2 block text-[15px] leading-5 text-[#666666]">{label}</span>
+      <input
+        type="password"
+        autoComplete={autoComplete}
+        value={pw[key]}
+        onChange={(e) => setPw((v) => ({ ...v, [key]: e.target.value }))}
+        onKeyDown={onKey}
+        className="h-[48px] w-full rounded-[8px] border border-[#d8d8d8] bg-white px-4 text-[16px] text-[#444444] outline-none transition focus:border-[#f9a313]"
+      />
+    </label>
+  );
+
+  return (
+    <div>
+      {msg && (
+        <p
+          className={`mb-3 rounded-[8px] border px-3 py-2 text-[14px] font-medium ${
+            msg.type === "success" ? "border-green-200 bg-green-50 text-green-700" : "border-red-200 bg-red-50 text-red-700"
+          }`}
+        >
+          {msg.text}
+        </p>
+      )}
+      {!open ? (
+        <button
+          type="button"
+          onClick={() => {
+            setMsg(null);
+            setOpen(true);
+          }}
+          className="h-[43px] rounded-[8px] border border-[#f9a313] bg-white px-4 text-[16px] text-[#f9a313] transition hover:bg-[#fff7e8]"
+        >
+          Change Password
+        </button>
+      ) : (
+        <div className="space-y-4 rounded-[8px] border border-[#f1d6a6] bg-[#fffaf1] p-4">
+          <p className="text-[16px] font-medium text-[#333333]">Change Password</p>
+          {input("Current Password", "current", "current-password")}
+          {input("New Password", "next", "new-password")}
+          {input("Confirm New Password", "confirm", "new-password")}
+          <p className="text-[13px] text-[#777777]">At least 8 characters. You stay signed in on this device.</p>
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={save}
+              disabled={saving}
+              className="h-[43px] rounded-[8px] bg-[#f9a313] px-5 text-[16px] text-white transition hover:bg-[#f29a0b] disabled:opacity-60"
+            >
+              {saving ? "Saving..." : "Save Password"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMsg(null);
+                close();
+              }}
+              disabled={saving}
+              className="h-[43px] rounded-[8px] border border-[#d8d8d8] bg-white px-5 text-[16px] text-[#666666] transition hover:bg-[#f7f7f7] disabled:opacity-60"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
