@@ -386,11 +386,63 @@ function AmountStep({ form, setForm }: { form: any; setForm: React.Dispatch<Reac
     <>
       <h2 className="text-[22px] font-semibold leading-none text-[#1f2937]">Amount Duration</h2>
       <div className="mt-[24px] grid grid-cols-1 gap-[20px] md:grid-cols-2">
-        <Field label="Sponsorship Amount *" value={form.amount} onChange={(value) => setForm((f: any) => ({ ...f, amount: value }))} placeholder="$50,000" />
-        <Field label="Duration Months*" value={form.durationMonths} onChange={(value) => setForm((f: any) => ({ ...f, durationMonths: value }))} placeholder="Select Duration" />
-        <Field className="md:col-span-2" label="Start Date*" value={form.startDate} onChange={(value) => setForm((f: any) => ({ ...f, startDate: value }))} placeholder="MM/DD/YYYY" />
+        <AmountField value={form.amount} onChange={(value) => setForm((f: any) => ({ ...f, amount: value }))} />
+        <label className="block">
+          <span className="text-[14px] font-semibold leading-none text-[#1f2937]">Duration Months*</span>
+          <select value={form.durationMonths} onChange={(e) => setForm((f: any) => ({ ...f, durationMonths: e.target.value }))} className={`mt-[10px] h-[54px] w-full cursor-pointer rounded-[8px] border border-[#d9d9d9] bg-white px-[24px] text-[15px] font-normal outline-none ${form.durationMonths ? "text-[#1f2937]" : "text-[#9ca3af]"}`}>
+            <option value="" disabled>Select Duration</option>
+            {DURATION_OPTIONS.map((m) => (
+              <option key={m} value={String(m)} className="text-[#1f2937]">{m} months</option>
+            ))}
+          </select>
+        </label>
+        <label className="block md:col-span-2">
+          <span className="text-[14px] font-semibold leading-none text-[#1f2937]">Start Date*</span>
+          <input type="date" value={form.startDate} min={new Date().toISOString().slice(0, 10)} onChange={(e) => setForm((f: any) => ({ ...f, startDate: e.target.value }))} onClick={(e) => e.currentTarget.showPicker?.()} className={`mt-[10px] h-[54px] w-full cursor-pointer rounded-[8px] border border-[#d9d9d9] bg-white px-[24px] text-[15px] font-normal outline-none ${form.startDate ? "text-[#1f2937]" : "text-[#9ca3af]"}`} />
+        </label>
       </div>
     </>
+  );
+}
+
+const AMOUNT_PRESETS = [10000, 25000, 50000, 75000, 100000];
+const DURATION_OPTIONS = [3, 6, 9, 12, 18, 24];
+
+function AmountField({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const digits = value.replace(/[^0-9]/g, "");
+  const display = digits ? Number(digits).toLocaleString() : "";
+  return (
+    <div className="relative block">
+      <span className="text-[14px] font-semibold leading-none text-[#1f2937]">Sponsorship Amount *</span>
+      <div className="mt-[10px] flex h-[54px] w-full items-center rounded-[8px] border border-[#d9d9d9] bg-white px-[24px]">
+        <span className="text-[15px] text-[#1f2937]">$</span>
+        <input
+          inputMode="numeric"
+          value={display}
+          onChange={(e) => {
+            const d = e.target.value.replace(/[^0-9]/g, "");
+            onChange(d ? `$${Number(d).toLocaleString()}` : "");
+          }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          placeholder="50,000"
+          className="h-full w-full bg-transparent pl-[4px] text-[15px] font-normal text-[#1f2937] outline-none placeholder:text-[#9ca3af]"
+        />
+        <button type="button" aria-label="Show amount options" onMouseDown={(e) => { e.preventDefault(); setOpen((o) => !o); }} className="ml-[8px] text-[#9ca3af]">▾</button>
+      </div>
+      {open && (
+        <ul className="absolute z-20 mt-[4px] w-full overflow-hidden rounded-[8px] border border-[#d9d9d9] bg-white shadow-md">
+          {AMOUNT_PRESETS.map((p) => (
+            <li key={p}>
+              <button type="button" onMouseDown={(e) => { e.preventDefault(); onChange(`$${p.toLocaleString()}`); setOpen(false); }} className="w-full px-[24px] py-[10px] text-left text-[15px] text-[#1f2937] hover:bg-[#fff7e6]">
+                ${p.toLocaleString()}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
