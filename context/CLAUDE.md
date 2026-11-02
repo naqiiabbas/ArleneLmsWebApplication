@@ -705,7 +705,7 @@ name/role via embed, last message, relative time, **unread count** = messages af
 participation), `sendMessage(convId, text)` (inserts message + bumps `conversations.last_message_at`),
 `markConversationRead` (**marks read up to the latest message's DB timestamp — not the app clock —
 to avoid clock-skew leaving the last message "unread"**), `createDirectConversation(name)`
-(resolves the name to a real user, find-or-creates a `direct` conversation). **`components/Messagesadmin.tsx`**
+(resolves the name to a real user, find-or-creates a `direct` conversation; now only the mentor and student modals use it). **Contact picker (2026-11-03):** admin and sponsor "Contact Name" is `components/ContactPicker.tsx`, a search-as-you-type dropdown fed by `listContacts()` (admin/manager: all active users with email; sponsor: admin/manager/mentor only, no emails; others: none) and started by id via `openDirectConversationWith`. Admin's unused Role field was removed. **`components/Messagesadmin.tsx`**
 — mock removed + fake auto-reply gone; loads conversations/messages, send persists, "Add New Chat"
 resolves a real user by name, marks read on open, and **polls every 5s** for near-real-time updates.
 Attachments not wired (paperclip only sets a text placeholder). Presence (online/offline) not

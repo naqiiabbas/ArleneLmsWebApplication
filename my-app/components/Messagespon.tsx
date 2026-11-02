@@ -1,16 +1,17 @@
 "use client";
 
 import React, { useState, useMemo, useEffect, useRef, ChangeEvent, FormEvent } from "react";
-import { Search, Plus, Paperclip, Send, X, FileText, ChevronDown } from "lucide-react";
+import { Search, Plus, Paperclip, Send, X, FileText } from "lucide-react";
 import {
   listConversations,
   getMessages,
   sendMessage,
   markConversationRead,
-  createDirectConversation,
+  openDirectConversationWith,
 } from "@/lib/data/messaging";
 import { notifyMessagesChanged } from "@/components/HeaderProfile";
-import type { UIConversation, UIMessage } from "@/lib/data/messaging.types";
+import ContactPicker from "@/components/ContactPicker";
+import type { UIContact, UIConversation, UIMessage } from "@/lib/data/messaging.types";
 
 const Modal = ({ isOpen, onClose, title, children }: { isOpen: boolean; onClose: () => void; title: string; children: React.ReactNode }) => {
   if (!isOpen) return null;
@@ -70,7 +71,7 @@ export default function MessagesSection() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const [contactName, setContactName] = useState("");
+  const [contact, setContact] = useState<UIContact | null>(null);
   const [initialMsg, setInitialMsg] = useState("");
   const [starting, setStarting] = useState(false);
 
@@ -163,9 +164,9 @@ export default function MessagesSection() {
   };
 
   const handleStartConversation = async () => {
-    if (!contactName.trim() || !initialMsg.trim() || starting) return;
+    if (!contact || !initialMsg.trim() || starting) return;
     setStarting(true);
-    const conv = await createDirectConversation(contactName.trim());
+    const conv = await openDirectConversationWith(contact.id);
     if (conv.error || !conv.id) {
       setStarting(false);
       setNotice(conv.error ?? "Could not start the conversation.");
@@ -178,7 +179,7 @@ export default function MessagesSection() {
       return;
     }
     setIsModalOpen(false);
-    setContactName("");
+    setContact(null);
     setInitialMsg("");
     await loadConversations();
     setActiveId(conv.id);
@@ -204,7 +205,7 @@ export default function MessagesSection() {
           <div className="flex h-[68px] items-center justify-between border-b border-[#dddddd] px-[16px]">
             <h2 className="text-[18px] font-semibold leading-none text-[#2d3b4f]">Messages</h2>
             <button
-              onClick={() => { setContactName(""); setInitialMsg(""); setIsModalOpen(true); }}
+              onClick={() => { setContact(null); setInitialMsg(""); setIsModalOpen(true); }}
               className="flex h-[34px] w-[34px] items-center justify-center rounded-[10px] bg-[#ffa313] text-white transition-all hover:bg-[#f59a0d] active:scale-95"
               aria-label="Start new conversation"
             >
@@ -321,16 +322,15 @@ export default function MessagesSection() {
             <div>
               <label className="mb-[10px] block text-[14px] font-normal leading-none text-[#657183]">Contact Name <span className="text-[#ff4d4f]">*</span></label>
               <div className="relative">
-                <span className="pointer-events-none absolute left-[13px] top-1/2 -translate-y-1/2 text-[#657183]">
+                <span className="pointer-events-none absolute left-[13px] top-[21px] z-[1] -translate-y-1/2 text-[#657183]">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                 </span>
-                <input
-                  className="h-[43px] w-full rounded-[8px] border border-[#d6dce3] bg-white pl-[38px] pr-[13px] text-[16px] font-normal text-[#2d3b4f] outline-none focus:border-[#ffa313]"
-                  placeholder="e.g., Admin name"
-                  value={contactName}
-                  onChange={(e) => setContactName(e.target.value)}
+                <ContactPicker
+                  value={contact}
+                  onChange={setContact}
+                  optionClassName="text-[#2d3b4f]"
+                  inputClassName="h-[43px] w-full rounded-[8px] border border-[#d6dce3] bg-white pl-[38px] pr-[13px] text-[16px] font-normal text-[#2d3b4f] outline-none focus:border-[#ffa313]"
                 />
-                <ChevronDown className="pointer-events-none absolute right-[13px] top-1/2 -translate-y-1/2 text-transparent" size={20} />
               </div>
             </div>
 
@@ -348,7 +348,7 @@ export default function MessagesSection() {
             <button onClick={() => setIsModalOpen(false)} className="h-[40px] w-[94px] rounded-[8px] border border-[#d6dce3] bg-white text-[14px] font-semibold text-[#2d3b4f] transition hover:bg-[#f7f8fa]">Cancel</button>
             <button
               onClick={handleStartConversation}
-              disabled={!contactName.trim() || !initialMsg.trim() || starting}
+              disabled={!contact || !initialMsg.trim() || starting}
               className="flex h-[40px] w-[181px] items-center justify-center gap-[6px] rounded-[8px] bg-[#ffa313] text-[14px] font-semibold text-white transition hover:bg-[#f59a0d] disabled:opacity-50"
             >
               <Send size={17} strokeWidth={1.8} /> {starting ? "Starting…" : "Start Conversation"}

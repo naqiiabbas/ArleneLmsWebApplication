@@ -6,16 +6,15 @@ import {
   getMessages,
   sendMessage,
   markConversationRead,
-  createDirectConversation,
+  openDirectConversationWith,
 } from "@/lib/data/messaging";
 import { notifyMessagesChanged } from "@/components/HeaderProfile";
+import ContactPicker from "@/components/ContactPicker";
 import { useChatDeepLink } from "@/components/useChatDeepLink";
-import type { UIConversation, UIMessage } from "@/lib/data/messaging.types";
+import type { UIContact, UIConversation, UIMessage } from "@/lib/data/messaging.types";
 
 type Message = UIMessage;
 type Conversation = UIConversation;
-
-const ROLES = ["Student", "Mentor", "Admin"];
 
 export default function Messagesadmin() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -26,8 +25,7 @@ export default function Messagesadmin() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newMessage, setNewMessage] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
-  const [newContactName, setNewContactName] = useState("");
-  const [newContactRole, setNewContactRole] = useState("Student");
+  const [newContact, setNewContact] = useState<UIContact | null>(null);
   const [sending, setSending] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -132,16 +130,14 @@ export default function Messagesadmin() {
   };
 
   const handleCreateChat = async () => {
-    const name = newContactName.trim();
-    if (!name) return;
-    const res = await createDirectConversation(name);
+    if (!newContact) return;
+    const res = await openDirectConversationWith(newContact.id);
     if (res.error) {
       setNotice(res.error);
       return;
     }
     setIsModalOpen(false);
-    setNewContactName("");
-    setNewContactRole("Student");
+    setNewContact(null);
     await loadConversations();
     if (res.id) setActiveChatId(res.id);
   };
@@ -307,11 +303,12 @@ export default function Messagesadmin() {
 
       {isModalOpen && (
         <NewChatModal
-          contactName={newContactName}
-          role={newContactRole}
-          onContactNameChange={setNewContactName}
-          onRoleChange={setNewContactRole}
-          onCancel={() => setIsModalOpen(false)}
+          contact={newContact}
+          onContactChange={setNewContact}
+          onCancel={() => {
+            setIsModalOpen(false);
+            setNewContact(null);
+          }}
           onSubmit={handleCreateChat}
         />
       )}
@@ -320,17 +317,13 @@ export default function Messagesadmin() {
 }
 
 function NewChatModal({
-  contactName,
-  role,
-  onContactNameChange,
-  onRoleChange,
+  contact,
+  onContactChange,
   onCancel,
   onSubmit,
 }: {
-  contactName: string;
-  role: string;
-  onContactNameChange: (value: string) => void;
-  onRoleChange: (value: string) => void;
+  contact: UIContact | null;
+  onContactChange: (value: UIContact | null) => void;
   onCancel: () => void;
   onSubmit: () => void;
 }) {
@@ -350,33 +343,19 @@ function NewChatModal({
         </div>
 
         <label className="mb-[11px] block text-[15px] font-normal leading-none text-[#666666]">Contact Name *</label>
-        <input
-          value={contactName}
-          onChange={(event) => onContactNameChange(event.target.value)}
-          placeholder="Enter contact name"
-          className="mb-[19px] h-[42px] w-full rounded-[8px] border border-[#d6d6d6] bg-white px-[15px] text-[16px] font-normal text-[#111111] outline-none placeholder:text-[#777777]"
-        />
-
-        <label className="mb-[11px] block text-[15px] font-normal leading-none text-[#666666]">Role *</label>
-        <div className="relative mb-[28px]">
-          <select
-            value={role}
-            onChange={(event) => onRoleChange(event.target.value)}
-            className="h-[42px] w-full appearance-none rounded-[8px] border border-[#d6d6d6] bg-white px-[10px] pr-[44px] text-[16px] font-normal text-[#666666] outline-none"
-          >
-            {ROLES.map((item) => (
-              <option key={item} value={item}>
-                {item}
-              </option>
-            ))}
-          </select>
-          <span className="pointer-events-none absolute right-[15px] top-1/2 h-[14px] w-[14px] -translate-y-[65%] rotate-45 border-b-2 border-r-2 border-[#666666]" />
+        <div className="mb-[28px]">
+          <ContactPicker
+            value={contact}
+            onChange={onContactChange}
+            inputClassName="h-[42px] w-full rounded-[8px] border border-[#d6d6d6] bg-white px-[15px] text-[16px] font-normal text-[#111111] outline-none placeholder:text-[#777777] focus:border-[#ffa313]"
+          />
         </div>
 
         <div className="grid grid-cols-[1fr_95px] gap-[13px]">
           <button
             onClick={onSubmit}
-            className="h-[42px] rounded-[8px] bg-[#ffa313] text-[16px] font-normal text-white transition-colors hover:bg-[#ef970d]"
+            disabled={!contact}
+            className="h-[42px] rounded-[8px] bg-[#ffa313] text-[16px] font-normal text-white transition-colors hover:bg-[#ef970d] disabled:cursor-not-allowed disabled:opacity-50"
           >
             Start Chat
           </button>

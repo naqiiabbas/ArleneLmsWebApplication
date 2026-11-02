@@ -2,7 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
-import type { UIConversation, UIMessage } from "@/lib/data/messaging.types"
+import type { UIContact, UIConversation, UIMessage } from "@/lib/data/messaging.types"
 
 async function currentUserId(): Promise<string | null> {
   const supabase = await createClient()
@@ -287,6 +287,41 @@ export async function markConversationRead(conversationId: string): Promise<{ er
     .eq("profile_id", me)
   if (error) return { error: error.message }
   return {}
+}
+
+/**
+ * Who the current user can pick when starting a chat. The admin panel sees every
+ * active user. Sponsors see the program team only: student names are not theirs
+ * to browse. Other roles have their own recipient lists and get nothing here.
+ */
+export async function listContacts(): Promise<UIContact[]> {
+  const me = await currentUserId()
+  if (!me) return []
+  const admin = createAdminClient()
+
+  const { data: self } = await admin.from("profiles").select("role, status").eq("id", me).maybeSingle()
+  if (self?.status !== "active") return []
+  const isAdminPanel = self.role === "super_admin" || self.role === "admin" || self.role === "manager"
+  if (!isAdminPanel && self.role !== "sponsor") return []
+
+  let query = admin
+    .from("profiles")
+    .select("id, full_name, email, role")
+    .eq("status", "active")
+    .neq("id", me)
+    .order("full_name")
+  if (!isAdminPanel) query = query.in("role", ["super_admin", "admin", "manager", "mentor"])
+
+  const { data, error } = await query
+  if (error) throw new Error(error.message)
+  return (data ?? [])
+    .filter((p) => p.full_name?.trim())
+    .map((p) => ({
+      id: p.id,
+      name: p.full_name!.trim(),
+      role: formatRole(p.role),
+      ...(isAdminPanel && p.email ? { email: p.email } : {}),
+    }))
 }
 
 /** Find-or-create a direct conversation with the named user. */
