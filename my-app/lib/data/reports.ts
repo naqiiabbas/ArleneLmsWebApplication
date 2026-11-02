@@ -2,6 +2,7 @@
 
 import { createAdminClient } from "@/lib/supabase/admin"
 import { assertPermission } from "@/lib/auth/permissions"
+import { sweepEndedSessions } from "@/lib/data/attendance-core"
 import type { ReportData } from "@/lib/data/reports.types"
 
 const PIE_COLORS = ["#F9A618", "#b99b16", "#e3c77e", "#f2dfb6", "#f8edd2"]
@@ -40,6 +41,7 @@ function gradeBucket(gpa: number): string {
 export async function getReportData(): Promise<ReportData> {
   await assertPermission("reports.view")
   const admin = createAdminClient()
+  await sweepEndedSessions(admin)
 
   const [att, sessions, students, profiles, mentors] = await Promise.all([
     admin.from("attendance_records").select("status, attendance_date"),

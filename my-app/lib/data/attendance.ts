@@ -2,7 +2,9 @@
 
 import { createAdminClient } from "@/lib/supabase/admin"
 import { assertPermission } from "@/lib/auth/permissions"
+import { assertAdmin } from "@/lib/data/guards"
 import { logActivity } from "@/lib/data/audit"
+import { sweepEndedSessions } from "@/lib/data/attendance-core"
 import { addDaysYmd, addMonthsYmd, formatTimeInZone, mondayOfWeek, ymdInZone } from "@/lib/time"
 import type {
   AttendanceData,
@@ -27,6 +29,7 @@ function formatClock(iso: string | null): string {
 
 type Row = {
   id: string
+  student_id: string
   attendance_date: string | null
   marked_at: string | null
   status: string
@@ -43,10 +46,11 @@ type Row = {
 export async function getAttendanceData(): Promise<AttendanceData> {
   await assertPermission("attendance.view")
   const admin = createAdminClient()
+  await sweepEndedSessions(admin)
 
   // student_id → students → profiles (nested); class_id → classes.
   const cols =
-    "id, attendance_date, marked_at, status, device, location, latitude, longitude, photo_url, excuse, student:students ( student_code, profile:profiles ( full_name ) ), class:classes ( name, batch )"
+    "id, student_id, attendance_date, marked_at, status, device, location, latitude, longitude, photo_url, excuse, student:students ( student_code, profile:profiles ( full_name ) ), class:classes ( name, batch )"
   const today = ymdInZone()
 
   // Everything in the longest filter range (1 month), page by page, so the
@@ -83,6 +87,23 @@ export async function getAttendanceData(): Promise<AttendanceData> {
       (b.marked_at ?? "").localeCompare(a.marked_at ?? ""),
   )
 
+  // Student-submitted reasons, for the admin reviewing the absence. Reports carry
+  // a date rather than a session, so they match on student + date; newest wins.
+  const isAbsence = (r: Row) => r.status !== "present" && r.status !== "late"
+  const absenceDates = rows.filter(isAbsence).map((r) => r.attendance_date ?? "").filter(Boolean).sort()
+  const reasons = new Map<string, string>()
+  if (absenceDates.length) {
+    const { data: reports } = await admin
+      .from("absence_reports")
+      .select("student_id, absence_date, reason")
+      .gte("absence_date", absenceDates[0])
+      .order("created_at", { ascending: false })
+    for (const rep of reports ?? []) {
+      const key = `${rep.student_id}|${rep.absence_date}`
+      if (rep.reason && !reasons.has(key)) reasons.set(key, rep.reason)
+    }
+  }
+
   const records: UIAttendanceRecord[] = rows.map((r) => ({
     id: r.id,
     studentId: r.student?.student_code ?? "—",
@@ -95,6 +116,7 @@ export async function getAttendanceData(): Promise<AttendanceData> {
     device: r.device ?? "—",
     location: r.location ?? (r.latitude != null ? `${r.latitude}, ${r.longitude}` : "—"),
     excuse: (["excused", "unexcused"].includes(r.excuse) ? r.excuse : "none") as ExcuseState,
+    absenceReason: isAbsence(r) ? reasons.get(`${r.student_id}|${r.attendance_date}`) ?? null : null,
     hasPhoto: !!r.photo_url,
   }))
 
@@ -141,25 +163,65 @@ export async function getAttendanceData(): Promise<AttendanceData> {
   return { today, records, stats: { present, absent, late, rate }, weekly, monthly }
 }
 
-/** Super-Admin/Manager: set excuse status on an absence. */
+const EXCUSE_LABEL: Record<string, string> = { none: "Needs review", excused: "Excused", unexcused: "Unexcused" }
+
+/** Admin only: review an absence as excused or unexcused. Every change is audited. */
 export async function setAttendanceExcuse(
   id: string,
   excuse: "excused" | "unexcused",
 ): Promise<{ error?: string }> {
   let me
   try {
-    me = await assertPermission("attendance.manage")
+    me = await assertAdmin()
   } catch (e) {
     return { error: (e as Error).message }
   }
+  if (excuse !== "excused" && excuse !== "unexcused") return { error: "Invalid absence status." }
   const admin = createAdminClient()
+
+  const [{ data: rec }, { data: actor }] = await Promise.all([
+    admin
+      .from("attendance_records")
+      .select("student_id, attendance_date, status, excuse, student:students ( profile:profiles ( full_name ) )")
+      .eq("id", id)
+      .maybeSingle(),
+    admin.from("profiles").select("role").eq("id", me.userId).maybeSingle(),
+  ])
+  if (!rec) return { error: "Attendance record not found." }
+  if (rec.status === "present" || rec.status === "late") {
+    return { error: "This student attended, so there is no absence to review." }
+  }
+  if (rec.excuse === excuse) return {} // unchanged: nothing to log
+
+  const now = new Date().toISOString()
   const { error } = await admin
     .from("attendance_records")
-    .update({ excuse, excused_by: me.userId, excused_at: new Date().toISOString() })
+    .update({ excuse, excused_by: me.userId, excused_at: now })
     .eq("id", id)
   if (error) return { error: error.message }
+
+  // Settle the student's own report for that day, which clears it from the
+  // admin dashboard's "awaiting review" alert.
+  if (rec.attendance_date) {
+    await admin
+      .from("absence_reports")
+      .update({ status: excuse, reviewed_by: me.userId, reviewed_at: now })
+      .eq("student_id", rec.student_id)
+      .eq("absence_date", rec.attendance_date)
+      .neq("status", "rejected")
+  }
+
+  const name = (rec as unknown as { student: { profile: { full_name: string | null } | null } | null }).student?.profile?.full_name ?? "Student"
   await logActivity(
-    { actorId: me.userId, action: excuse === "excused" ? "Excused absence" : "Marked absence unexcused", targetType: "attendance", targetId: id },
+    {
+      actorId: me.userId,
+      actorRole: actor?.role ?? null,
+      action: excuse === "excused" ? "Excused absence" : "Marked absence unexcused",
+      targetType: "attendance",
+      targetId: id,
+      description: `${name}, ${rec.attendance_date ?? "no date"}: ${EXCUSE_LABEL[rec.excuse] ?? rec.excuse} → ${EXCUSE_LABEL[excuse]}`,
+      metadata: { studentId: rec.student_id, date: rec.attendance_date, from: rec.excuse, to: excuse },
+    },
     admin,
   )
   return {}

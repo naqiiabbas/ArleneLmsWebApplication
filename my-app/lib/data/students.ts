@@ -6,7 +6,7 @@ import { assertPermission } from "@/lib/auth/permissions"
 import { checkTargetRole } from "@/lib/data/guards"
 import { logActivity } from "@/lib/data/audit"
 import { ensureStudentRecord } from "@/lib/data/role-records"
-import { setStudentEnrollment } from "@/lib/data/attendance-core"
+import { setStudentEnrollment, sweepEndedSessions } from "@/lib/data/attendance-core"
 import type {
   ClassOption,
   MentorOption,
@@ -118,6 +118,7 @@ type ProfileRow = {
 export async function listStudents(): Promise<UIStudent[]> {
   await assertPermission("students.view")
   const admin = createAdminClient()
+  await sweepEndedSessions(admin)
 
   // Driven by profiles, not the students table. The ensure_role_row trigger
   // normally creates the students row, but listing from profiles means a

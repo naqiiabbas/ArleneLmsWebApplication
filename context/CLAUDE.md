@@ -139,7 +139,7 @@ Separate signed addendum. Classroom-mounted **iPad**, zero teacher involvement, 
   device (Classroom iPad), final picture (proof). Full audit trail on all records.
 - **Admin:** view daily + historical attendance, search by date/class/student, view photo
   proof, export **Excel / PDF / CSV**.
-- **Absence mgmt (Super Admin only):** absent-by-default; Super Admin sets **Excused /
+- **Absence mgmt (Admin only: `super_admin` or `admin`):** absent-by-default; Admin sets **Excused /
   Unexcused**; all changes logged in audit trail.
 
 > Note: the current frontend student check-in (`Attendancewrk.tsx`) uses **MediaPipe face
@@ -269,7 +269,22 @@ in `lib/data/me.ts` (guard `assertActiveUser()` — new in `guards.ts`). After a
   Admins still have no class screen; they enrol students via Student Management → Class.
 - **Absences:** completing a session (mentor calendar or admin dashboard) runs
   `recordAbsencesForSession` — enrolled **active** students with no record get `absent` (method
-  manual). Without it no-shows had no row and attendance % only counted days attended.
+  manual). Without it no-shows had no row and attendance % only counted days attended. Students
+  enrolled after the session's `end_at` are skipped; re-activating an enrollment resets `enrolled_at`.
+- **Absent by default:** `sweepEndedSessions` (`attendance-core.ts`) runs the same recording for every
+  scheduled/in-progress session past its `end_at`, then sets it `completed`, so it runs once and never
+  recreates a deleted record. No scheduler exists: it's called on read by `getAttendanceData`,
+  `getAdminDashboard`, `getReportData`, `listStudents`, `getMentorDashboard`, `getAssignedStudents`,
+  `getMentorAttendance`, `getStudentDashboard`, `getStudentAttendance`. Best-effort.
+- **Absence review (Attencon.tsx):** Absence column + "Needs review / Excused / Unexcused" filters + "N
+  need review" chip; the modal shows the student's `absence_reports` reason (matched on student + date).
+  `setAttendanceExcuse` is `assertAdmin` only (NOT `attendance.manage`; managers see it read-only),
+  refuses present/late records, skips unchanged values, and settles matching `absence_reports` (clearing
+  the dashboard alert). Excused absences still count against the attendance rate. A pending report
+  with no matching absence record (e.g. no session that day) can't be settled and stays in the alert.
+- **Audit (`activity_logs`):** "Marked absent automatically" (actor null = System), "Recorded absences",
+  "Excused absence" / "Marked absence unexcused" (old → new), "Changed attendance status" (mentor edit),
+  "Absence corrected by check-in" (kiosk). Mentor/kiosk corrections to present/late reset `excuse`.
   `student_attendance_summary` now uses `count(a.id)` (count(*) gave new students total=1 / 0%) and
   ignores `pending` rows.
 
@@ -786,7 +801,7 @@ failed login, documents, notes, resources, students, users, dashboard and the ro
 `student:students ( student_code, profile:profiles ( full_name ) )` + `class:classes ( name, batch )`
 (attendance→students→profiles; attendance→classes via class_id) and computes stats (this-week
 present/absent/late/rate), weekly Mon–Fri breakdown, and 4-week trend. `setAttendanceExcuse(id, excused|
-unexcused)` (gated `attendance.manage`) — the **Super-Admin absence excuse workflow** (sets
+unexcused)` (`assertAdmin` since 2026-11-02, see §5c) — the **Admin absence excuse workflow** (sets
 `excuse`/`excused_by`/`excused_at`). `getAttendancePhotoUrl(id)` — signed URL from the new **private
 `attendance` bucket** (ready for the iPad photo-proof flow). **`components/Attencon.tsx`** — mock
 removed; real records/stats/recharts, detail modal loads the photo via signed URL + adds

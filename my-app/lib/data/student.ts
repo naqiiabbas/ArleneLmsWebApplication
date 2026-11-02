@@ -6,6 +6,7 @@ import { assertStudent } from "@/lib/data/guards"
 import { listConversations } from "@/lib/data/messaging"
 import { createNotification } from "@/lib/data/notifications"
 import { logActivity, notifyAdmins } from "@/lib/data/audit"
+import { sweepEndedSessions } from "@/lib/data/attendance-core"
 import { formatTimeInZone, ymdInZone } from "@/lib/time"
 import type {
   AbsenceReportInput,
@@ -72,6 +73,7 @@ type SessionRow = {
 export async function getStudentDashboard(): Promise<StudentDashboard> {
   const { userId } = await assertStudent()
   const admin = createAdminClient()
+  await sweepEndedSessions(admin)
 
   const [{ data: prof }, { data: enrolls }, { data: summary }] = await Promise.all([
     admin.from("profiles").select("full_name").eq("id", userId).single(),
@@ -192,6 +194,7 @@ function timeRange(start: string | null, end: string | null): string {
 export async function getStudentAttendance(): Promise<StudentAttendance> {
   const { userId } = await assertStudent()
   const admin = createAdminClient()
+  await sweepEndedSessions(admin)
 
   const [{ data: summary }, { data: rows, error }] = await Promise.all([
     admin

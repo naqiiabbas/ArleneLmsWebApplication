@@ -6,6 +6,7 @@
 
 import { randomUUID } from "node:crypto"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { logActivity } from "@/lib/data/audit"
 import { APP_TIMEZONE, formatTimeInZone, ymdInZone } from "@/lib/time"
 
 type Admin = ReturnType<typeof createAdminClient>
@@ -220,14 +221,33 @@ export async function markKioskAttendance(
     photo_url: photoPath,
   }
 
+  // Replacing an "absent" placeholder: they came after all, so any review of the
+  // absence no longer applies.
   const { error } = existing
-    ? await admin.from("attendance_records").update(row).eq("student_id", student.id).eq("session_id", session.id)
+    ? await admin
+        .from("attendance_records")
+        .update({ ...row, excuse: "none" as const, excused_by: null, excused_at: null })
+        .eq("student_id", student.id)
+        .eq("session_id", session.id)
     : await admin.from("attendance_records").insert(row)
   if (error) {
     if (photoPath) await admin.storage.from(ATTENDANCE_BUCKET).remove([photoPath])
     // Two taps racing on the same code: the first insert won — report it.
     if (error.code === "23505") return { error: "You're already checked in for this session." }
     return { error: "Attendance couldn't be saved. Please try again." }
+  }
+
+  if (existing) {
+    await logActivity(
+      {
+        action: "Absence corrected by check-in",
+        targetType: "session",
+        targetId: session.id,
+        description: `${name}, ${row.attendance_date}: Absent → ${status === "late" ? "Late" : "Present"}`,
+        metadata: { studentId: student.id },
+      },
+      admin,
+    )
   }
 
   return { name, status, time: formatTimeInZone(row.marked_at, tz) }

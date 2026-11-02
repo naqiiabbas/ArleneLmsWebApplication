@@ -6,6 +6,7 @@
 // permission checks. Callers must authorize first.
 import "server-only"
 import type { createAdminClient } from "@/lib/supabase/admin"
+import { logActivity } from "@/lib/data/audit"
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
@@ -49,8 +50,9 @@ export async function setStudentEnrollment(
     .eq("class_id", classId)
     .limit(1)
     .maybeSingle()
+  // enrolled_at restarts so sessions missed while withdrawn don't count as absences.
   const { error } = past
-    ? await admin.from("enrollments").update({ status: "active" }).eq("id", past.id)
+    ? await admin.from("enrollments").update({ status: "active", enrolled_at: new Date().toISOString() }).eq("id", past.id)
     : await admin.from("enrollments").insert({ student_id: studentId, class_id: classId, status: "active" })
   return error ? { error: error.message } : {}
 }
@@ -60,6 +62,7 @@ export async function setStudentEnrollment(
  * in as ABSENT. Without this, no-shows have no attendance row at all, so
  * attendance percentages only ever counted the days a student DID attend.
  * Idempotent: students who already have a record for the session are skipped.
+ * markedBy is null when the sweep below did it rather than a person.
  */
 export async function recordAbsencesForSession(
   admin: AdminClient,
@@ -68,7 +71,7 @@ export async function recordAbsencesForSession(
 ): Promise<{ absent: number; error?: string }> {
   const { data: session } = await admin
     .from("class_sessions")
-    .select("id, class_id, session_date")
+    .select("id, class_id, session_date, title, end_at, class:classes ( name )")
     .eq("id", sessionId)
     .maybeSingle()
   if (!session) return { absent: 0, error: "Session not found." }
@@ -80,7 +83,9 @@ export async function recordAbsencesForSession(
       .from("enrollments")
       .select("student_id, student:students ( profile:profiles ( status ) )")
       .eq("class_id", session.class_id)
-      .eq("status", "active"),
+      .eq("status", "active")
+      // Someone who joined after the session ended can't have missed it.
+      .lte("enrolled_at", session.end_at),
     admin.from("attendance_records").select("student_id").eq("session_id", sessionId),
   ])
   const have = new Set((existing ?? []).map((r) => r.student_id))
@@ -94,7 +99,7 @@ export async function recordAbsencesForSession(
   if (!missing.length) return { absent: 0 }
 
   const now = new Date().toISOString()
-  const { error } = await admin.from("attendance_records").upsert(
+  const { data: inserted, error } = await admin.from("attendance_records").upsert(
     missing.map((student_id) => ({
       student_id,
       session_id: sessionId,
@@ -107,6 +112,54 @@ export async function recordAbsencesForSession(
     })),
     // A kiosk check-in racing this must win, never be overwritten by "absent".
     { onConflict: "student_id,session_id", ignoreDuplicates: true },
-  )
-  return error ? { absent: 0, error: error.message } : { absent: missing.length }
+  ).select("student_id") // only the rows really inserted, so a racing sweep can't log them twice
+  if (error) return { absent: 0, error: error.message }
+
+  const absent = inserted?.length ?? 0
+  if (absent) {
+    const name = session.title || (session as unknown as { class: { name: string | null } | null }).class?.name || "Session"
+    await logActivity(
+      {
+        actorId: markedBy,
+        action: markedBy ? "Recorded absences" : "Marked absent automatically",
+        targetType: "session",
+        targetId: sessionId,
+        description: `${name}, ${session.session_date}: ${absent} student${absent === 1 ? "" : "s"} marked absent`,
+        metadata: { studentIds: inserted?.map((r) => r.student_id) },
+      },
+      admin,
+    )
+  }
+  return { absent }
+}
+
+/**
+ * Close every session whose end time has passed: no-shows become ABSENT and the
+ * session becomes completed, so absent is the default without anyone having to
+ * press Complete. There's no scheduler, so the pages that show attendance call
+ * this before reading. Completing the session means it only ever runs once, and
+ * a record an admin later deletes isn't recreated. Best-effort: a failure must
+ * not break the page, and the next read retries.
+ */
+export async function sweepEndedSessions(admin: AdminClient): Promise<void> {
+  try {
+    const { data: ended } = await admin
+      .from("class_sessions")
+      .select("id")
+      .in("status", ["scheduled", "in_progress"])
+      .lt("end_at", new Date().toISOString())
+      .order("end_at")
+      .limit(200)
+    for (const s of ended ?? []) {
+      const { error } = await recordAbsencesForSession(admin, s.id, null)
+      if (error) continue // stays open so the next read tries again
+      await admin
+        .from("class_sessions")
+        .update({ status: "completed" })
+        .eq("id", s.id)
+        .in("status", ["scheduled", "in_progress"])
+    }
+  } catch {
+    /* best-effort */
+  }
 }

@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Camera, Download, Eye, MapPin, X } from "lucide-react";
 import { getAttendanceData, setAttendanceExcuse, getAttendancePhotoUrl } from "@/lib/data/attendance";
+import { usePermissions } from "@/components/PermissionsProvider";
 import { addDaysYmd, addMonthsYmd, ymdInZone } from "@/lib/time";
 
 const DATE_RANGES = [
@@ -14,7 +15,7 @@ const DATE_RANGES = [
   { id: "month", label: "Last 1 Month" },
 ] as const;
 type DateRange = (typeof DATE_RANGES)[number]["id"];
-import type { UIAttendanceRecord, AttendanceStatus, AttendanceData } from "@/lib/data/attendance.types";
+import type { UIAttendanceRecord, AttendanceStatus, AttendanceData, ExcuseState } from "@/lib/data/attendance.types";
 import {
   Bar,
   BarChart,
@@ -30,6 +31,20 @@ import {
 
 type AttendanceRecord = UIAttendanceRecord;
 
+const STATUS_FILTERS = [
+  { id: "All", label: "All Status" },
+  { id: "Present", label: "Present" },
+  { id: "Late", label: "Late" },
+  { id: "Absent", label: "Absent" },
+  { id: "needs_review", label: "Absent: Needs Review" },
+  { id: "excused", label: "Absent: Excused" },
+  { id: "unexcused", label: "Absent: Unexcused" },
+] as const;
+type StatusFilter = (typeof STATUS_FILTERS)[number]["id"];
+
+const EXCUSE_LABEL: Record<ExcuseState, string> = { none: "Needs review", excused: "Excused", unexcused: "Unexcused" };
+const excuseLabel = (r: AttendanceRecord) => (r.status === "Absent" ? EXCUSE_LABEL[r.excuse] : "");
+
 const statusBadgeClass: Record<AttendanceStatus, string> = {
   Present: "bg-[#d9f8e6] text-[#009a3d]",
   Late: "bg-[#ffe9d6] text-[#c65300]",
@@ -39,6 +54,18 @@ const statusBadgeClass: Record<AttendanceStatus, string> = {
 const StatusBadge = ({ status }: { status: AttendanceStatus }) => (
   <span className={`inline-flex h-[25px] items-center rounded-full px-[13px] text-[13px] font-normal leading-none ${statusBadgeClass[status]}`}>
     {status}
+  </span>
+);
+
+const excuseBadgeClass: Record<ExcuseState, string> = {
+  none: "bg-[#fff7e8] text-[#b97700]",
+  excused: "bg-[#dbeafe] text-[#0057ff]",
+  unexcused: "bg-[#f1f1f1] text-[#666666]",
+};
+
+const ExcuseBadge = ({ excuse }: { excuse: ExcuseState }) => (
+  <span className={`inline-flex h-[25px] items-center whitespace-nowrap rounded-full px-[13px] text-[13px] font-normal leading-none ${excuseBadgeClass[excuse]}`}>
+    {EXCUSE_LABEL[excuse]}
   </span>
 );
 
@@ -68,10 +95,12 @@ const EMPTY_ATTENDANCE: AttendanceData = {
 };
 
 export default function Attencon() {
+  const { isAdminTier } = usePermissions();
   const [data, setData] = useState<AttendanceData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<AttendanceStatus | "All">("All");
+  const [notice, setNotice] = useState<{ text: string; error?: boolean } | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("All");
   const [dateRange, setDateRange] = useState<DateRange>("all");
   const [selected, setSelected] = useState<AttendanceRecord | null>(null);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
@@ -91,7 +120,7 @@ export default function Attencon() {
     try {
       setData(await getAttendanceData());
     } catch (e) {
-      setNotice((e as Error).message);
+      setNotice({ text: (e as Error).message, error: true });
     } finally {
       setLoading(false);
     }
@@ -111,14 +140,16 @@ export default function Attencon() {
   }, [selected]);
 
   const handleExcuse = async (excuse: "excused" | "unexcused") => {
-    if (!selected) return;
+    if (!selected || saving) return;
+    setSaving(true);
     const res = await setAttendanceExcuse(selected.id, excuse);
+    setSaving(false);
     if (res.error) {
-      setNotice(res.error);
+      setNotice({ text: res.error, error: true });
       return;
     }
     setSelected((prev) => (prev ? { ...prev, excuse } : prev));
-    setNotice(`Marked ${excuse}.`);
+    setNotice({ text: `${selected.studentName}'s absence on ${selected.date} marked ${excuse}.` });
     await refresh();
   };
 
@@ -128,8 +159,19 @@ export default function Attencon() {
   );
 
   const filteredRecords = useMemo(
-    () => recordsInRange.filter((r) => statusFilter === "All" || r.status === statusFilter),
+    () =>
+      recordsInRange.filter((r) => {
+        if (statusFilter === "All") return true;
+        if (statusFilter === "needs_review") return r.status === "Absent" && r.excuse === "none";
+        if (statusFilter === "excused" || statusFilter === "unexcused") return r.status === "Absent" && r.excuse === statusFilter;
+        return r.status === statusFilter;
+      }),
     [recordsInRange, statusFilter]
+  );
+  const statusFilterLabel = STATUS_FILTERS.find((f) => f.id === statusFilter)?.label ?? "All Status";
+  const needsReview = useMemo(
+    () => recordsInRange.filter((r) => r.status === "Absent" && r.excuse === "none").length,
+    [recordsInRange]
   );
 
   // The cards follow the selected range; "All Dates" keeps the 7-day summary.
@@ -153,11 +195,11 @@ export default function Attencon() {
     doc.text("Attendance Report", 14, 15);
     doc.setFontSize(10);
     doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 22);
-    doc.text(`Filters: Status = ${statusFilter}, Date = ${rangeLabel}`, 14, 28);
+    doc.text(`Filters: Status = ${statusFilterLabel}, Date = ${rangeLabel}`, 14, 28);
 
     autoTable(doc, {
-      head: [["Student ID", "Student Name", "Class", "Time", "Status", "Date", "Batch"]],
-      body: filteredRecords.map((r) => [r.studentId, r.studentName, r.className, r.time, r.status, r.date, r.batch]),
+      head: [["Student ID", "Student Name", "Class", "Time", "Status", "Absence", "Date", "Batch"]],
+      body: filteredRecords.map((r) => [r.studentId, r.studentName, r.className, r.time, r.status, excuseLabel(r), r.date, r.batch]),
       startY: 34,
       styles: { fontSize: 9, cellPadding: 2 },
       headStyles: { fillColor: [249, 166, 24] },
@@ -169,9 +211,9 @@ export default function Attencon() {
   const downloadCsv = () => {
     if (typeof window === "undefined") return;
     const esc = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-    const header = "Student ID,Student Name,Class,Time,Status,Date,Batch\n";
+    const header = "Student ID,Student Name,Class,Time,Status,Absence,Date,Batch\n";
     const rows = filteredRecords
-      .map((r) => [r.studentId, r.studentName, r.className, r.time, r.status, r.date, r.batch].map(esc).join(","))
+      .map((r) => [r.studentId, r.studentName, r.className, r.time, r.status, excuseLabel(r), r.date, r.batch].map(esc).join(","))
       .join("\n");
     const blob = new Blob([header + rows], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
@@ -227,8 +269,8 @@ export default function Attencon() {
       </div>
 
       {notice && (
-        <div className="mb-[24px] flex items-start justify-between gap-4 rounded-[8px] border border-green-200 bg-green-50 px-4 py-3 text-[14px] font-semibold text-green-700">
-          <span className="break-all">{notice}</span>
+        <div className={`mb-[24px] flex items-start justify-between gap-4 rounded-[8px] border px-4 py-3 text-[14px] font-semibold ${notice.error ? "border-red-200 bg-red-50 text-red-700" : "border-green-200 bg-green-50 text-green-700"}`}>
+          <span className="break-words">{notice.text}</span>
           <button type="button" onClick={() => setNotice(null)} className="shrink-0 text-[13px] underline">
             Dismiss
           </button>
@@ -285,23 +327,34 @@ export default function Attencon() {
 
       <section className="overflow-hidden rounded-[8px] border border-[#d6d6d6] bg-white">
         <div className="flex h-[71px] items-center justify-between border-b border-[#e5e5e5] px-[24px]">
-          <h2 className="text-[18px] font-normal leading-none text-[#111111]">Recent Attendance Records</h2>
-          <div className="relative h-[40px] w-[135px]">
+          <div className="flex items-center gap-[12px]">
+            <h2 className="text-[18px] font-normal leading-none text-[#111111]">Recent Attendance Records</h2>
+            {needsReview > 0 && (
+              <button
+                type="button"
+                onClick={() => setStatusFilter("needs_review")}
+                className="inline-flex h-[28px] items-center whitespace-nowrap rounded-full bg-[#fff7e8] px-[13px] text-[13px] font-medium leading-none text-[#b97700] transition-colors hover:bg-[#ffedcc]"
+              >
+                {needsReview} need{needsReview === 1 ? "s" : ""} review
+              </button>
+            )}
+          </div>
+          <div className="relative h-[40px] w-[205px]">
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as AttendanceStatus | "All")}
+              onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+              aria-label="Filter by status"
               className="h-full w-full appearance-none rounded-[8px] border border-[#d6d6d6] bg-white px-[13px] pr-[34px] text-[15px] font-normal text-[#666666] outline-none"
             >
-              <option value="All">All Status</option>
-              <option value="Present">Present</option>
-              <option value="Late">Late</option>
-              <option value="Absent">Absent</option>
+              {STATUS_FILTERS.map((f) => (
+                <option key={f.id} value={f.id}>{f.label}</option>
+              ))}
             </select>
           </div>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="min-w-[900px] w-full text-left">
+          <table className="min-w-[1020px] w-full text-left">
             <thead className="bg-[#f2f2f2] text-[16px] font-normal leading-none text-[#666666]">
               <tr>
                 <th className="px-[24px] py-[18px] font-normal">Student ID</th>
@@ -309,15 +362,16 @@ export default function Attencon() {
                 <th className="px-[24px] py-[18px] font-normal">Class</th>
                 <th className="px-[24px] py-[18px] font-normal">Time</th>
                 <th className="px-[24px] py-[18px] font-normal">Status</th>
+                <th className="px-[24px] py-[18px] font-normal">Absence</th>
                 <th className="px-[24px] py-[18px] font-normal">Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading && (
-                <tr><td colSpan={6} className="px-[24px] py-[40px] text-center text-[#777777]">Loading attendance...</td></tr>
+                <tr><td colSpan={7} className="px-[24px] py-[40px] text-center text-[#777777]">Loading attendance...</td></tr>
               )}
               {!loading && filteredRecords.length === 0 && (
-                <tr><td colSpan={6} className="px-[24px] py-[40px] text-center text-[#777777]">No attendance records found.</td></tr>
+                <tr><td colSpan={7} className="px-[24px] py-[40px] text-center text-[#777777]">No attendance records found.</td></tr>
               )}
               {!loading && filteredRecords.map((r) => (
                 <tr key={r.id} className="border-b border-[#e5e5e5] text-[16px] font-normal leading-none text-[#666666] last:border-b-0">
@@ -326,6 +380,7 @@ export default function Attencon() {
                   <td className="px-[24px] py-[20px]">{r.className}</td>
                   <td className="px-[24px] py-[20px]">{r.time}</td>
                   <td className="px-[24px] py-[20px]"><StatusBadge status={r.status} /></td>
+                  <td className="px-[24px] py-[20px]">{r.status === "Absent" ? <ExcuseBadge excuse={r.excuse} /> : "-"}</td>
                   <td className="px-[24px] py-[20px]">
                     <button
                       onClick={() => setSelected(r)}
@@ -348,6 +403,8 @@ export default function Attencon() {
         <AttendanceDetailModal
           record={selected}
           photoUrl={photoUrl}
+          canReview={isAdminTier}
+          saving={saving}
           onExcuse={handleExcuse}
           onClose={() => setSelected(null)}
         />
@@ -359,11 +416,15 @@ export default function Attencon() {
 function AttendanceDetailModal({
   record,
   photoUrl,
+  canReview,
+  saving,
   onExcuse,
   onClose,
 }: {
   record: AttendanceRecord;
   photoUrl: string | null;
+  canReview: boolean;
+  saving: boolean;
   onExcuse: (excuse: "excused" | "unexcused") => void;
   onClose: () => void;
 }) {
@@ -403,34 +464,36 @@ function AttendanceDetailModal({
           <h3 className="mt-[25px] text-[16px] font-normal leading-none text-[#666666]">Attendance Status</h3>
           <div className="mt-[18px] flex items-center gap-[10px]">
             <StatusBadge status={record.status} />
-            {record.excuse !== "none" && (
-              <span
-                className={`inline-flex h-[25px] items-center rounded-full px-[13px] text-[13px] font-normal leading-none ${
-                  record.excuse === "excused" ? "bg-[#dbeafe] text-[#0057ff]" : "bg-[#f1f1f1] text-[#666666]"
-                }`}
-              >
-                {record.excuse === "excused" ? "Excused" : "Unexcused"}
-              </span>
-            )}
+            {record.status === "Absent" && <ExcuseBadge excuse={record.excuse} />}
           </div>
 
           {record.status === "Absent" && (
             <div className="mt-[18px] rounded-[8px] border border-[#d6d6d6] bg-[#fafafa] px-[16px] py-[16px]">
-              <p className="text-[14px] font-normal leading-none text-[#666666]">Absence Management (Super Admin)</p>
-              <div className="mt-[14px] flex gap-[12px]">
-                <button
-                  onClick={() => onExcuse("excused")}
-                  className="h-[38px] rounded-[8px] bg-[#0057ff] px-[18px] text-[15px] font-medium text-white hover:bg-[#0048d1]"
-                >
-                  Mark Excused
-                </button>
-                <button
-                  onClick={() => onExcuse("unexcused")}
-                  className="h-[38px] rounded-[8px] border border-[#d6d6d6] bg-white px-[18px] text-[15px] font-medium text-[#666666] hover:bg-[#f2f2f2]"
-                >
-                  Mark Unexcused
-                </button>
-              </div>
+              <p className="text-[14px] font-normal leading-none text-[#666666]">Absence Management (Admin)</p>
+              <p className="mt-[12px] text-[14px] font-normal leading-[20px] text-[#111111]">
+                <span className="text-[#777777]">Student&apos;s reason: </span>
+                {record.absenceReason ?? "No absence report submitted."}
+              </p>
+              {canReview ? (
+                <div className="mt-[14px] flex flex-wrap gap-[12px]">
+                  <button
+                    onClick={() => onExcuse("excused")}
+                    disabled={saving || record.excuse === "excused"}
+                    className="h-[38px] rounded-[8px] bg-[#0057ff] px-[18px] text-[15px] font-medium text-white hover:bg-[#0048d1] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {record.excuse === "excused" ? "Excused" : "Mark Excused"}
+                  </button>
+                  <button
+                    onClick={() => onExcuse("unexcused")}
+                    disabled={saving || record.excuse === "unexcused"}
+                    className="h-[38px] rounded-[8px] border border-[#d6d6d6] bg-white px-[18px] text-[15px] font-medium text-[#666666] hover:bg-[#f2f2f2] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {record.excuse === "unexcused" ? "Unexcused" : "Mark Unexcused"}
+                  </button>
+                </div>
+              ) : (
+                <p className="mt-[12px] text-[13px] font-normal leading-none text-[#777777]">Only an admin can change this.</p>
+              )}
             </div>
           )}
 

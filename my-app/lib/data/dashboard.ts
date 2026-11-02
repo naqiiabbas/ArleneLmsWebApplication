@@ -6,7 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { assertPermission, getMyPermissions } from "@/lib/auth/permissions"
 import { checkTargetRole } from "@/lib/data/guards"
 import { logActivity } from "@/lib/data/audit"
-import { recordAbsencesForSession } from "@/lib/data/attendance-core"
+import { recordAbsencesForSession, sweepEndedSessions } from "@/lib/data/attendance-core"
 import {
   APP_TIMEZONE,
   addDaysYmd,
@@ -50,6 +50,7 @@ const toPerson = (p: PersonRow) => ({
 export async function getAdminDashboard(): Promise<AdminDashboard> {
   await assertPermission("dashboard.view")
   const admin = createAdminClient()
+  await sweepEndedSessions(admin)
 
   const today = ymdInZone()
   const monday = mondayOfWeek(today)

@@ -14,6 +14,8 @@ export type UIAttendanceRecord = {
   device: string
   location: string
   excuse: ExcuseState
+  /** What the student wrote when reporting this absence, if they did. */
+  absenceReason: string | null
   hasPhoto: boolean
 }
 

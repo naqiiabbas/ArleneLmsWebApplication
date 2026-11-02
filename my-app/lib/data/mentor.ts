@@ -5,7 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { assertMentor } from "@/lib/data/guards"
 import { logActivity, notifyAdmins } from "@/lib/data/audit"
 import { avatarFileError, removeAvatarObject, storeAvatar } from "@/lib/data/avatar"
-import { recordAbsencesForSession } from "@/lib/data/attendance-core"
+import { recordAbsencesForSession, sweepEndedSessions } from "@/lib/data/attendance-core"
 import {
   APP_TIMEZONE,
   addDaysYmd,
@@ -147,6 +147,7 @@ type StudentRow = {
 export async function getAssignedStudents(): Promise<MentorStudent[]> {
   const { userId } = await assertMentor()
   const admin = createAdminClient()
+  await sweepEndedSessions(admin)
 
   const { data: assigns } = await admin
     .from("mentor_student_assignments")
@@ -255,6 +256,7 @@ export async function getStudentDetail(studentId: string): Promise<MentorStudent
 export async function getMentorDashboard(): Promise<MentorDashboard> {
   const { userId } = await assertMentor()
   const admin = createAdminClient()
+  await sweepEndedSessions(admin)
 
   const [{ data: prof }, { data: assigns }] = await Promise.all([
     admin.from("profiles").select("full_name").eq("id", userId).single(),
@@ -380,6 +382,7 @@ export async function getMentorDashboard(): Promise<MentorDashboard> {
 export async function getMentorAttendance(): Promise<MentorAttendanceRow[]> {
   const { userId } = await assertMentor()
   const admin = createAdminClient()
+  await sweepEndedSessions(admin)
 
   const { data: assigns } = await admin
     .from("mentor_student_assignments")
@@ -452,7 +455,7 @@ export async function updateMentorAttendance(
   // this mentor's own sessions (the same scope as getMentorAttendance).
   const { data: rec } = await admin
     .from("attendance_records")
-    .select("student_id, status, session:class_sessions ( mentor_id )")
+    .select("student_id, status, attendance_date, session:class_sessions ( mentor_id ), student:students ( profile:profiles ( full_name ) )")
     .eq("id", id)
     .maybeSingle()
   if (!rec) return { error: "Attendance record not found." }
@@ -473,15 +476,33 @@ export async function updateMentorAttendance(
   // used to overwrite the kiosk's check-in time and "selfie" method.
   const dbStatus = UI_TO_DB_STATUS[status]
   const statusChanged = rec.status !== dbStatus
+  const attended = dbStatus === "present" || dbStatus === "late"
   const { error } = await admin
     .from("attendance_records")
     .update({
       status: dbStatus,
       notes: notes.trim() || null,
       ...(statusChanged && { method: "manual" as const, marked_by: userId, marked_at: new Date().toISOString() }),
+      // No longer an absence, so an admin's excused/unexcused review doesn't apply.
+      ...(attended && { excuse: "none" as const, excused_by: null, excused_at: null }),
     })
     .eq("id", id)
   if (error) return { error: error.message }
+  if (statusChanged) {
+    const name = (rec as unknown as { student: { profile: { full_name: string | null } | null } | null }).student?.profile?.full_name ?? "Student"
+    await logActivity(
+      {
+        actorId: userId,
+        actorRole: "mentor",
+        action: "Changed attendance status",
+        targetType: "attendance",
+        targetId: id,
+        description: `${name}, ${rec.attendance_date ?? "no date"}: ${rec.status.replace("_", " ")} → ${dbStatus.replace("_", " ")}`,
+        metadata: { studentId: rec.student_id, from: rec.status, to: dbStatus },
+      },
+      admin,
+    )
+  }
   return {}
 }
 
