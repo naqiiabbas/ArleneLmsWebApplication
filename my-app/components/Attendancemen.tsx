@@ -1,4 +1,5 @@
 "use client";
+import { PersonAvatar } from "@/components/PersonAvatar";
 
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import {
@@ -210,7 +211,7 @@ export default function AttendanceManagement() {
                 <td className="px-[70px] py-[16px] text-[16px] font-normal leading-none text-[#111111]">{row.date}</td>
                 <td className="px-[20px] py-[16px]">
                   <div className="flex items-center gap-[13px]">
-                    <img src={row.avatar} alt="" className="h-[32px] w-[32px] rounded-full object-cover" />
+                    <PersonAvatar src={row.avatar} name={row.name} className="h-[32px] w-[32px] rounded-full" textClass="text-[12px]" />
                     <span className="text-[16px] font-normal leading-none text-[#111111]">{row.name}</span>
                   </div>
                 </td>
@@ -271,7 +272,7 @@ export default function AttendanceManagement() {
           <>
           <div className="px-[24px] pb-[22px] pt-[25px]">
             <div className="mb-[20px] flex items-center gap-[12px]">
-              <img src={selectedRecord.avatar} className="h-[40px] w-[40px] rounded-full object-cover" alt="" />
+              <PersonAvatar src={selectedRecord.avatar} name={selectedRecord.name} className="h-[40px] w-[40px] rounded-full" />
               <div>
                 <h4 className="text-[15px] font-semibold leading-none text-[#2d3b4f]">{selectedRecord.name}</h4>
                 <p className="mt-[6px] text-[13px] font-normal leading-none text-[#657183]">{selectedRecord.session}</p>
@@ -324,7 +325,7 @@ export default function AttendanceManagement() {
           <>
           <div className="px-[24px] pb-[24px] pt-[24px]">
             <div className="mb-[20px] flex min-h-[72px] items-center gap-[12px] rounded-[8px] bg-[#f7f8fa] px-[16px]">
-              <img src={selectedRecord.avatar} className="h-[40px] w-[40px] rounded-full object-cover" alt="" />
+              <PersonAvatar src={selectedRecord.avatar} name={selectedRecord.name} className="h-[40px] w-[40px] rounded-full" />
               <div>
                 <h4 className="text-[15px] font-semibold leading-none text-[#2d3b4f]">{selectedRecord.name}</h4>
                 <p className="mt-[7px] text-[13px] font-normal leading-none text-[#657183]">{selectedRecord.session} &bull; {selectedRecord.date}</p>
@@ -346,7 +347,7 @@ export default function AttendanceManagement() {
           </div>
           <div className="hidden">
             <div className="flex items-center gap-4 p-4 bg-[#F8FAFC] rounded-2xl border border-[#F1F5F9]">
-              <img src={selectedRecord.avatar} className="w-12 h-12 rounded-full object-cover" alt="" />
+              <PersonAvatar src={selectedRecord.avatar} name={selectedRecord.name} className="h-12 w-12 rounded-full" />
               <div>
                 <h4 className="font-bold text-[#1A202C]">{selectedRecord.name}</h4>
                 <p className="text-[12px] text-[#718096]">{selectedRecord.session} • {selectedRecord.date}</p>

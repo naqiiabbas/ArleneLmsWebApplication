@@ -18,6 +18,8 @@ export type UIAttendanceRecord = {
 }
 
 export type AttendanceData = {
+  /** The program's date ("yyyy-mm-dd", Pacific), for the date-range filter. */
+  today: string
   records: UIAttendanceRecord[]
   stats: { present: number; absent: number; late: number; rate: number }
   weekly: { day: string; present: number; absent: number; late: number }[]

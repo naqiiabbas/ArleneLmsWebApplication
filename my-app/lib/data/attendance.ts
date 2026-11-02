@@ -2,7 +2,8 @@
 
 import { createAdminClient } from "@/lib/supabase/admin"
 import { assertPermission } from "@/lib/auth/permissions"
-import { addDaysYmd, formatTimeInZone, mondayOfWeek, ymdInZone } from "@/lib/time"
+import { logActivity } from "@/lib/data/audit"
+import { addDaysYmd, addMonthsYmd, formatTimeInZone, mondayOfWeek, ymdInZone } from "@/lib/time"
 import type {
   AttendanceData,
   AttendanceStatus,
@@ -43,18 +44,44 @@ export async function getAttendanceData(): Promise<AttendanceData> {
   await assertPermission("attendance.view")
   const admin = createAdminClient()
 
-  const { data, error } = await admin
+  // student_id → students → profiles (nested); class_id → classes.
+  const cols =
+    "id, attendance_date, marked_at, status, device, location, latitude, longitude, photo_url, excuse, student:students ( student_code, profile:profiles ( full_name ) ), class:classes ( name, batch )"
+  const today = ymdInZone()
+
+  // Everything in the longest filter range (1 month), page by page, so the
+  // date-range filter and the stats can't lose rows to a row cap...
+  const monthAgo = addMonthsYmd(today, -1)
+  const inMonth: Row[] = []
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await admin
+      .from("attendance_records")
+      .select(cols)
+      .gte("attendance_date", monthAgo)
+      .order("attendance_date", { ascending: false })
+      .order("marked_at", { ascending: false })
+      .order("id")
+      .range(from, from + 999)
+    if (error) throw new Error(error.message)
+    inMonth.push(...((data ?? []) as unknown as Row[]))
+    if ((data ?? []).length < 1000) break
+  }
+  // ...plus the newest records of any age for the "All Dates" view.
+  const { data: recent, error } = await admin
     .from("attendance_records")
-    // student_id → students → profiles (nested); class_id → classes.
-    .select(
-      "id, attendance_date, marked_at, status, device, location, latitude, longitude, photo_url, excuse, student:students ( student_code, profile:profiles ( full_name ) ), class:classes ( name, batch )",
-    )
+    .select(cols)
     .order("attendance_date", { ascending: false })
     .order("marked_at", { ascending: false })
     .limit(300)
   if (error) throw new Error(error.message)
 
-  const rows = (data ?? []) as unknown as Row[]
+  const byId = new Map<string, Row>()
+  for (const r of [...inMonth, ...((recent ?? []) as unknown as Row[])]) byId.set(r.id, r)
+  const rows = [...byId.values()].sort(
+    (a, b) =>
+      (b.attendance_date ?? "").localeCompare(a.attendance_date ?? "") ||
+      (b.marked_at ?? "").localeCompare(a.marked_at ?? ""),
+  )
 
   const records: UIAttendanceRecord[] = rows.map((r) => ({
     id: r.id,
@@ -74,7 +101,6 @@ export async function getAttendanceData(): Promise<AttendanceData> {
   // All windows below compare program-local "yyyy-mm-dd" strings (which sort
   // chronologically) rather than server-clock Dates.
   // ---- Stats (last 7 days) ----
-  const today = ymdInZone()
   const weekAgo = addDaysYmd(today, -6)
   const inWeek = rows.filter((r) => r.attendance_date && r.attendance_date >= weekAgo && r.attendance_date <= today)
   const present = inWeek.filter((r) => r.status === "present").length
@@ -112,7 +138,7 @@ export async function getAttendanceData(): Promise<AttendanceData> {
     monthly.push({ week: `Week ${4 - i}`, rate: c ? Math.round(((p + l) / c) * 100) : 0 })
   }
 
-  return { records, stats: { present, absent, late, rate }, weekly, monthly }
+  return { today, records, stats: { present, absent, late, rate }, weekly, monthly }
 }
 
 /** Super-Admin/Manager: set excuse status on an absence. */
@@ -132,6 +158,10 @@ export async function setAttendanceExcuse(
     .update({ excuse, excused_by: me.userId, excused_at: new Date().toISOString() })
     .eq("id", id)
   if (error) return { error: error.message }
+  await logActivity(
+    { actorId: me.userId, action: excuse === "excused" ? "Excused absence" : "Marked absence unexcused", targetType: "attendance", targetId: id },
+    admin,
+  )
   return {}
 }
 

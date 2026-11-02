@@ -967,6 +967,12 @@ PHP 8.3.6, standard layout (`/var/www/html`, not Bitnami). SSH `ssh -i 100-black
   (`new_messages`, `session_reminders`, `student_alerts`), Security changes the password after
   verifying the current one (`changeMyPassword`), Preferences are read-only. The tabs used to save
   nothing and fire a browser `alert()` (the "black bar").
+- **Avatars (2026-11-02):** no stock-photo fallbacks; `components/PersonAvatar.tsx` shows the uploaded
+  photo or the person's initials, and data modules return `avatar: ""` when there is no photo.
+- **Attendance Control filter (2026-11-02):** date-range dropdown (All Dates, Today, Last 7/14/21 Days,
+  Last 1 Month) on the program's Pacific dates; the table, stat cards and exports follow it.
+  `getAttendanceData` pages through the whole last month, plus the newest 300 of any age. Excuse
+  changes are written to the audit log.
 - **Billing → Choose Plan:** `selectPlan` cancels the current subscription, starts the new one for a
   month and issues a **pending** `INV-YYYY-NNN` invoice (no payment gateway — settled offline).
 

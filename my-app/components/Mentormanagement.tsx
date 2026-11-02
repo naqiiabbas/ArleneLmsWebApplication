@@ -1,8 +1,8 @@
 "use client";
+import { PersonAvatar } from "@/components/PersonAvatar";
 
 import React from "react";
 import { useEffect, useMemo, useState } from "react";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { chatLink } from "@/components/useChatDeepLink";
 import { Search, Trash2, ChevronDown, Plus } from "lucide-react";
@@ -87,7 +87,7 @@ function DetailCard({ mentor, onDownload }: { mentor: Mentor; onDownload: (mento
       <div className="min-h-[569px] rounded-[8px] border border-[#d6d6d6] bg-white px-[24px] py-[24px]">
         <div className="mb-[28px] flex gap-[26px] border-b border-[#dddddd] pb-[24px]">
           <div className="relative h-[84px] w-[84px] overflow-hidden rounded-full">
-            <Image src={mentor.avatar} alt={mentor.name} fill className="object-cover" />
+            <PersonAvatar src={mentor.avatar} name={mentor.name} className="h-full w-full rounded-full" textClass="text-[28px]" />
           </div>
           <div className="flex-1">
             <p className="text-[21px] font-normal leading-none text-[#111111]">{mentor.name}</p>

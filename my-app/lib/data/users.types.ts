@@ -9,6 +9,7 @@ export type AdminUser = {
   phone: string
   role: UIRole
   status: UIStatus
+  avatar: string
   lastLogin: string
   createdAt: string
 }

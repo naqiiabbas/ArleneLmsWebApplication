@@ -1,4 +1,5 @@
 "use client";
+import { PersonAvatar } from "@/components/PersonAvatar";
 
 import React, { useEffect, useMemo, useState } from "react";
 import { Poppins } from "next/font/google";
@@ -44,7 +45,7 @@ const NoteViewModal = ({
         <div className="shrink-0 border-b border-[#dddddd] px-[24px] py-[27px]">
           <div className="flex items-start justify-between gap-4">
             <div className="flex min-w-0 items-start gap-[16px]">
-              <img src={note.avatar} alt={note.mentor} className="h-[48px] w-[48px] shrink-0 rounded-full object-cover" />
+              <PersonAvatar src={note.avatar} name={note.mentor} className="h-[48px] w-[48px] shrink-0 rounded-full" />
               <div className="min-w-0">
                 <h2 className="truncate text-[22px] font-normal leading-none text-[#111111]">{note.title}</h2>
                 <div className="mt-[12px] flex flex-wrap items-center gap-[11px] text-[13px] font-normal leading-none text-[#666666]">
@@ -102,7 +103,7 @@ const NoteViewModal = ({
 const NoteCard = ({ note, onClick }: { note: MentorNote; onClick: () => void }) => (
   <article className={`relative min-h-[212px] rounded-[12px] border ${borderFor(note.isNew)} bg-white px-[22px] py-[24px]`}>
     <div className="flex items-start gap-[16px]">
-      <img src={note.avatar} alt={note.mentor} className="h-[48px] w-[48px] shrink-0 rounded-full object-cover" />
+      <PersonAvatar src={note.avatar} name={note.mentor} className="h-[48px] w-[48px] shrink-0 rounded-full" />
       <div className="min-w-0 flex-1 pr-[54px] md:pr-[150px]">
         <div className="flex min-w-0 items-center gap-[9px]">
           <h3 className="truncate text-[18px] font-normal leading-none text-[#111111]">{note.title}</h3>

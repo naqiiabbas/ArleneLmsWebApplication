@@ -1,7 +1,7 @@
 "use client";
+import { PersonAvatar } from "@/components/PersonAvatar";
 
 import React, { useEffect, useMemo, useState } from "react";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { chatLink } from "@/components/useChatDeepLink";
 import { ChevronDown, Eye, IdCard, KeyRound, Mail, MapPin, Phone, Plus, Search, Trash2 } from "lucide-react";
@@ -384,7 +384,7 @@ function StudentDetails({
         <section className="min-h-[433px] rounded-[8px] border border-[#d6d6d6] bg-white px-[24px] py-[24px]">
           <div className="flex items-start gap-[26px] pb-[24px]">
             <div className="relative h-[96px] w-[96px] overflow-hidden rounded-full bg-[#eeeeee]">
-              <Image src={student.avatar} alt={student.name} fill className="object-cover" />
+              <PersonAvatar src={student.avatar} name={student.name} className="h-full w-full rounded-full" textClass="text-[30px]" />
             </div>
             <div className="pt-[5px]">
               <h2 className="text-[22px] font-normal leading-none text-[#111111]">{student.name}</h2>

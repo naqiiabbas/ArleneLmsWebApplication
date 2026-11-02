@@ -18,7 +18,6 @@ import type {
 type Admin = ReturnType<typeof createAdminClient>
 
 const QUICK_ACTIONS = ["Send Message", "View Sessions", "Download Report"]
-const DEFAULT_AVATAR = "/images/avatar1.png"
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 function uiToDbStatus(s: StudentStatus) {
@@ -172,7 +171,7 @@ export async function listStudents(): Promise<UIStudent[]> {
       name: p.full_name ?? "",
       email: p.email ?? "",
       phone: p.phone ?? "",
-      avatar: p.avatar_url || DEFAULT_AVATAR,
+      avatar: p.avatar_url ?? "",
       mentor: mentor?.name ?? "",
       mentorId: mentor?.id ?? "",
       classId: classByStudent.get(p.id)?.id ?? "",

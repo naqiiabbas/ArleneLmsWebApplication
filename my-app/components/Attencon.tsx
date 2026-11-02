@@ -3,6 +3,17 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Camera, Download, Eye, MapPin, X } from "lucide-react";
 import { getAttendanceData, setAttendanceExcuse, getAttendancePhotoUrl } from "@/lib/data/attendance";
+import { addDaysYmd, addMonthsYmd, ymdInZone } from "@/lib/time";
+
+const DATE_RANGES = [
+  { id: "all", label: "All Dates" },
+  { id: "today", label: "Today" },
+  { id: "7", label: "Last 7 Days" },
+  { id: "14", label: "Last 14 Days" },
+  { id: "21", label: "Last 21 Days" },
+  { id: "month", label: "Last 1 Month" },
+] as const;
+type DateRange = (typeof DATE_RANGES)[number]["id"];
 import type { UIAttendanceRecord, AttendanceStatus, AttendanceData } from "@/lib/data/attendance.types";
 import {
   Bar,
@@ -49,6 +60,7 @@ const ChartCard = ({ title, children }: { title: string; children: React.ReactNo
 );
 
 const EMPTY_ATTENDANCE: AttendanceData = {
+  today: "",
   records: [],
   stats: { present: 0, absent: 0, late: 0, rate: 0 },
   weekly: [],
@@ -60,13 +72,19 @@ export default function Attencon() {
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<AttendanceStatus | "All">("All");
-  const [filteredDate, setFilteredDate] = useState<string | null>(null);
+  const [dateRange, setDateRange] = useState<DateRange>("all");
   const [selected, setSelected] = useState<AttendanceRecord | null>(null);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
 
   const attendance = data ?? EMPTY_ATTENDANCE;
-  const today = new Date();
-  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  // Dates are the program's (Pacific) calendar days, not the viewer's.
+  const todayStr = data?.today ?? ymdInZone();
+  const rangeLabel = DATE_RANGES.find((r) => r.id === dateRange)?.label ?? "All Dates";
+  const rangeStart =
+    dateRange === "all" ? "" :
+    dateRange === "today" ? todayStr :
+    dateRange === "month" ? addMonthsYmd(todayStr, -1) :
+    addDaysYmd(todayStr, -(Number(dateRange) - 1)); // inclusive of today
 
   const refresh = async () => {
     setLoading(true);
@@ -104,15 +122,25 @@ export default function Attencon() {
     await refresh();
   };
 
-  const filteredRecords = useMemo(() => {
-    return attendance.records.filter((r) => {
-      const matchStatus = statusFilter === "All" || r.status === statusFilter;
-      const matchDate = !filteredDate || r.date === filteredDate;
-      return matchStatus && matchDate;
-    });
-  }, [attendance.records, statusFilter, filteredDate]);
+  const recordsInRange = useMemo(
+    () => (rangeStart ? attendance.records.filter((r) => r.date >= rangeStart && r.date <= todayStr) : attendance.records),
+    [attendance.records, rangeStart, todayStr]
+  );
 
-  const summary = attendance.stats;
+  const filteredRecords = useMemo(
+    () => recordsInRange.filter((r) => statusFilter === "All" || r.status === statusFilter),
+    [recordsInRange, statusFilter]
+  );
+
+  // The cards follow the selected range; "All Dates" keeps the 7-day summary.
+  const summary = useMemo(() => {
+    if (!rangeStart) return attendance.stats;
+    const count = (s: AttendanceStatus) => recordsInRange.filter((r) => r.status === s).length;
+    const present = count("Present"), late = count("Late"), absent = count("Absent");
+    const total = present + late + absent;
+    return { present, late, absent, rate: total ? Math.round(((present + late) / total) * 1000) / 10 : 0 };
+  }, [attendance.stats, recordsInRange, rangeStart]);
+  const statsSub = rangeStart ? rangeLabel : "Last 7 Days";
 
   const downloadReport = async () => {
     if (typeof window === "undefined") return;
@@ -125,7 +153,7 @@ export default function Attencon() {
     doc.text("Attendance Report", 14, 15);
     doc.setFontSize(10);
     doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 22);
-    doc.text(`Filters: Status = ${statusFilter}, Date = ${filteredDate ?? "All"}`, 14, 28);
+    doc.text(`Filters: Status = ${statusFilter}, Date = ${rangeLabel}`, 14, 28);
 
     autoTable(doc, {
       head: [["Student ID", "Student Name", "Class", "Time", "Status", "Date", "Batch"]],
@@ -168,15 +196,19 @@ export default function Attencon() {
         </div>
 
         <div className="flex items-center gap-[12px]">
-          <button
-            onClick={() => setFilteredDate((prev) => (prev ? null : todayStr))}
-            className={`flex h-[48px] min-w-[126px] items-center justify-center gap-[10px] rounded-[8px] border border-[#d6d6d6] px-[20px] text-[16px] font-normal text-[#F9A618] transition-colors hover:bg-[#fff7e8] ${
-              filteredDate ? "bg-[#fff7e8]" : "bg-white"
-            }`}
-          >
+          <label className={`relative flex h-[48px] min-w-[170px] items-center gap-[10px] rounded-[8px] border border-[#d6d6d6] px-[16px] text-[16px] font-normal text-[#F9A618] transition-colors hover:bg-[#fff7e8] ${dateRange !== "all" ? "bg-[#fff7e8]" : "bg-white"}`}>
             <img src="/images/admin-attendance-filter.svg" alt="" className="h-4 w-4" />
-            {filteredDate ? "Today" : "Filter"}
-          </button>
+            <select
+              value={dateRange}
+              onChange={(e) => setDateRange(e.target.value as DateRange)}
+              aria-label="Filter by date range"
+              className="h-full w-full cursor-pointer bg-transparent text-[16px] text-[#F9A618] outline-none"
+            >
+              {DATE_RANGES.map((r) => (
+                <option key={r.id} value={r.id} className="text-[#111111]">{r.label}</option>
+              ))}
+            </select>
+          </label>
           <button
             onClick={downloadCsv}
             className="flex h-[48px] min-w-[126px] items-center justify-center gap-[10px] rounded-[8px] border border-[#d6d6d6] bg-white px-[20px] text-[16px] font-normal text-[#F9A618] transition-colors hover:bg-[#fff7e8]"
@@ -204,10 +236,10 @@ export default function Attencon() {
       )}
 
       <div className="mb-[24px] grid grid-cols-1 gap-[18px] sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Total Present" value={summary.present} sub="This week" color="text-[#00a641]" />
-        <StatCard label="Total Absent" value={summary.absent} sub="This week" color="text-[#ff0000]" />
-        <StatCard label="Late Arrivals" value={summary.late} sub="This week" color="text-[#ff7a00]" />
-        <StatCard label="Attendance Rate" value={`${summary.rate}%`} sub="This week" color="text-[#F9A618]" />
+        <StatCard label="Total Present" value={summary.present} sub={statsSub} color="text-[#00a641]" />
+        <StatCard label="Total Absent" value={summary.absent} sub={statsSub} color="text-[#ff0000]" />
+        <StatCard label="Late Arrivals" value={summary.late} sub={statsSub} color="text-[#ff7a00]" />
+        <StatCard label="Attendance Rate" value={`${summary.rate}%`} sub={statsSub} color="text-[#F9A618]" />
       </div>
 
       <div className="mb-[24px] grid grid-cols-1 gap-[18px] xl:grid-cols-2">

@@ -7,7 +7,6 @@ import { checkTargetRole } from "@/lib/data/guards"
 import type { MentorInput, MentorStatus, UIMentor } from "@/lib/data/mentors.types"
 
 const QUICK_ACTIONS = ["Send Message", "View Schedule", "Assign Students", "Download Report"]
-const DEFAULT_AVATAR = "/images/avatar1.png"
 
 function uiToDbStatus(s: MentorStatus) {
   return s === "Inactive" ? ("inactive" as const) : ("active" as const)
@@ -83,7 +82,7 @@ export async function listMentors(): Promise<UIMentor[]> {
       name: m.profiles?.full_name ?? "",
       email: m.profiles?.email ?? "",
       phone: m.profiles?.phone ?? "",
-      avatar: m.profiles?.avatar_url || DEFAULT_AVATAR,
+      avatar: m.profiles?.avatar_url ?? "",
       expertise: m.expertise ?? "",
       experience: formatYears(m.experience_years),
       address: m.address ?? "",

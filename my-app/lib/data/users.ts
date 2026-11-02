@@ -53,7 +53,7 @@ export async function listUsers(): Promise<AdminUser[]> {
 
   const { data, error } = await admin
     .from("profiles")
-    .select("id, full_name, email, phone, role, status, last_login_at, created_at")
+    .select("id, full_name, email, phone, avatar_url, role, status, last_login_at, created_at")
     .in("role", MANAGED_DB_ROLES)
     .order("created_at", { ascending: false })
 
@@ -66,6 +66,7 @@ export async function listUsers(): Promise<AdminUser[]> {
     phone: p.phone ?? "",
     role: DB_TO_UI_ROLE[p.role] ?? "Student",
     status: p.status === "suspended" ? "Suspended" : "Active",
+    avatar: p.avatar_url ?? "",
     lastLogin: p.last_login_at
       ? new Date(p.last_login_at).toLocaleString()
       : "—",

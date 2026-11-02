@@ -1,4 +1,5 @@
 "use client";
+import { PersonAvatar } from "@/components/PersonAvatar";
 
 import React, { useEffect, useMemo, useState } from "react";
 import {
@@ -24,6 +25,7 @@ type User = {
   phone: string;
   role: Role;
   status: Status;
+  avatar: string;
   lastLogin: string;
   createdAt: string;
 };
@@ -315,7 +317,7 @@ export default function UserManagement() {
         <div className="rounded-[8px] border border-[#d6d6d6] bg-white px-[24px] py-[28px]">
           <div className="flex flex-col gap-4 border-b border-[#dddddd] pb-[24px] md:flex-row md:items-center">
             <div className="flex items-center gap-[26px]">
-              <img src="/images/avatar.png" alt={selected.name} className="h-[84px] w-[84px] rounded-full object-cover" />
+              <PersonAvatar src={selected.avatar} name={selected.name} className="h-[84px] w-[84px] rounded-full" textClass="text-[28px]" />
               <div>
                 <h3 className="text-[21px] font-semibold leading-none text-[#111111]">{selected.name}</h3>
                 <div className="mt-[15px] flex gap-[10px]">

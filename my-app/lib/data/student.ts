@@ -28,7 +28,6 @@ import type {
   StudentTodaySession,
 } from "@/lib/data/student.types"
 
-const DEFAULT_AVATAR = "/images/avatar1.png"
 const DOCUMENTS_BUCKET = "documents"
 const ATTACHMENTS_BUCKET = "attachments"
 
@@ -291,7 +290,7 @@ function toMentor(p: { id: string; full_name: string | null; email: string | nul
     department: "Mentorship Program",
     email: p.email ?? "",
     phone: p.phone ?? "",
-    avatar: p.avatar_url || DEFAULT_AVATAR,
+    avatar: p.avatar_url ?? "",
     tags: [],
   }
 }
@@ -722,7 +721,7 @@ export async function getStudentNotes(): Promise<StudentNote[]> {
       attachments: atts.length,
       attachmentList: atts,
       category: n.category ?? "Note",
-      avatar: n.author?.avatar_url || DEFAULT_AVATAR,
+      avatar: n.author?.avatar_url ?? "",
       isNew: !!n.created_at && new Date(n.created_at) >= weekAgo,
     }
   })

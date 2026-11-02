@@ -1,4 +1,5 @@
 "use client";
+import { PersonAvatar } from "@/components/PersonAvatar";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -179,7 +180,7 @@ export default function AssignedStudentsSection() {
         <div className="grid grid-cols-1 gap-[24px] xl:grid-cols-[358px_minmax(0,1fr)]">
           <aside className="rounded-[8px] border border-[#d6d6d6] bg-white px-[24px] pb-[24px] pt-[25px]">
             <div className="flex flex-col items-center text-center">
-              <img src={selectedStudent.avatar} className="h-[96px] w-[96px] rounded-full object-cover" alt={selectedStudent.name} />
+              <PersonAvatar src={selectedStudent.avatar} name={selectedStudent.name} className="h-[96px] w-[96px] rounded-full" textClass="text-[30px]" />
               <h2 className="mt-[24px] text-[26px] font-semibold leading-none text-[#2d3b4f]">{selectedStudent.name}</h2>
               <p className="mt-[12px] text-[15px] font-normal leading-none text-[#657183]">{selectedStudent.grade} Grade</p>
               <div className="mt-[15px]">
@@ -477,7 +478,7 @@ export default function AssignedStudentsSection() {
                 <tr key={student.id} className="border-b border-[#e5e5e5] last:border-b-0">
                   <td className="px-[24px] py-[17px] md:px-[40px]">
                     <button type="button" onClick={() => openProfile(student)} className="flex items-center gap-[14px] text-left">
-                      <img src={student.avatar} className="h-[40px] w-[40px] rounded-full object-cover" alt={student.name} />
+                      <PersonAvatar src={student.avatar} name={student.name} className="h-[40px] w-[40px] rounded-full" />
                       <span className="text-[16px] font-normal leading-none text-[#111111]">{student.name}</span>
                     </button>
                   </td>

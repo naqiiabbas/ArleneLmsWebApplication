@@ -94,6 +94,13 @@ export function addDaysYmd(ymd: string, days: number): string {
   return dt.toISOString().slice(0, 10)
 }
 
+/** `ymd` shifted by `months` calendar months, clamped to the target month's last day. */
+export function addMonthsYmd(ymd: string, months: number): string {
+  const [y, m, d] = ymd.split("-").map(Number)
+  const lastDay = new Date(Date.UTC(y, m - 1 + months + 1, 0)).getUTCDate()
+  return new Date(Date.UTC(y, m - 1 + months, Math.min(d, lastDay))).toISOString().slice(0, 10)
+}
+
 /** Monday of the week containing `ymd` (weeks run Mon–Sun). */
 export function mondayOfWeek(ymd: string): string {
   const [y, m, d] = ymd.split("-").map(Number)

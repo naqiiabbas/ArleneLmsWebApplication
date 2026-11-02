@@ -78,7 +78,6 @@ function formatSize(bytes: number | null): string {
   return `${(mb / 1024).toFixed(1)} GB`
 }
 
-const DEFAULT_AVATAR = "/images/avatar1.png"
 
 const UI_TO_DB_STATUS: Record<
   MentorAttendanceStatus,
@@ -177,7 +176,7 @@ export async function getAssignedStudents(): Promise<MentorStudent[]> {
     return {
       id: s.id,
       name: s.profiles?.full_name ?? "—",
-      avatar: s.profiles?.avatar_url || DEFAULT_AVATAR,
+      avatar: s.profiles?.avatar_url ?? "",
       school: s.school ?? "",
       grade: s.academic_year ?? "",
       // No records yet is "no data", not 0% attendance — don't flag new students.
@@ -428,7 +427,7 @@ export async function getMentorAttendance(): Promise<MentorAttendanceRow[]> {
     date: r.attendance_date ?? "",
     studentId: r.student_id,
     name: r.student?.profile?.full_name ?? "—",
-    avatar: r.student?.profile?.avatar_url || DEFAULT_AVATAR,
+    avatar: r.student?.profile?.avatar_url ?? "",
     session: r.session?.title ?? r.class?.name ?? "Session",
     status: dbToUiStatus(r.status),
     notes: r.notes ?? "",
