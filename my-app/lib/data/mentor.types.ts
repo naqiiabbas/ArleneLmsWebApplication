@@ -1,3 +1,5 @@
+import type { GuardianInfo } from "@/lib/data/students.types"
+
 // UI-facing types for the mentor panel (Assigned Students).
 export type RiskLevel = "Low" | "Medium" | "High"
 
@@ -22,6 +24,7 @@ export interface MentorStudent {
   avatar: string
   school: string
   grade: string
+  guardian: GuardianInfo
   riskLevel: RiskLevel
   attendance: number
   totalSessions: number

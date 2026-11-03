@@ -13,6 +13,7 @@
 // that have already authorized the caller.
 import "server-only"
 import type { createAdminClient } from "@/lib/supabase/admin"
+import type { GuardianInfo } from "@/lib/data/students.types"
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
@@ -54,6 +55,8 @@ async function nextStudentCode(admin: AdminClient): Promise<string> {
 type StudentFields = {
   course?: string | null
   address?: string | null
+  school?: string | null
+  academic_year?: string | null
   status?: "active" | "inactive"
 }
 
@@ -71,6 +74,8 @@ export async function ensureStudentRecord(
   const given = {
     ...(fields.course !== undefined && { course: fields.course }),
     ...(fields.address !== undefined && { address: fields.address }),
+    ...(fields.school !== undefined && { school: fields.school }),
+    ...(fields.academic_year !== undefined && { academic_year: fields.academic_year }),
     ...(fields.status !== undefined && { status: fields.status }),
   }
 
@@ -107,6 +112,66 @@ export async function ensureStudentRecord(
     }
   }
   return { error: "Could not allocate a unique Student ID / attendance code. Please try again." }
+}
+
+type GuardianRow = {
+  full_name: string | null
+  relationship: string | null
+  email: string | null
+  phone: string | null
+  is_primary: boolean | null
+}
+
+/** The primary guardian out of a student's guardians rows (the first one if none is flagged). */
+export function primaryGuardian(rows: GuardianRow[] | null | undefined): GuardianInfo {
+  const g = (rows ?? []).find((r) => r.is_primary) ?? rows?.[0]
+  return {
+    name: g?.full_name ?? "",
+    relationship: g?.relationship ?? "",
+    email: g?.email ?? "",
+    phone: g?.phone ?? "",
+  }
+}
+
+/** Error message for guardian details that can't be saved, or null. All blank is fine. */
+export function guardianError(g: GuardianInfo | undefined): string | null {
+  if (!g) return null
+  const anyGiven = [g.name, g.relationship, g.email, g.phone].some((v) => v?.trim())
+  if (!anyGiven) return null
+  if (!g.name?.trim()) return "Guardian name is required when other guardian details are entered."
+  if (g.email?.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(g.email.trim())) return "Enter a valid guardian email address."
+  return null
+}
+
+/** Create, update or (when every field is blank) remove the student's primary guardian. */
+export async function savePrimaryGuardian(
+  admin: AdminClient,
+  studentId: string,
+  g: GuardianInfo | undefined,
+): Promise<{ error?: string }> {
+  if (!g) return {}
+  const { data: rows, error: readErr } = await admin
+    .from("guardians")
+    .select("id, is_primary")
+    .eq("student_id", studentId)
+  if (readErr) return { error: readErr.message }
+  const current = (rows ?? []).find((r) => r.is_primary) ?? rows?.[0]
+
+  const values = {
+    full_name: g.name.trim(),
+    relationship: g.relationship.trim() || null,
+    email: g.email.trim() || null,
+    phone: g.phone.trim() || null,
+  }
+  if (!values.full_name) {
+    if (!current) return {}
+    const { error } = await admin.from("guardians").delete().eq("id", current.id)
+    return error ? { error: error.message } : {}
+  }
+  const { error } = current
+    ? await admin.from("guardians").update({ ...values, is_primary: true }).eq("id", current.id)
+    : await admin.from("guardians").insert({ ...values, student_id: studentId, is_primary: true })
+  return error ? { error: error.message } : {}
 }
 
 /**

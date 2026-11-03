@@ -13,7 +13,8 @@ import {
   updateStudent,
   deleteStudent,
 } from "@/lib/data/students";
-import type { ClassOption, MentorOption, UIStudent } from "@/lib/data/students.types";
+import { EMPTY_GUARDIAN, GRADE_OPTIONS } from "@/lib/data/students.types";
+import type { ClassOption, GuardianInfo, MentorOption, UIStudent } from "@/lib/data/students.types";
 
 type StudentStatus = "Active" | "Inactive";
 
@@ -32,6 +33,9 @@ interface FormState {
   classId: string;
   course: string;
   address: string;
+  gradeLevel: string;
+  school: string;
+  guardian: GuardianInfo;
 }
 
 const emptyForm: FormState = {
@@ -43,6 +47,9 @@ const emptyForm: FormState = {
   classId: "",
   course: "",
   address: "",
+  gradeLevel: "",
+  school: "",
+  guardian: EMPTY_GUARDIAN,
 };
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -53,6 +60,11 @@ function validateForm(f: FormState): string | null {
   if (!f.email.trim()) return "Email is required.";
   if (!EMAIL_RE.test(f.email.trim())) return "Enter a valid email address.";
   if (!f.phone.trim()) return "Phone is required.";
+  const g = f.guardian;
+  if (!g.name.trim() && (g.relationship.trim() || g.email.trim() || g.phone.trim())) {
+    return "Guardian name is required when other guardian details are entered.";
+  }
+  if (g.email.trim() && !EMAIL_RE.test(g.email.trim())) return "Enter a valid guardian email address.";
   return null;
 }
 
@@ -308,6 +320,32 @@ function StudentForm({
             />
           </label>
 
+          <label>
+            <span className={labelClass}>Grade Level</span>
+            <input
+              className={inputClass}
+              list="student-grade-options"
+              value={form.gradeLevel}
+              onChange={(e) => setForm((s) => ({ ...s, gradeLevel: e.target.value }))}
+              placeholder="e.g., 9th Grade"
+            />
+            <datalist id="student-grade-options">
+              {GRADE_OPTIONS.map((g) => (
+                <option key={g} value={g} />
+              ))}
+            </datalist>
+          </label>
+
+          <label>
+            <span className={labelClass}>School</span>
+            <input
+              className={inputClass}
+              value={form.school}
+              onChange={(e) => setForm((s) => ({ ...s, school: e.target.value }))}
+              placeholder="Enter school name"
+            />
+          </label>
+
           <label className="lg:col-span-2">
             <span className={labelClass}>Address</span>
             <input
@@ -315,6 +353,51 @@ function StudentForm({
               value={form.address}
               onChange={(e) => setForm((s) => ({ ...s, address: e.target.value }))}
               placeholder="Enter full address"
+            />
+          </label>
+        </div>
+
+        <h2 className="mb-[20px] mt-[28px] border-t border-[#dedede] pt-[24px] text-[18px] font-normal leading-none text-[#111111]">
+          Guardian Information
+        </h2>
+        <div className="grid grid-cols-1 gap-x-[26px] gap-y-[25px] lg:grid-cols-2">
+          <label>
+            <span className={labelClass}>Guardian Name</span>
+            <input
+              className={inputClass}
+              value={form.guardian.name}
+              onChange={(e) => setForm((s) => ({ ...s, guardian: { ...s.guardian, name: e.target.value } }))}
+              placeholder="Enter guardian name"
+            />
+          </label>
+          <label>
+            <span className={labelClass}>Relationship</span>
+            <input
+              className={inputClass}
+              value={form.guardian.relationship}
+              onChange={(e) => setForm((s) => ({ ...s, guardian: { ...s.guardian, relationship: e.target.value } }))}
+              placeholder="e.g., Mother, Father, Grandparent"
+            />
+          </label>
+          <label>
+            <span className={labelClass}>Guardian Email</span>
+            <input
+              type="email"
+              autoComplete="off"
+              className={inputClass}
+              value={form.guardian.email}
+              onChange={(e) => setForm((s) => ({ ...s, guardian: { ...s.guardian, email: e.target.value } }))}
+              placeholder="guardian@email.com"
+            />
+          </label>
+          <label>
+            <span className={labelClass}>Guardian Phone</span>
+            <input
+              type="tel"
+              className={inputClass}
+              value={form.guardian.phone}
+              onChange={(e) => setForm((s) => ({ ...s, guardian: { ...s.guardian, phone: e.target.value } }))}
+              placeholder="+1 234-567-8900"
             />
           </label>
         </div>
@@ -402,8 +485,24 @@ function StudentDetails({
               <InfoBlock label="Current Mentor" value={student.mentor || "Unassigned"} />
               <InfoBlock label="Class" value={student.className || "Not enrolled"} />
               <InfoBlock label="Course" value={student.course} />
+              <InfoBlock label="Grade Level" value={student.gradeLevel || "Not provided"} />
+              <InfoBlock label="School" value={student.school || "Not provided"} />
               <InfoBlock icon={<MapPin size={15} />} label="Address" value={student.address} />
             </div>
+
+            <h3 className="mb-[20px] mt-[27px] border-t border-[#d9d9d9] pt-[24px] text-[18px] font-normal leading-none text-[#111111]">
+              Guardian Information
+            </h3>
+            {student.guardian.name ? (
+              <div className="grid grid-cols-1 gap-x-[88px] gap-y-[25px] md:grid-cols-2">
+                <InfoBlock label="Name" value={student.guardian.name} />
+                <InfoBlock label="Relationship" value={student.guardian.relationship || "Not provided"} />
+                <InfoBlock icon={<Mail size={15} />} label="Email" value={student.guardian.email || "Not provided"} />
+                <InfoBlock icon={<Phone size={15} />} label="Phone" value={student.guardian.phone || "Not provided"} />
+              </div>
+            ) : (
+              <p className="text-[15px] text-[#777777]">No guardian on file.</p>
+            )}
 
             <div className="mt-[27px] grid grid-cols-1 gap-[12px] md:grid-cols-2">
               <CodeBlock
@@ -625,6 +724,10 @@ export default function Studentmanagement() {
       { label: "Email", value: student.email },
       { label: "Mentor", value: student.mentor },
       { label: "Course", value: student.course },
+      { label: "Grade Level", value: student.gradeLevel },
+      { label: "School", value: student.school },
+      { label: "Guardian", value: [student.guardian.name, student.guardian.relationship].filter(Boolean).join(", ") },
+      { label: "Guardian Contact", value: [student.guardian.phone, student.guardian.email].filter(Boolean).join(", ") },
       { label: "Status", value: student.status },
       { label: "Class", value: student.className },
       { label: "Attendance", value: student.performance.attendance == null ? "No records yet" : `${student.performance.attendance}%` },
@@ -718,6 +821,9 @@ export default function Studentmanagement() {
       classId: s.classId,
       course: s.course,
       address: s.address,
+      gradeLevel: s.gradeLevel,
+      school: s.school,
+      guardian: s.guardian,
     });
     setView("edit");
     loadMentors();

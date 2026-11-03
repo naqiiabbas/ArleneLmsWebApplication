@@ -6,6 +6,7 @@ import { assertStudent } from "@/lib/data/guards"
 import { listConversations } from "@/lib/data/messaging"
 import { createNotification } from "@/lib/data/notifications"
 import { logActivity, notifyAdmins } from "@/lib/data/audit"
+import { guardianError, primaryGuardian, savePrimaryGuardian } from "@/lib/data/role-records"
 import { sweepEndedSessions } from "@/lib/data/attendance-core"
 import { formatTimeInZone, ymdInZone } from "@/lib/time"
 import type {
@@ -305,12 +306,12 @@ export async function getStudentProfile(): Promise<StudentProfile> {
   const { userId } = await assertStudent()
   const admin = createAdminClient()
 
-  const [{ data: prof }, { data: stu }, { data: assigns }, { data: summary }, { data: docs }, { data: goals }, { data: recentAtt }] =
+  const [{ data: prof }, { data: stu }, { data: assigns }, { data: summary }, { data: docs }, { data: goals }, { data: recentAtt }, { data: guardians }] =
     await Promise.all([
       admin.from("profiles").select("full_name, email, phone, avatar_url").eq("id", userId).single(),
       admin
         .from("students")
-        .select("student_code, attendance_code, course, academic_year, gpa, date_of_birth, address, about, enrollment_date, expected_graduation")
+        .select("student_code, attendance_code, course, academic_year, school, gpa, date_of_birth, address, about, enrollment_date, expected_graduation")
         .eq("id", userId)
         .maybeSingle(),
       admin
@@ -327,6 +328,7 @@ export async function getStudentProfile(): Promise<StudentProfile> {
         .eq("student_id", userId)
         .order("marked_at", { ascending: false })
         .limit(3),
+      admin.from("guardians").select("full_name, relationship, email, phone, is_primary").eq("student_id", userId),
     ])
 
   const mentorRows = (assigns ?? []) as unknown as {
@@ -386,6 +388,8 @@ export async function getStudentProfile(): Promise<StudentProfile> {
     year: stu?.academic_year ?? "—",
     studentId: stu?.student_code ?? "—",
     attendanceCode: stu?.attendance_code ?? "",
+    school: stu?.school ?? "",
+    guardian: primaryGuardian(guardians),
     gpa: stu?.gpa != null ? String(stu.gpa) : "—",
     enrollmentDate: fmtMonthYear(stu?.enrollment_date ?? null),
     expectedGraduation: fmtMonthYear(stu?.expected_graduation ?? null),
@@ -406,6 +410,8 @@ export async function updateStudentProfile(
   } catch (e) {
     return { error: (e as Error).message }
   }
+  const badGuardian = guardianError(input.guardian)
+  if (badGuardian) return { error: badGuardian }
   const admin = createAdminClient()
 
   const { error: pErr } = await admin
@@ -419,10 +425,17 @@ export async function updateStudentProfile(
 
   const { error: sErr } = await admin
     .from("students")
-    .update({ address: input.address.trim() || null, about: input.about.trim() || null, date_of_birth: dobStr })
+    .update({
+      address: input.address.trim() || null,
+      about: input.about.trim() || null,
+      date_of_birth: dobStr,
+      academic_year: (input.gradeLevel ?? "").trim() || null,
+      school: (input.school ?? "").trim() || null,
+    })
     .eq("id", userId)
   if (sErr) return { error: sErr.message }
-  return {}
+
+  return savePrimaryGuardian(admin, userId, input.guardian)
 }
 
 /** The student's own goals (Goals tab). */

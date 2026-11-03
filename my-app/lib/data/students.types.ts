@@ -1,6 +1,19 @@
 // UI-facing types for the admin Student Management module.
 export type StudentStatus = "Active" | "Inactive"
 
+/** A student's primary guardian (guardians row with is_primary). All "" when none is on file. */
+export type GuardianInfo = {
+  name: string
+  relationship: string
+  email: string
+  phone: string
+}
+
+export const EMPTY_GUARDIAN: GuardianInfo = { name: "", relationship: "", email: "", phone: "" }
+
+/** Suggestions for the grade field; other values (e.g. "Academy") can be typed. */
+export const GRADE_OPTIONS = ["8th Grade", "9th Grade", "10th Grade", "11th Grade", "12th Grade"]
+
 export type UIStudent = {
   id: string
   name: string
@@ -14,6 +27,10 @@ export type UIStudent = {
   classId: string
   className: string
   course: string
+  /** Grade level (students.academic_year), not the letter grade in performance. */
+  gradeLevel: string
+  school: string
+  guardian: GuardianInfo
   status: StudentStatus
   avatar: string
   enrollmentDate: string
@@ -38,6 +55,9 @@ export type StudentInput = {
   classId: string
   course: string
   address: string
+  gradeLevel: string
+  school: string
+  guardian: GuardianInfo
 }
 
 /** A class a student can be enrolled in. */

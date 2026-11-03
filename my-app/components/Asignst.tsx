@@ -56,7 +56,7 @@ const AttendanceText = ({ value }: { value: number }) => {
   return <span className={`text-[16px] font-normal leading-none ${color}`}>{value}%</span>;
 };
 
-const profileSchool = (school: string) => (school.endsWith("School") ? school : `${school} School`);
+const profileSchool = (school: string) => school.trim() || "Not provided";
 
 const InfoIcon = ({ src }: { src: string }) => (
   <img src={src} alt="" aria-hidden="true" className="mt-[3px] h-[18px] w-[18px] shrink-0" />
@@ -182,7 +182,7 @@ export default function AssignedStudentsSection() {
             <div className="flex flex-col items-center text-center">
               <PersonAvatar src={selectedStudent.avatar} name={selectedStudent.name} className="h-[96px] w-[96px] rounded-full" textClass="text-[30px]" />
               <h2 className="mt-[24px] text-[26px] font-semibold leading-none text-[#2d3b4f]">{selectedStudent.name}</h2>
-              <p className="mt-[12px] text-[15px] font-normal leading-none text-[#657183]">{selectedStudent.grade} Grade</p>
+              <p className="mt-[12px] text-[15px] font-normal leading-none text-[#657183]">{selectedStudent.grade || "Grade not provided"}</p>
               <div className="mt-[15px]">
                 <RiskBadge level={selectedStudent.riskLevel} />
               </div>
@@ -210,6 +210,24 @@ export default function AssignedStudentsSection() {
                 <div>
                   <p className="text-[12px] font-normal leading-none text-[#657183]">Phone</p>
                   <p className="mt-[6px] text-[15px] font-normal leading-none text-[#2d3b4f]">{selectedStudent.phone || "N/A"}</p>
+                </div>
+              </div>
+              <div className="flex gap-[14px]">
+                <InfoIcon src="/images/mentor-assigned-phone.svg" />
+                <div className="min-w-0">
+                  <p className="text-[12px] font-normal leading-none text-[#657183]">Guardian</p>
+                  {selectedStudent.guardian.name ? (
+                    <>
+                      <p className="mt-[6px] break-words text-[15px] font-normal leading-tight text-[#2d3b4f]">
+                        {selectedStudent.guardian.name}
+                        {selectedStudent.guardian.relationship ? ` (${selectedStudent.guardian.relationship})` : ""}
+                      </p>
+                      {selectedStudent.guardian.phone && <p className="mt-[6px] text-[14px] leading-none text-[#657183]">{selectedStudent.guardian.phone}</p>}
+                      {selectedStudent.guardian.email && <p className="mt-[6px] break-all text-[14px] leading-tight text-[#657183]">{selectedStudent.guardian.email}</p>}
+                    </>
+                  ) : (
+                    <p className="mt-[6px] text-[15px] font-normal leading-none text-[#2d3b4f]">Not provided</p>
+                  )}
                 </div>
               </div>
             </div>
@@ -431,11 +449,9 @@ export default function AssignedStudentsSection() {
             className="h-[44px] w-full appearance-none rounded-[8px] border border-[#dddddd] bg-white px-[16px] pr-[38px] text-[16px] font-normal text-[#666666] outline-none"
           >
             <option>All Grades</option>
-            <option>8th</option>
-            <option>9th</option>
-            <option>10th</option>
-            <option>11th</option>
-            <option>12th</option>
+            {[...new Set(students.map((s) => s.grade).filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true })).map((g) => (
+              <option key={g}>{g}</option>
+            ))}
           </select>
           <ChevronDown className="pointer-events-none absolute right-[14px] top-1/2 -translate-y-1/2 text-[#666666]" size={18} strokeWidth={1.8} />
         </div>

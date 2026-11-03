@@ -1,3 +1,5 @@
+import type { GuardianInfo } from "@/lib/data/students.types"
+
 // UI-facing types for the student panel.
 
 export interface StudentDashboardStat {
@@ -73,6 +75,8 @@ export interface StudentProfileActivity {
 
 export interface StudentProfile {
   attendanceCode: string // the student's own 4-digit iPad check-in code
+  school: string
+  guardian: GuardianInfo
   name: string
   avatar: string
   email: string
@@ -98,6 +102,9 @@ export interface StudentProfileInput {
   address: string
   dob: string
   about: string
+  gradeLevel: string
+  school: string
+  guardian: GuardianInfo
 }
 
 export type StudentGoalStatus = "Not Started" | "In Progress" | "Completed"

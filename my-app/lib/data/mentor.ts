@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { assertMentor } from "@/lib/data/guards"
 import { logActivity, notifyAdmins } from "@/lib/data/audit"
+import { primaryGuardian } from "@/lib/data/role-records"
 import { avatarFileError, removeAvatarObject, storeAvatar } from "@/lib/data/avatar"
 import { recordAbsencesForSession, sweepEndedSessions } from "@/lib/data/attendance-core"
 import {
@@ -135,6 +136,7 @@ type StudentRow = {
   id: string
   academic_year: string | null
   school: string | null
+  guardians: Parameters<typeof primaryGuardian>[0]
   profiles: {
     full_name: string | null
     email: string | null
@@ -160,7 +162,7 @@ export async function getAssignedStudents(): Promise<MentorStudent[]> {
   const [{ data: students, error }, { data: att }] = await Promise.all([
     admin
       .from("students")
-      .select("id, academic_year, school, profiles ( full_name, email, phone, avatar_url )")
+      .select("id, academic_year, school, guardians ( full_name, relationship, email, phone, is_primary ), profiles ( full_name, email, phone, avatar_url )")
       .in("id", ids),
     admin.from("student_attendance_summary").select("student_id, attendance_pct, total").in("student_id", ids),
   ])
@@ -180,6 +182,7 @@ export async function getAssignedStudents(): Promise<MentorStudent[]> {
       avatar: s.profiles?.avatar_url ?? "",
       school: s.school ?? "",
       grade: s.academic_year ?? "",
+      guardian: primaryGuardian(s.guardians),
       // No records yet is "no data", not 0% attendance — don't flag new students.
       riskLevel: a.total ? riskFromAttendance(a.pct) : "Low",
       attendance: a.pct,

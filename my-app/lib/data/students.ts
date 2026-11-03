@@ -5,7 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { assertPermission } from "@/lib/auth/permissions"
 import { checkTargetRole } from "@/lib/data/guards"
 import { logActivity } from "@/lib/data/audit"
-import { ensureStudentRecord } from "@/lib/data/role-records"
+import { ensureStudentRecord, guardianError, primaryGuardian, savePrimaryGuardian } from "@/lib/data/role-records"
 import { setStudentEnrollment, sweepEndedSessions } from "@/lib/data/attendance-core"
 import type {
   ClassOption,
@@ -43,7 +43,7 @@ function validateInput(input: StudentInput): string | null {
   if (!input.email?.trim()) return "Email is required."
   if (!EMAIL_RE.test(input.email.trim())) return "Enter a valid email address."
   if (!input.phone?.trim()) return "Phone is required."
-  return null
+  return guardianError(input.guardian)
 }
 
 /** Error message unless `mentorId` is blank or an existing mentor. */
@@ -101,6 +101,9 @@ type StudentFields = {
   address: string | null
   enrollment_date: string | null
   gpa: number | null
+  school: string | null
+  academic_year: string | null
+  guardians: Parameters<typeof primaryGuardian>[0]
 }
 
 type ProfileRow = {
@@ -128,7 +131,7 @@ export async function listStudents(): Promise<UIStudent[]> {
     admin
       .from("profiles")
       .select(
-        "id, full_name, email, phone, avatar_url, status, students ( student_code, attendance_code, course, address, enrollment_date, gpa )",
+        "id, full_name, email, phone, avatar_url, status, students ( student_code, attendance_code, course, address, enrollment_date, gpa, school, academic_year, guardians ( full_name, relationship, email, phone, is_primary ) )",
       )
       .eq("role", "student")
       .order("created_at", { ascending: false }),
@@ -178,6 +181,9 @@ export async function listStudents(): Promise<UIStudent[]> {
       classId: classByStudent.get(p.id)?.id ?? "",
       className: classByStudent.get(p.id)?.name ?? "",
       course: s?.course ?? "",
+      gradeLevel: s?.academic_year ?? "",
+      school: s?.school ?? "",
+      guardian: primaryGuardian(s?.guardians),
       // profiles.status is what sign-in and the middleware enforce.
       status: p.status === "active" ? "Active" : "Inactive",
       enrollmentDate: s?.enrollment_date
@@ -269,9 +275,14 @@ export async function createStudent(
     const rec = await ensureStudentRecord(admin, id, {
       course: input.course.trim() || null,
       address: input.address.trim() || null,
+      school: (input.school ?? "").trim() || null,
+      academic_year: (input.gradeLevel ?? "").trim() || null,
       status: dbStatus,
     })
     if (rec.error) return rollback(rec.error)
+
+    const gd = await savePrimaryGuardian(admin, id, input.guardian)
+    if (gd.error) return rollback(gd.error)
 
     const asg = await setPrimaryMentor(admin, id, input.mentorId, me.userId)
     if (asg.error) return rollback(asg.error)
@@ -339,9 +350,14 @@ export async function updateStudent(
   const rec = await ensureStudentRecord(admin, id, {
     course: input.course.trim() || null,
     address: input.address.trim() || null,
+    school: (input.school ?? "").trim() || null,
+    academic_year: (input.gradeLevel ?? "").trim() || null,
     status: dbStatus,
   })
   if (rec.error) return { error: rec.error }
+
+  const gd = await savePrimaryGuardian(admin, id, input.guardian)
+  if (gd.error) return { error: gd.error }
 
   const asg = await setPrimaryMentor(admin, id, input.mentorId, me.userId)
   if (asg.error) return { error: asg.error }

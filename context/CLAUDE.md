@@ -1083,6 +1083,12 @@ wherever the answer now lives.
 - Tested with `next dev` + Chrome against an in-memory Supabase stand-in, plus read-only query checks on live.
   **Not** tested: real Postgres/Storage writes, face detection with a real face, a real iPad.
 
+**Student grade, school and guardian** (no schema change): grade = `students.academic_year`, school =
+`students.school`, one primary guardian per student in `guardians` (table allows more; the UI handles one). Helpers
+in `role-records.ts` (`primaryGuardian`, `guardianError`, `savePrimaryGuardian`; all fields blank removes the row).
+Editable in admin Student Management and the student's Profile, read-only in the mentor's student profile. All
+optional, so existing students start blank. Same test scope as above.
+
 **Still open from that review:**
 - **Attendance entry:** no way to add a record. Mentors change status on existing rows; admins only set
   excused/unexcused. `recordAbsencesForSession` skips students enrolled after the session ended, so past

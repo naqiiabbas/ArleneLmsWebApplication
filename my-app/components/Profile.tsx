@@ -24,6 +24,7 @@ import {
 } from '@/lib/data/student';
 import { updateMyAvatar } from '@/lib/data/me';
 import { notifyProfileChanged } from '@/components/HeaderProfile';
+import { EMPTY_GUARDIAN, GRADE_OPTIONS } from '@/lib/data/students.types';
 import type { StudentProfile, StudentGoal } from '@/lib/data/student.types';
 
 const AVATAR_MAX_BYTES = 5 * 1024 * 1024;
@@ -56,7 +57,7 @@ const Modal = ({ isOpen, onClose, title, children }: { isOpen: boolean, onClose:
   );
 };
 
-const emptyForm = { email: '', phone: '', address: '', dob: '', about: '' };
+const emptyForm = { email: '', phone: '', address: '', dob: '', about: '', gradeLevel: '', school: '', guardian: EMPTY_GUARDIAN };
 
 const ProfileSection = () => {
   const [activeTab, setActiveTab] = useState<TabType>('Overview');
@@ -107,7 +108,7 @@ const ProfileSection = () => {
 
   const startEdit = () => {
     if (!profile) return;
-    setForm({ email: profile.email, phone: profile.phone, address: profile.address, dob: profile.dob === '—' ? '' : profile.dob, about: profile.about });
+    setForm({ email: profile.email, phone: profile.phone, address: profile.address, dob: profile.dob === '—' ? '' : profile.dob, about: profile.about, gradeLevel: profile.year === '—' ? '' : profile.year, school: profile.school, guardian: profile.guardian });
     setIsEditing(true);
   };
 
@@ -286,8 +287,38 @@ const ProfileSection = () => {
                     <p className="text-[14px] font-normal leading-none text-[#111111]">{d?.major}</p>
                   </div>
                   <div className="rounded-[9px] bg-[#f4f4f4] px-[16px] py-[18px]">
-                    <p className="mb-[10px] text-[12px] font-normal leading-none text-[#666666]">Current Year</p>
-                    <p className="text-[14px] font-normal leading-none text-[#111111]">{d?.year}</p>
+                    <p className="mb-[10px] text-[12px] font-normal leading-none text-[#666666]">Grade Level</p>
+                    {isEditing ? (
+                      <>
+                        <input
+                          aria-label="Grade Level"
+                          list="profile-grade-options"
+                          value={form.gradeLevel}
+                          onChange={(e) => setForm({ ...form, gradeLevel: e.target.value })}
+                          placeholder="e.g., 9th Grade"
+                          className="w-full border-b border-orange-200 bg-transparent text-[14px] font-normal text-[#111111] outline-none"
+                        />
+                        <datalist id="profile-grade-options">
+                          {GRADE_OPTIONS.map((g) => <option key={g} value={g} />)}
+                        </datalist>
+                      </>
+                    ) : (
+                      <p className="text-[14px] font-normal leading-none text-[#111111]">{d?.year}</p>
+                    )}
+                  </div>
+                  <div className="rounded-[9px] bg-[#f4f4f4] px-[16px] py-[18px] sm:col-span-2">
+                    <p className="mb-[10px] text-[12px] font-normal leading-none text-[#666666]">School</p>
+                    {isEditing ? (
+                      <input
+                        aria-label="School"
+                        value={form.school}
+                        onChange={(e) => setForm({ ...form, school: e.target.value })}
+                        placeholder="Enter your school"
+                        className="w-full border-b border-orange-200 bg-transparent text-[14px] font-normal text-[#111111] outline-none"
+                      />
+                    ) : (
+                      <p className="text-[14px] font-normal leading-none text-[#111111]">{d?.school || '—'}</p>
+                    )}
                   </div>
                   <div className="rounded-[9px] bg-[#f4f4f4] px-[16px] py-[18px]">
                     <p className="mb-[10px] text-[12px] font-normal leading-none text-[#666666]">Enrollment Date</p>
@@ -301,6 +332,31 @@ const ProfileSection = () => {
                 <div className="mt-[16px] rounded-[9px] border border-[#10c79a] bg-[#e8f6ea] px-[16px] py-[17px]">
                   <p className="text-[12px] font-normal leading-none text-[#666666]">Current GPA</p>
                   <p className="mt-[10px] text-[24px] font-normal leading-none text-[#10c79a]">{d?.gpa}</p>
+                </div>
+              </section>
+              <section>
+                <h3 className="mb-[20px] text-[20px] font-normal leading-none text-[#111111]">Guardian Information</h3>
+                <div className="grid grid-cols-1 gap-[16px] sm:grid-cols-2">
+                  {([
+                    ['name', 'Guardian Name'],
+                    ['relationship', 'Relationship'],
+                    ['email', 'Guardian Email'],
+                    ['phone', 'Guardian Phone'],
+                  ] as const).map(([key, label]) => (
+                    <div key={key} className="min-w-0 rounded-[9px] bg-[#f4f4f4] px-[16px] py-[18px]">
+                      <p className="mb-[10px] text-[12px] font-normal leading-none text-[#666666]">{label}</p>
+                      {isEditing ? (
+                        <input
+                          aria-label={label}
+                          value={form.guardian[key]}
+                          onChange={(e) => setForm({ ...form, guardian: { ...form.guardian, [key]: e.target.value } })}
+                          className="w-full border-b border-orange-200 bg-transparent text-[14px] font-normal text-[#111111] outline-none"
+                        />
+                      ) : (
+                        <p className="truncate text-[14px] font-normal leading-none text-[#111111]">{d?.guardian[key] || '—'}</p>
+                      )}
+                    </div>
+                  ))}
                 </div>
               </section>
               <section>
