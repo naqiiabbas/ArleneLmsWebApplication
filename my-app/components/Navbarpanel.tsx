@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Bell, Menu, X } from 'lucide-react';
 import Sidebar from './Sidebar';
 import ProfileMenu from './ProfileMenu';
-import { HeaderAvatar, HeaderName, NotificationDot, useHeaderInfo } from './HeaderProfile';
+import { HeaderAvatar, HeaderName, NotificationDot, headerGreeting, useHeaderInfo } from './HeaderProfile';
 
 type NavbarProps = {
   isSidebarOpen?: boolean;
@@ -46,8 +46,7 @@ const Navbar = ({ isSidebarOpen = false, onMenuClick }: NavbarProps) => {
           {sidebarOpen ? <X size={24} strokeWidth={2.4} /> : <Menu size={24} strokeWidth={2.4} />}
         </button>
         <div className="flex flex-col">
-        {/* Changed Hussain to Alex as requested */}
-          <h2 className="text-[22px] font-bold tracking-tight leading-none md:text-[26px]">Hi, Alex</h2>
+          <h2 className="text-[22px] font-bold tracking-tight leading-none md:text-[26px]">{headerGreeting(me)}</h2>
         </div>
       </div>
 

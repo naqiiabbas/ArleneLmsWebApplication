@@ -127,6 +127,12 @@ export function NotificationDot({ info }: { info: HeaderInfo | null }) {
   );
 }
 
+/** "Hi, Sam" from the signed-in user's name; just "Hi" while it loads. */
+export function headerGreeting(info: HeaderInfo | null): string {
+  const first = info?.name.split(/\s+/).find(Boolean);
+  return first ? `Hi, ${first}` : "Hi";
+}
+
 /** Name line: real name, or a placeholder bar while loading. */
 export function HeaderName({ info, className }: { info: HeaderInfo | null; className: string }) {
   if (!info) return <span className={`block h-[13px] w-[96px] animate-pulse rounded bg-white/30 ${className}`} />;

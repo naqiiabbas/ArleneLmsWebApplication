@@ -1088,7 +1088,7 @@ wherever the answer now lives.
   excused/unexcused. `recordAbsencesForSession` skips students enrolled after the session ended, so past
   sessions yield no rows. `class_schedules` has no UI.
 - **Kiosk:** grace/photo settings have no UI; not restricted to classroom iPads; no attempt limit on codes.
-- **Student header** hard-codes "Hi, Alex" (`Navbarpanel.tsx`). `npm audit` reports a critical finding on `next` 16.2.0.
+- `npm audit` reports a critical finding on `next` 16.2.0.
 - **Time zone:** `America/Los_Angeles` (auto DST) is hard-coded and correct for sessions, kiosk and attendance.
   The Settings "Timezone" box (`site.timezone`) has no effect and defaults to "UTC-5 (Eastern)". About 30
   server-side `toLocale*` calls without `timeZone` (Activity Logs, last login, notes, messages, notifications,
