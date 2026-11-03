@@ -1066,6 +1066,34 @@ wherever the answer now lives.
 
 ---
 
+## 14b. Known Gaps from Client Review (2026-11-03)
+
+**Built 2026-11-03 (no schema change; check deploy state before assuming it is live):**
+- **Calendar events** (`lib/data/events.ts`, `Calendaradmin.tsx`, `ProgramEvents.tsx`): `updateEvent`, delete UI,
+  location, Workshop/Fundraiser types, attachments in `event_materials` + private `attachments` bucket under
+  `events/<eventId>/` (closed type list, 10 MB, `getEventMaterialUrl` applies event visibility). Clicking a day
+  lists its events, including past ones. Create/update/delete write `activity_logs`.
+- **Admin sessions** (`dashboard.ts`, `Adminpanel.tsx`): `createDashboardSession` + `createDashboardClass`, gated by
+  `attendance.manage`.
+- **Student code** on Profile and My Attendance. No parent portal, so parents still can't see it.
+- **Kiosk** (`Attendancewrk.tsx`, `kiosk.ts`): explicit preview (never sent) then final picture, no auto-capture.
+  Buttons wait for a centered face, unless the face model fails to load, when check-in proceeds without the check.
+  `device` is saved from a client-side check against a server allow-list (self-reported, not proof of location).
+- **Exports** (`Attencon.tsx`): `.xlsx` via `exceljs` (loaded on click); CSV/PDF/Excel share `EXPORT_COLUMNS` incl. Device.
+- Tested with `next dev` + Chrome against an in-memory Supabase stand-in, plus read-only query checks on live.
+  **Not** tested: real Postgres/Storage writes, face detection with a real face, a real iPad.
+
+**Still open from that review:**
+- **Attendance entry:** no way to add a record. Mentors change status on existing rows; admins only set
+  excused/unexcused. `recordAbsencesForSession` skips students enrolled after the session ended, so past
+  sessions yield no rows. `class_schedules` has no UI.
+- **Kiosk:** grace/photo settings have no UI; not restricted to classroom iPads; no attempt limit on codes.
+- **Student header** hard-codes "Hi, Alex" (`Navbarpanel.tsx`). `npm audit` reports a critical finding on `next` 16.2.0.
+- **Time zone:** `America/Los_Angeles` (auto DST) is hard-coded and correct for sessions, kiosk and attendance.
+  The Settings "Timezone" box (`site.timezone`) has no effect and defaults to "UTC-5 (Eastern)". About 30
+  server-side `toLocale*` calls without `timeZone` (Activity Logs, last login, notes, messages, notifications,
+  billing...) render UTC.
+
 ## 15. Open Questions / To Confirm
 
 - [x] Backend layer choice — **DECIDED: Next.js + Supabase (§9).**

@@ -214,6 +214,12 @@ const ProfileSection = () => {
             <h2 className="text-[24px] font-semibold leading-none text-[#111111]">{d?.name ?? '—'}</h2>
             <p className="mt-[13px] text-[16px] font-normal leading-[1.45] text-[#666666]">{d?.major} &bull; {d?.year}</p>
             <p className="mt-[8px] text-[14px] font-normal leading-none text-[#666666]">Student ID: {d?.studentId} <span className="mx-[13px]">&bull;</span> GPA: {d?.gpa}</p>
+            {d?.attendanceCode && (
+              <p className="mt-[12px] inline-flex items-center gap-[8px] rounded-[8px] bg-[#fff7e8] px-[12px] py-[7px] text-[14px] text-[#666666]">
+                Attendance code
+                <span className="text-[18px] font-semibold leading-none tracking-[0.15em] text-[#111111]">{d.attendanceCode}</span>
+              </p>
+            )}
           </div>
           <button
             onClick={() => (isEditing ? saveEdit() : startEdit())}

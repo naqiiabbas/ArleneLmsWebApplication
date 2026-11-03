@@ -4,9 +4,9 @@
 // read-only inside the mentor and student calendars. They used to exist only in
 // the admin calendar, so mentors and students never saw them.
 import React, { useEffect, useState } from "react";
-import { CalendarDays, Clock, X } from "lucide-react";
-import { getMyEvents } from "@/lib/data/events";
-import type { VisibleEvent } from "@/lib/data/events.types";
+import { CalendarDays, Clock, MapPin, Paperclip, X } from "lucide-react";
+import { getEventMaterialUrl, getMyEvents } from "@/lib/data/events";
+import type { EventMaterial, VisibleEvent } from "@/lib/data/events.types";
 
 /** Purple, so events never get mistaken for the orange class sessions. */
 export const EVENT_COLOR = "#7c3aed";
@@ -104,6 +104,34 @@ export function UpcomingEventsList({
   );
 }
 
+/** Opens an attachment through a short-lived signed link. */
+export function EventMaterialLink({ material }: { material: EventMaterial }) {
+  const [error, setError] = useState("");
+
+  const open = async () => {
+    setError("");
+    // Open first: browsers block a new tab once this click has awaited anything.
+    const tab = window.open("", "_blank");
+    const res = await getEventMaterialUrl(material.id);
+    if (res.url && tab) {
+      tab.location.href = res.url;
+    } else {
+      tab?.close();
+      setError(res.error ?? "Your browser blocked the new tab. Allow pop-ups and try again.");
+    }
+  };
+
+  return (
+    <span className="block min-w-0">
+      <button type="button" onClick={open} className="flex max-w-full items-center gap-[8px] text-left text-[14px] text-[#7c3aed] hover:underline">
+        <Paperclip size={15} className="shrink-0" />
+        <span className="truncate">{material.name}</span>
+      </button>
+      {error && <span className="mt-[2px] block text-[12px] text-red-600">{error}</span>}
+    </span>
+  );
+}
+
 export function EventDetailsModal({ event, onClose }: { event: VisibleEvent | null; onClose: () => void }) {
   if (!event) return null;
   return (
@@ -129,7 +157,29 @@ export function EventDetailsModal({ event, onClose }: { event: VisibleEvent | nu
               <Clock size={18} className="text-[#657183]" /> {event.time}
             </p>
           )}
+          {event.location && (
+            <p className="flex items-start gap-[10px]">
+              <MapPin size={18} className="mt-[2px] shrink-0 text-[#657183]" />
+              {/^https?:\/\//i.test(event.location) ? (
+                <a href={event.location} target="_blank" rel="noopener noreferrer" className="break-all text-[#7c3aed] hover:underline">
+                  {event.location}
+                </a>
+              ) : (
+                <span className="break-words">{event.location}</span>
+              )}
+            </p>
+          )}
           <p className="whitespace-pre-wrap leading-[1.5] text-[#555555]">{event.description || "No description provided."}</p>
+          {event.materials.length > 0 && (
+            <div>
+              <p className="mb-[8px] text-[13px] font-medium text-[#657183]">Attached materials</p>
+              <div className="space-y-[6px]">
+                {event.materials.map((m) => (
+                  <EventMaterialLink key={m.id} material={m} />
+                ))}
+              </div>
+            </div>
+          )}
           <p className="text-[12px] text-[#999999]">Posted by the program administrators.</p>
         </div>
       </div>

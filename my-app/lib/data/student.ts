@@ -196,7 +196,8 @@ export async function getStudentAttendance(): Promise<StudentAttendance> {
   const admin = createAdminClient()
   await sweepEndedSessions(admin)
 
-  const [{ data: summary }, { data: rows, error }] = await Promise.all([
+  const [{ data: stu }, { data: summary }, { data: rows, error }] = await Promise.all([
+    admin.from("students").select("attendance_code").eq("id", userId).maybeSingle(),
     admin
       .from("student_attendance_summary")
       .select("present, late, absent, total, attendance_pct")
@@ -239,6 +240,7 @@ export async function getStudentAttendance(): Promise<StudentAttendance> {
   })
 
   return {
+    attendanceCode: stu?.attendance_code ?? "",
     stats: { total, attended: present + late, missed: absent, ratePct, late },
     history,
   }
@@ -308,7 +310,7 @@ export async function getStudentProfile(): Promise<StudentProfile> {
       admin.from("profiles").select("full_name, email, phone, avatar_url").eq("id", userId).single(),
       admin
         .from("students")
-        .select("student_code, course, academic_year, gpa, date_of_birth, address, about, enrollment_date, expected_graduation")
+        .select("student_code, attendance_code, course, academic_year, gpa, date_of_birth, address, about, enrollment_date, expected_graduation")
         .eq("id", userId)
         .maybeSingle(),
       admin
@@ -383,6 +385,7 @@ export async function getStudentProfile(): Promise<StudentProfile> {
     major: stu?.course ?? "—",
     year: stu?.academic_year ?? "—",
     studentId: stu?.student_code ?? "—",
+    attendanceCode: stu?.attendance_code ?? "",
     gpa: stu?.gpa != null ? String(stu.gpa) : "—",
     enrollmentDate: fmtMonthYear(stu?.enrollment_date ?? null),
     expectedGraduation: fmtMonthYear(stu?.expected_graduation ?? null),

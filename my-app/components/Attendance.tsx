@@ -25,6 +25,7 @@ const STAT_META: { key: keyof StudentAttendance["stats"]; label: string; icon: s
 ];
 
 const EMPTY: StudentAttendance = {
+  attendanceCode: "",
   stats: { total: 0, attended: 0, missed: 0, ratePct: 0, late: 0 },
   history: [],
 };
@@ -96,6 +97,16 @@ export default function AttendanceSection() {
           Export Report
         </button>
       </div>
+
+      {data?.attendanceCode && (
+        <div className="mb-[16px] flex flex-wrap items-center justify-between gap-3 rounded-[12px] border border-[#ffd88d] bg-[#fff7e8] px-[20px] py-[16px]">
+          <div>
+            <p className="text-[16px] font-semibold text-[#111111]">Your attendance code</p>
+            <p className="mt-[4px] text-[14px] text-[#666666]">Enter this on the classroom iPad to check in. Keep it private.</p>
+          </div>
+          <span className="text-[30px] font-bold leading-none tracking-[0.2em] text-[#111111]">{data.attendanceCode}</span>
+        </div>
+      )}
 
       {notice && (
         <div className="mb-[16px] rounded-[8px] border border-red-200 bg-red-50 px-4 py-3 text-[14px] font-semibold text-red-700">

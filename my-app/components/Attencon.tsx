@@ -45,6 +45,30 @@ type StatusFilter = (typeof STATUS_FILTERS)[number]["id"];
 const EXCUSE_LABEL: Record<ExcuseState, string> = { none: "Needs review", excused: "Excused", unexcused: "Unexcused" };
 const excuseLabel = (r: AttendanceRecord) => (r.status === "Absent" ? EXCUSE_LABEL[r.excuse] : "");
 
+// One definition for the CSV, Excel and PDF exports, so they can't drift apart.
+const EXPORT_COLUMNS = [
+  { header: "Student ID", width: 12 },
+  { header: "Student Name", width: 26 },
+  { header: "Class", width: 22 },
+  { header: "Date", width: 12 },
+  { header: "Time", width: 11 },
+  { header: "Status", width: 10 },
+  { header: "Absence", width: 14 },
+  { header: "Batch", width: 14 },
+  { header: "Device", width: 16 },
+];
+const exportRow = (r: AttendanceRecord) => [
+  r.studentId,
+  r.studentName,
+  r.className,
+  r.date,
+  r.time,
+  r.status,
+  excuseLabel(r),
+  r.batch,
+  r.device,
+];
+
 const statusBadgeClass: Record<AttendanceStatus, string> = {
   Present: "bg-[#d9f8e6] text-[#009a3d]",
   Late: "bg-[#ffe9d6] text-[#c65300]",
@@ -198,10 +222,10 @@ export default function Attencon() {
     doc.text(`Filters: Status = ${statusFilterLabel}, Date = ${rangeLabel}`, 14, 28);
 
     autoTable(doc, {
-      head: [["Student ID", "Student Name", "Class", "Time", "Status", "Absence", "Date", "Batch"]],
-      body: filteredRecords.map((r) => [r.studentId, r.studentName, r.className, r.time, r.status, excuseLabel(r), r.date, r.batch]),
+      head: [EXPORT_COLUMNS.map((c) => c.header)],
+      body: filteredRecords.map(exportRow),
       startY: 34,
-      styles: { fontSize: 9, cellPadding: 2 },
+      styles: { fontSize: 8, cellPadding: 2 },
       headStyles: { fillColor: [249, 166, 24] },
     });
 
@@ -211,10 +235,8 @@ export default function Attencon() {
   const downloadCsv = () => {
     if (typeof window === "undefined") return;
     const esc = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-    const header = "Student ID,Student Name,Class,Time,Status,Absence,Date,Batch\n";
-    const rows = filteredRecords
-      .map((r) => [r.studentId, r.studentName, r.className, r.time, r.status, excuseLabel(r), r.date, r.batch].map(esc).join(","))
-      .join("\n");
+    const header = EXPORT_COLUMNS.map((c) => c.header).join(",") + "\n";
+    const rows = filteredRecords.map((r) => exportRow(r).map(esc).join(",")).join("\n");
     const blob = new Blob([header + rows], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -224,9 +246,34 @@ export default function Attencon() {
     URL.revokeObjectURL(url);
   };
 
+  const downloadExcel = async () => {
+    if (typeof window === "undefined") return;
+    try {
+      // Large library: loaded only when someone actually exports.
+      const ExcelJS = (await import("exceljs")).default;
+      const workbook = new ExcelJS.Workbook();
+      const sheet = workbook.addWorksheet("Attendance", { views: [{ state: "frozen", ySplit: 1 }] });
+      sheet.columns = EXPORT_COLUMNS.map((c) => ({ header: c.header, width: c.width }));
+      filteredRecords.forEach((r) => sheet.addRow(exportRow(r)));
+      sheet.getRow(1).font = { bold: true };
+      sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: EXPORT_COLUMNS.length } };
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `attendance-report-${todayStr || new Date().toISOString().split("T")[0]}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setNotice({ text: `Could not create the Excel file: ${(e as Error).message}`, error: true });
+    }
+  };
+
   return (
     <div className="min-h-full bg-[#f4f4f4] px-6 py-6 font-[Poppins]">
-      <div className="mb-[24px] flex items-center justify-between gap-4">
+      <div className="mb-[24px] flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-[12px]">
           <div className="flex h-[48px] w-[48px] items-center justify-center rounded-[8px] bg-[#fff7e8]">
             <img src="/images/admin-attendance-header.svg" alt="" className="h-6 w-6" />
@@ -237,7 +284,7 @@ export default function Attencon() {
           </div>
         </div>
 
-        <div className="flex items-center gap-[12px]">
+        <div className="flex flex-wrap items-center gap-[12px]">
           <label className={`relative flex h-[48px] min-w-[170px] items-center gap-[10px] rounded-[8px] border border-[#d6d6d6] px-[16px] text-[16px] font-normal text-[#F9A618] transition-colors hover:bg-[#fff7e8] ${dateRange !== "all" ? "bg-[#fff7e8]" : "bg-white"}`}>
             <img src="/images/admin-attendance-filter.svg" alt="" className="h-4 w-4" />
             <select
@@ -257,6 +304,13 @@ export default function Attencon() {
           >
             <Download size={18} strokeWidth={2} />
             Export CSV
+          </button>
+          <button
+            onClick={downloadExcel}
+            className="flex h-[48px] min-w-[126px] items-center justify-center gap-[10px] rounded-[8px] border border-[#d6d6d6] bg-white px-[20px] text-[16px] font-normal text-[#F9A618] transition-colors hover:bg-[#fff7e8]"
+          >
+            <Download size={18} strokeWidth={2} />
+            Export Excel
           </button>
           <button
             onClick={downloadReport}

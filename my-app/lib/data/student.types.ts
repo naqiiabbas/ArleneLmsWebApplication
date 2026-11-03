@@ -72,6 +72,7 @@ export interface StudentProfileActivity {
 }
 
 export interface StudentProfile {
+  attendanceCode: string // the student's own 4-digit iPad check-in code
   name: string
   avatar: string
   email: string
@@ -190,6 +191,7 @@ export interface StudentAttendanceRow {
 }
 
 export interface StudentAttendance {
+  attendanceCode: string // the student's own 4-digit iPad check-in code
   stats: {
     total: number
     attended: number

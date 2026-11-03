@@ -1,5 +1,11 @@
 // UI-facing types for the admin Calendar module.
-export type EventType = "Session" | "Meeting" | "Deadline" | "Holiday"
+export type EventType = "Session" | "Meeting" | "Deadline" | "Holiday" | "Workshop" | "Fundraiser"
+
+/** A file attached to an event. Opened through a short-lived signed link. */
+export type EventMaterial = {
+  id: string
+  name: string
+}
 
 /**
  * Who sees an event in their own calendar. Stored on events.visibility
@@ -16,6 +22,8 @@ export type UIEvent = {
   participants: string[]
   description: string
   audience: EventAudience
+  location: string
+  materials: EventMaterial[]
 }
 
 export type EventInput = {
@@ -26,6 +34,7 @@ export type EventInput = {
   participants: string[]
   description: string
   audience: EventAudience
+  location: string
 }
 
 /** An admin-created event as shown read-only in a mentor's / student's calendar. */
@@ -36,4 +45,6 @@ export type VisibleEvent = {
   time: string // free-text label, e.g. "6:00 PM"
   type: EventType
   description: string
+  location: string
+  materials: EventMaterial[]
 }

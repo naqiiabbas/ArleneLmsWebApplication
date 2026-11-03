@@ -3,14 +3,27 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { verifyAttendanceCode, markKioskAttendance } from "@/lib/data/kiosk";
 
+// iPadOS Safari identifies itself as a Mac, so touch support is what tells them apart.
+function detectDevice(): string {
+  const ua = navigator.userAgent;
+  if (/iPad/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) return "Classroom iPad";
+  if (/iPhone|iPod/.test(ua) || (/Android/.test(ua) && /Mobile/.test(ua))) return "Phone";
+  if (/Android|Tablet/.test(ua)) return "Tablet";
+  return "Computer";
+}
+
 export default function AttendanceFlow() {
   const [currentStep, setCurrentStep] = useState(0);
   const [passcode, setPasscode] = useState("");
   const [stream, setStream] = useState<MediaStream | null>(null);
-  const [, setCapturedImg] = useState<string | null>(null);
+  // Picture 1: positioning only. Held in memory for this screen and never sent anywhere.
+  const [previewImg, setPreviewImg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isFaceDetected, setIsFaceDetected] = useState(false);
   const [isLoadingModel, setIsLoadingModel] = useState(false);
+  // If the face model can't load (e.g. a blocked network) check-in still works;
+  // the stored photo remains the proof.
+  const [modelFailed, setModelFailed] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [codeError, setCodeError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -25,8 +38,6 @@ export default function AttendanceFlow() {
   const modelPromiseRef = useRef<Promise<any> | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const currentStepRef = useRef(currentStep);
-  const hasCapturedRef = useRef(false);
-  const captureTimeoutRef = useRef<number | null>(null);
   const videoReadyRef = useRef(false);
   const lastVideoTimeRef = useRef(-1);
   const lastDetectTsRef = useRef(0);
@@ -63,8 +74,8 @@ export default function AttendanceFlow() {
     setCodeError(null);
     setResult(null);
     setGreeting(null);
-    setCapturedImg(null);
-    hasCapturedRef.current = false;
+    setPreviewImg(null);
+    setModelFailed(false);
     submittingRef.current = false;
   };
 
@@ -107,10 +118,10 @@ export default function AttendanceFlow() {
 
     try {
       return await modelPromiseRef.current;
-    } catch (err) {
-      setError("AI model failed to load.");
+    } catch {
+      setModelFailed(true);
       modelPromiseRef.current = null;
-      throw err;
+      return null;
     } finally {
       setIsLoadingModel(false);
     }
@@ -120,10 +131,6 @@ export default function AttendanceFlow() {
     if (detectionLoopRef.current) {
       cancelAnimationFrame(detectionLoopRef.current);
       detectionLoopRef.current = null;
-    }
-    if (captureTimeoutRef.current) {
-      window.clearTimeout(captureTimeoutRef.current);
-      captureTimeoutRef.current = null;
     }
   }, []);
 
@@ -139,20 +146,18 @@ export default function AttendanceFlow() {
     }
   }, []);
 
-  const capturePhoto = useCallback(async () => {
+  // Draw the current camera frame as a downscaled, mirrored JPEG.
+  const grabFrame = useCallback((): string | null => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    if (!video || !canvas || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
+    if (!video || !canvas || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return null;
 
     const width = video.videoWidth || video.clientWidth;
     const height = video.videoHeight || video.clientHeight;
-    if (!width || !height) return;
+    if (!width || !height) return null;
 
     const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    if (submittingRef.current) return; // auto-capture and the button can both fire
-    submittingRef.current = true;
+    if (!ctx) return null;
 
     // ~640px JPEG (≈50–150 KB) — plenty for photo proof, fast to upload on an iPad.
     const scale = Math.min(1, 640 / width);
@@ -163,8 +168,24 @@ export default function AttendanceFlow() {
     ctx.setTransform(-scale, 0, 0, scale, w, 0); // mirror, like the preview
     ctx.drawImage(video, 0, 0, width, height);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.82);
-    setCapturedImg(dataUrl);
+    return canvas.toDataURL("image/jpeg", 0.82);
+  }, []);
+
+  // Picture 1: lets the student check how they look, then it's thrown away.
+  const takePreview = useCallback(() => {
+    const dataUrl = grabFrame();
+    if (!dataUrl) return;
+    setPreviewImg(dataUrl);
+    setCurrentStep(3);
+  }, [grabFrame]);
+
+  // Picture 2: the only image that is submitted and stored.
+  const takeFinalPicture = useCallback(async () => {
+    if (submittingRef.current) return;
+    const dataUrl = grabFrame();
+    if (!dataUrl) return;
+    submittingRef.current = true;
+    setPreviewImg(null);
 
     // Stop the camera/detection and submit the check-in.
     stopDetection();
@@ -172,7 +193,7 @@ export default function AttendanceFlow() {
     setSubmitting(true);
     let res: Awaited<ReturnType<typeof markKioskAttendance>>;
     try {
-      res = await markKioskAttendance(passcodeRef.current, dataUrl);
+      res = await markKioskAttendance(passcodeRef.current, dataUrl, detectDevice());
     } catch {
       res = { error: "Couldn't reach the server. Please try again." };
     } finally {
@@ -185,13 +206,13 @@ export default function AttendanceFlow() {
     }
     setResult({ name: res.name ?? "Student", status: res.status ?? "present", time: res.time });
     setCurrentStep(4);
-  }, [stopDetection, stopCamera]);
+  }, [grabFrame, stopDetection, stopCamera]);
 
   const runDetection = useCallback(() => {
     const video = videoRef.current;
     const faceLandmarker = faceLandmarkerRef.current;
 
-    if (currentStepRef.current !== 2 || !video || !faceLandmarker || hasCapturedRef.current) {
+    if ((currentStepRef.current !== 2 && currentStepRef.current !== 3) || !video || !faceLandmarker) {
       detectionLoopRef.current = null;
       return;
     }
@@ -218,14 +239,7 @@ export default function AttendanceFlow() {
           const nose = results.faceLandmarks[0][4];
           const inCenter = nose.x > 0.35 && nose.x < 0.65 && nose.y > 0.3 && nose.y < 0.7;
 
-          if (inCenter) {
-            hasCapturedRef.current = true;
-            setIsFaceDetected(true);
-            setCurrentStep(3);
-            captureTimeoutRef.current = window.setTimeout(capturePhoto, 1000);
-            detectionLoopRef.current = null;
-            return;
-          }
+          setIsFaceDetected(inCenter);
         } else {
           setIsFaceDetected(false);
         }
@@ -234,7 +248,7 @@ export default function AttendanceFlow() {
       setIsFaceDetected(false);
     }
     detectionLoopRef.current = requestAnimationFrame(runDetection);
-  }, [capturePhoto]);
+  }, []);
 
   const startCamera = useCallback(async () => {
     try {
@@ -306,12 +320,15 @@ export default function AttendanceFlow() {
 
     if (currentStep === 2) {
       setError(null);
-      setIsFaceDetected(false);
-      hasCapturedRef.current = false;
-      videoReadyRef.current = false;
-      lastVideoTimeRef.current = -1;
+      // "Retake preview" comes back here with the camera still running.
+      const cameraRunning = !!streamRef.current;
+      if (!cameraRunning) {
+        setIsFaceDetected(false);
+        videoReadyRef.current = false;
+        lastVideoTimeRef.current = -1;
+      }
 
-      Promise.all([loadModel(), startCamera()])
+      Promise.all([loadModel(), cameraRunning ? undefined : startCamera()])
         .then(() => {
           if (!isCancelled && currentStepRef.current === 2 && !detectionLoopRef.current) {
             detectionLoopRef.current = requestAnimationFrame(runDetection);
@@ -371,10 +388,10 @@ export default function AttendanceFlow() {
       {currentStep === 0 && (
         <div className="flex min-h-screen flex-col items-center justify-center px-6 pb-[32px] pt-[20px] text-center">
           <Logo size="large" />
-          <h1 className="mt-[34px] text-[58px] font-bold leading-none tracking-[0] text-[#0a0a0a] max-sm:text-[42px]">Mark Attendance</h1>
-          <p className="mt-[42px] text-[30px] font-normal leading-none tracking-[0] text-[#0a0a0a] max-sm:text-[22px]">Enter your attendance code</p>
+          <h1 className="mt-[34px] text-[58px] font-bold leading-none tracking-[0] text-[#0a0a0a] max-sm:text-[42px]">Welcome</h1>
+          <p className="mt-[42px] text-[30px] font-normal leading-none tracking-[0] text-[#0a0a0a] max-sm:text-[22px]">Tap below to check in with your attendance code</p>
           <button onClick={() => setCurrentStep(1)} className="mt-[49px] h-[104px] w-full max-w-[529px] rounded-[12px] bg-[#F9A618] text-[36px] font-bold leading-none text-[#0a0a0a] transition active:scale-[0.99] max-sm:h-[76px] max-sm:text-[28px]">
-            Start
+            Mark Attendance
           </button>
         </div>
       )}
@@ -413,8 +430,11 @@ export default function AttendanceFlow() {
 
       {(currentStep === 2 || currentStep === 3) && (
         <div className="flex min-h-screen flex-col items-center px-5 pb-[28px] pt-[84px] max-[700px]:pt-[165px]">
-          <h2 className={`text-center font-bold leading-none tracking-[0] text-[#0a0a0a] ${currentStep === 2 ? "text-[48px] max-sm:text-[34px]" : "text-[48px] max-sm:text-[38px]"}`}>
-            {currentStep === 2 ? `${greeting ? greeting + " " : ""}Position Your Face in the Frame` : "Hold Still…"}
+          <p className="mb-[14px] text-center text-[20px] font-medium leading-none text-[#737373]">
+            Picture {currentStep === 2 ? 1 : 2} of 2
+          </p>
+          <h2 className="text-center text-[48px] font-bold leading-none tracking-[0] text-[#0a0a0a] max-sm:text-[34px]">
+            {currentStep === 2 ? `${greeting ? greeting + " " : ""}Take a Preview Picture` : "Take Your Final Picture"}
           </h2>
           <div className="relative mt-[34px] h-[528px] w-full max-w-[640px] overflow-hidden rounded-[12px] border border-[#737373] bg-white max-sm:h-[440px]">
             {isLoadingModel && (
@@ -429,19 +449,62 @@ export default function AttendanceFlow() {
 
             {/* Face guide over the LIVE preview; the placeholder only shows until the camera starts. */}
             <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
-              <div className={`flex h-[460px] w-[376px] items-center justify-center rounded-[190px] border-[3px] shadow-[0_3px_5px_rgba(0,0,0,0.24)] transition-colors max-sm:h-[350px] max-sm:w-[286px] ${currentStep === 3 ? "border-[#12C79A]" : "border-[#F9A618]"}`}>
+              <div className={`flex h-[460px] w-[376px] items-center justify-center rounded-[190px] border-[3px] shadow-[0_3px_5px_rgba(0,0,0,0.24)] transition-colors max-sm:h-[350px] max-sm:w-[286px] ${isFaceDetected ? "border-[#12C79A]" : "border-[#F9A618]"}`}>
                 {!stream && <FaceMark label="Camera Preview" />}
               </div>
             </div>
+
+            {/* Picture 1, so the student can compare. Not stored or sent. */}
+            {currentStep === 3 && previewImg && (
+              <div className="absolute bottom-3 right-3 z-20 overflow-hidden rounded-[8px] border-2 border-white shadow-lg">
+                <img src={previewImg} alt="Your preview" className="h-[110px] w-[146px] object-cover" />
+                <span className="block bg-black/60 py-[3px] text-center text-[12px] text-white">Preview (not saved)</span>
+              </div>
+            )}
           </div>
           <div className="flex w-full flex-col items-center">
-            {currentStep === 3 ? (
-              <button onClick={capturePhoto} disabled={submitting} className="mt-[32px] h-[85px] w-full max-w-[282px] rounded-[12px] bg-[#F9A618] text-[30px] font-bold leading-none text-[#0a0a0a] transition active:scale-[0.99] disabled:opacity-60">
-                {submitting ? "Marking…" : "Capture Photo"}
-              </button>
-            ) : (
-              <p className="mt-[34px] text-center text-[24px] font-normal leading-none text-[#737373]">{isFaceDetected ? "Face clear and ready to capture..." : "Please look at the camera..."}</p>
-            )}
+            {(() => {
+              const canShoot = !!stream && !error && !isLoadingModel && (isFaceDetected || modelFailed);
+              const hint = error
+                ? ""
+                : !stream || isLoadingModel
+                  ? "Starting the camera..."
+                  : canShoot
+                    ? currentStep === 2
+                      ? "Looks good. This picture is only for positioning and won't be saved."
+                      : "This is the picture that will be saved as your attendance proof."
+                    : "Center your face inside the frame.";
+              return (
+                <>
+                  <p className="mt-[24px] min-h-[24px] text-center text-[20px] font-normal leading-[1.2] text-[#737373] max-sm:text-[16px]">{hint}</p>
+                  <button
+                    onClick={currentStep === 2 ? takePreview : takeFinalPicture}
+                    disabled={!canShoot || submitting}
+                    className="mt-[18px] h-[85px] w-full max-w-[360px] rounded-[12px] bg-[#F9A618] text-[30px] font-bold leading-none text-[#0a0a0a] transition active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-[#ffd88d] max-sm:text-[24px]"
+                  >
+                    {currentStep === 2 ? "Take Preview" : submitting ? "Marking…" : "Take Final Picture"}
+                  </button>
+                  <div className="mt-[16px] flex items-center gap-[28px]">
+                    {currentStep === 3 && (
+                      <button
+                        type="button"
+                        disabled={submitting}
+                        onClick={() => {
+                          setPreviewImg(null);
+                          setCurrentStep(2);
+                        }}
+                        className="text-[20px] font-medium text-[#666666] underline disabled:opacity-50"
+                      >
+                        Retake preview
+                      </button>
+                    )}
+                    <button type="button" disabled={submitting} onClick={resetFlow} className="text-[20px] font-medium text-[#666666] underline disabled:opacity-50">
+                      Cancel
+                    </button>
+                  </div>
+                </>
+              );
+            })()}
           </div>
         </div>
       )}

@@ -14,20 +14,33 @@ import {
   startOfMonth,
   startOfWeek,
 } from "date-fns";
-import { listEvents, createEvent } from "@/lib/data/events";
-import type { EventAudience } from "@/lib/data/events.types";
+import { MapPin, Paperclip, Pencil, Trash2, X } from "lucide-react";
+import {
+  createEvent,
+  deleteEvent,
+  deleteEventMaterial,
+  listEvents,
+  updateEvent,
+  uploadEventMaterial,
+} from "@/lib/data/events";
+import type { EventAudience, EventMaterial, EventType, UIEvent } from "@/lib/data/events.types";
+import { EventMaterialLink } from "@/components/ProgramEvents";
 
-type EventType = "Session" | "Meeting" | "Deadline" | "Holiday";
+type EventItem = UIEvent;
 
-type EventItem = {
-  id: string;
-  title: string;
-  date: string;
-  time: string;
-  type: EventType;
-  participants: string[];
-  description: string;
-  audience: EventAudience;
+const MATERIAL_MAX_BYTES = 10 * 1024 * 1024;
+const MATERIAL_ACCEPT = ".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.csv,.txt,.jpg,.jpeg,.png,.webp,.gif";
+
+const EMPTY_FORM = {
+  title: "",
+  date: "",
+  startTime: "",
+  endTime: "",
+  type: "Session" as EventType,
+  participants: "",
+  description: "",
+  audience: "Everyone" as EventAudience,
+  location: "",
 };
 
 
@@ -36,6 +49,8 @@ const typeColor: Record<EventType, string> = {
   Meeting: "bg-[#00c853]",
   Deadline: "bg-[#ff2d3d]",
   Holiday: "bg-[#a842f4]",
+  Workshop: "bg-[#00acc1]",
+  Fundraiser: "bg-[#f4511e]",
 };
 
 export default function Calendaradmin() {
@@ -46,16 +61,14 @@ export default function Calendaradmin() {
   const [submitting, setSubmitting] = useState(false);
   const [notice, setNotice] = useState<{ type: "success" | "error"; msg: string } | null>(null);
   const [showModal, setShowModal] = useState(false);
-  const [form, setForm] = useState({
-    title: "",
-    date: "",
-    startTime: "",
-    endTime: "",
-    type: "Session" as EventType,
-    participants: "",
-    description: "",
-    audience: "Everyone" as EventAudience,
-  });
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [keptMaterials, setKeptMaterials] = useState<EventMaterial[]>([]);
+  const [removedMaterials, setRemovedMaterials] = useState<string[]>([]);
+  const [newFiles, setNewFiles] = useState<File[]>([]);
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<EventItem | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   const refresh = async () => {
     setLoading(true);
@@ -83,7 +96,66 @@ export default function Calendaradmin() {
       .slice(0, 4);
   }, [events, today]);
 
-  const addEvent = async (event: React.FormEvent) => {
+  // The side panel: the clicked day's events (any date, past included), else what's next.
+  const listed = useMemo(
+    () => (selectedDay ? events.filter((ev) => ev.date === selectedDay) : upcoming),
+    [events, selectedDay, upcoming],
+  );
+
+  const openAdd = () => {
+    setEditingId(null);
+    setForm({ ...EMPTY_FORM, date: selectedDay ?? "" });
+    setKeptMaterials([]);
+    setRemovedMaterials([]);
+    setNewFiles([]);
+    setShowModal(true);
+  };
+
+  const openEdit = (ev: EventItem) => {
+    const { start, end } = parseTimeLabel(ev.time);
+    setEditingId(ev.id);
+    setForm({
+      title: ev.title,
+      date: ev.date,
+      startTime: start,
+      endTime: end,
+      type: ev.type,
+      participants: ev.participants.join(", "),
+      description: ev.description,
+      audience: ev.audience,
+      location: ev.location,
+    });
+    setKeptMaterials(ev.materials);
+    setRemovedMaterials([]);
+    setNewFiles([]);
+    setShowModal(true);
+  };
+
+  const pickFiles = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const picked = Array.from(event.target.files ?? []);
+    event.target.value = ""; // allow re-picking the same file
+    const tooBig = picked.filter((f) => f.size > MATERIAL_MAX_BYTES);
+    if (tooBig.length) {
+      setNotice({ type: "error", msg: `${tooBig.map((f) => f.name).join(", ")} is larger than 10 MB.` });
+    }
+    setNewFiles((files) => [...files, ...picked.filter((f) => f.size <= MATERIAL_MAX_BYTES)]);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleting || deleteBusy) return;
+    setDeleteBusy(true);
+    const res = await deleteEvent(deleting.id);
+    setDeleteBusy(false);
+    if (res.error) {
+      setNotice({ type: "error", msg: res.error });
+    } else {
+      setNotice({ type: "success", msg: `"${deleting.title}" deleted.` });
+    }
+    setDeleting(null);
+    await refresh();
+  };
+
+  const saveEvent = async (event: React.FormEvent) => {
     event.preventDefault();
     const participants = form.participants
       ? form.participants.split(",").map((p) => p.trim()).filter(Boolean)
@@ -93,7 +165,7 @@ export default function Calendaradmin() {
       return;
     }
     setSubmitting(true);
-    const res = await createEvent({
+    const input = {
       title: form.title,
       date: form.date,
       time: `${formatTime(form.startTime)} - ${formatTime(form.endTime)}`,
@@ -101,15 +173,50 @@ export default function Calendaradmin() {
       participants,
       description: form.description,
       audience: form.audience,
-    });
-    setSubmitting(false);
-    if (res.error) {
-      setNotice({ type: "error", msg: res.error });
+      location: form.location,
+    };
+    let eventId = editingId;
+    let saveError: string | undefined;
+    if (editingId) {
+      saveError = (await updateEvent(editingId, input)).error;
+    } else {
+      const created = await createEvent(input);
+      saveError = created.error;
+      eventId = created.id ?? null;
+    }
+    if (saveError || !eventId) {
+      setSubmitting(false);
+      setNotice({ type: "error", msg: saveError ?? "The event couldn't be saved." });
       return;
     }
-    setNotice({ type: "success", msg: "Event added." });
+
+    // The event itself is saved; file problems are reported without losing it.
+    const fileErrors: string[] = [];
+    for (const id of removedMaterials) {
+      const r = await deleteEventMaterial(id);
+      if (r.error) fileErrors.push(r.error);
+    }
+    for (const file of newFiles) {
+      const fd = new FormData();
+      fd.set("file", file);
+      try {
+        const r = await uploadEventMaterial(eventId, fd);
+        if (r.error) fileErrors.push(r.error);
+      } catch {
+        fileErrors.push(`"${file.name}" couldn't be uploaded.`);
+      }
+    }
+    setSubmitting(false);
+
+    const saved = editingId ? "Event updated." : "Event added.";
+    setNotice(
+      fileErrors.length
+        ? { type: "error", msg: `${saved} But: ${fileErrors.join(" ")}` }
+        : { type: "success", msg: saved },
+    );
     setShowModal(false);
-    setForm({ title: "", date: "", startTime: "", endTime: "", type: "Session", participants: "", description: "", audience: "Everyone" });
+    setForm(EMPTY_FORM);
+    setEditingId(null);
     await refresh();
   };
 
@@ -152,7 +259,7 @@ export default function Calendaradmin() {
         </div>
 
         <button
-          onClick={() => setShowModal(true)}
+          onClick={openAdd}
           className="flex h-[42px] items-center gap-[10px] rounded-[8px] bg-[#ffa313] px-[21px] text-[16px] font-normal text-white transition-colors hover:bg-[#ef970d]"
         >
           <span className="text-[22px] leading-none">+</span>
@@ -198,14 +305,21 @@ export default function Calendaradmin() {
               const dayKey = format(day, "yyyy-MM-dd");
               const dayEvents = outside ? [] : events.filter((ev) => ev.date === dayKey);
               return (
-                <div
+                <button
+                  type="button"
                   key={day.toISOString()}
-                  className={`h-[96px] rounded-[8px] border px-[9px] py-[10px] ${
+                  disabled={outside}
+                  onClick={() => setSelectedDay((d) => (d === dayKey ? null : dayKey))}
+                  aria-pressed={selectedDay === dayKey}
+                  aria-label={`${format(day, "MMMM d, yyyy")}, ${dayEvents.length} event${dayEvents.length === 1 ? "" : "s"}`}
+                  className={`flex h-[96px] w-full flex-col items-start justify-start rounded-[8px] border px-[9px] py-[10px] text-left ${
                     outside
                       ? "border-transparent bg-transparent text-transparent"
-                      : isSelected
-                        ? "border-[#b5cedf] bg-[#e1f2ff] text-[#0073d8]"
-                        : "border-[#d6d6d6] bg-white text-[#111111]"
+                      : selectedDay === dayKey
+                        ? "border-[#ffa313] bg-[#fff7e8] text-[#111111]"
+                        : isSelected
+                          ? "border-[#b5cedf] bg-[#e1f2ff] text-[#0073d8] hover:border-[#ffa313]"
+                          : "border-[#d6d6d6] bg-white text-[#111111] hover:border-[#ffa313]"
                   }`}
                 >
                   {!outside && (
@@ -220,39 +334,73 @@ export default function Calendaradmin() {
                       )}
                     </>
                   )}
-                </div>
+                </button>
               );
             })}
           </div>
         </section>
 
         <aside className="overflow-hidden rounded-[8px] border border-[#d6d6d6] bg-white">
-          <h2 className="border-b border-[#d6d6d6] px-[16px] py-[20px] text-[18px] font-normal leading-none text-[#111111]">
-            Upcoming Events
-          </h2>
+          <div className="flex items-center justify-between gap-3 border-b border-[#d6d6d6] px-[16px] py-[20px]">
+            <h2 className="text-[18px] font-normal leading-none text-[#111111]">
+              {selectedDay ? format(parseISO(selectedDay), "MMM d, yyyy") : "Upcoming Events"}
+            </h2>
+            {selectedDay && (
+              <button type="button" onClick={() => setSelectedDay(null)} className="shrink-0 text-[13px] text-[#ff9f0f] hover:underline">
+                Show upcoming
+              </button>
+            )}
+          </div>
           <div>
             {loading && (
               <p className="px-[16px] py-[17px] text-[14px] text-[#666666]">Loading events...</p>
             )}
-            {!loading && upcoming.length === 0 && (
-              <p className="px-[16px] py-[17px] text-[14px] text-[#666666]">No upcoming events.</p>
+            {!loading && listed.length === 0 && (
+              <p className="px-[16px] py-[17px] text-[14px] text-[#666666]">
+                {selectedDay ? "No events on this day." : "No upcoming events. Click a day to see past events."}
+              </p>
             )}
-            {upcoming.map((event) => (
+            {listed.map((event) => (
               <div key={event.id} className="flex gap-[12px] border-b border-[#d6d6d6] px-[16px] py-[17px] last:border-b-0">
                 <div className="flex h-[48px] w-[48px] shrink-0 items-center justify-center rounded-[8px] bg-[#fff7e8]">
                   <img src="/images/admin-calendar-icon.svg" alt="" className="h-5 w-5" />
                 </div>
-                <div className="min-w-0">
-                  <h3 className="truncate text-[15px] font-normal leading-none text-[#111111]">{event.title}</h3>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <h3 className="min-w-0 break-words text-[15px] font-normal leading-[18px] text-[#111111]">{event.title}</h3>
+                    <div className="flex shrink-0 gap-[4px]">
+                      <button type="button" onClick={() => openEdit(event)} aria-label={`Edit ${event.title}`} title="Edit event" className="flex h-[28px] w-[28px] items-center justify-center rounded-[6px] text-[#666666] transition-colors hover:bg-[#fff7e8] hover:text-[#ff9f0f]">
+                        <Pencil size={15} />
+                      </button>
+                      <button type="button" onClick={() => setDeleting(event)} aria-label={`Delete ${event.title}`} title="Delete event" className="flex h-[28px] w-[28px] items-center justify-center rounded-[6px] text-[#666666] transition-colors hover:bg-[#fff1f2] hover:text-[#ff1f2d]">
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  </div>
                   <p className="mt-[10px] flex items-center gap-[5px] text-[13px] font-normal leading-none text-[#666666]">
                     <ClockIcon />
                     {event.time}
                   </p>
-                  <p className="mt-[10px] text-[13px] font-normal leading-none text-[#666666]">{event.date}</p>
-                  <p className="mt-[10px] flex items-start gap-[5px] text-[13px] font-normal leading-[16px] text-[#666666]">
-                    <UsersIcon />
-                    <span>{event.participants.join("\n")}</span>
-                  </p>
+                  <p className="mt-[10px] text-[13px] font-normal leading-none text-[#666666]">{event.date} · {event.type}</p>
+                  {event.location && (
+                    <p className="mt-[10px] flex items-start gap-[5px] break-words text-[13px] font-normal leading-[16px] text-[#666666]">
+                      <MapPin size={13} className="mt-[1px] shrink-0" />
+                      <span className="min-w-0 break-words">{event.location}</span>
+                    </p>
+                  )}
+                  {event.participants.length > 0 && (
+                    <p className="mt-[10px] flex items-start gap-[5px] text-[13px] font-normal leading-[16px] text-[#666666]">
+                      <UsersIcon />
+                      <span>{event.participants.join(", ")}</span>
+                    </p>
+                  )}
+                  {event.materials.length > 0 && (
+                    <div className="mt-[10px] space-y-[5px]">
+                      {event.materials.map((m) => (
+                        <EventMaterialLink key={m.id} material={m} />
+                      ))}
+                    </div>
+                  )}
                   <p className="mt-[8px] inline-flex rounded-full bg-[#fff7e8] px-[8px] py-[3px] text-[11px] font-medium text-[#c2410c]">
                     {event.audience === "Everyone" ? "Visible to everyone" : event.audience === "Admins" ? "Admins only" : `${event.audience} only`}
                   </p>
@@ -265,11 +413,13 @@ export default function Calendaradmin() {
 
       <section className="mt-[24px] rounded-[8px] border border-[#d6d6d6] bg-white px-[24px] py-[28px]">
         <h2 className="mb-[24px] text-[18px] font-normal leading-none text-[#111111]">Event Types</h2>
-        <div className="grid grid-cols-2 gap-y-[18px] sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-y-[18px] sm:grid-cols-3 lg:grid-cols-6">
           <Legend label="Sessions" color={typeColor.Session} />
           <Legend label="Meetings" color={typeColor.Meeting} />
           <Legend label="Deadlines" color={typeColor.Deadline} />
           <Legend label="Holidays" color={typeColor.Holiday} />
+          <Legend label="Workshops" color={typeColor.Workshop} />
+          <Legend label="Fundraisers" color={typeColor.Fundraiser} />
         </div>
       </section>
 
@@ -277,14 +427,14 @@ export default function Calendaradmin() {
         <div className="fixed inset-0 z-[250] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
           <div className="max-h-[calc(100vh-24px)] w-full max-w-[447px] overflow-y-auto rounded-[8px] bg-white px-[24px] py-[33px] shadow-2xl [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
             <div className="mb-[27px] flex items-center justify-between">
-              <h3 className="text-[18px] font-semibold leading-none text-[#111111]">Add New Event</h3>
+              <h3 className="text-[18px] font-semibold leading-none text-[#111111]">{editingId ? "Edit Event" : "Add New Event"}</h3>
               <button onClick={() => setShowModal(false)} className="relative h-6 w-6" aria-label="Close">
                 <span className="absolute left-1/2 top-1/2 h-[2px] w-[18px] -translate-x-1/2 -translate-y-1/2 rotate-45 bg-[#666666]" />
                 <span className="absolute left-1/2 top-1/2 h-[2px] w-[18px] -translate-x-1/2 -translate-y-1/2 -rotate-45 bg-[#666666]" />
               </button>
             </div>
 
-            <form onSubmit={addEvent}>
+            <form onSubmit={saveEvent}>
               <Field label="Event Title *">
                 <input
                   required
@@ -339,6 +489,8 @@ export default function Calendaradmin() {
                   <option value="Meeting">Meeting</option>
                   <option value="Deadline">Deadline</option>
                   <option value="Holiday">Holiday</option>
+                  <option value="Workshop">Workshop</option>
+                  <option value="Fundraiser">Fundraiser</option>
                 </select>
               </Field>
               <Field label="Who should see this? *">
@@ -352,6 +504,13 @@ export default function Calendaradmin() {
                   <option value="Students">Students only</option>
                   <option value="Admins">Admins only (not shared)</option>
                 </select>
+              </Field>
+              <Field label="Location">
+                <input
+                  value={form.location}
+                  onChange={(event) => setForm((previous) => ({ ...previous, location: event.target.value }))}
+                  placeholder="e.g., Library Room 301 or a meeting link"
+                />
               </Field>
               <Field label="Participants (comma-separated)">
                 <input
@@ -367,6 +526,28 @@ export default function Calendaradmin() {
                   placeholder="Event description"
                 />
               </Field>
+              <div className="mb-[17px]">
+                <span className="mb-[11px] block text-[15px] font-semibold leading-none text-[#666666]">Attached Materials</span>
+                {keptMaterials.map((m) => (
+                  <AttachmentRow
+                    key={m.id}
+                    name={m.name}
+                    onRemove={() => {
+                      setKeptMaterials((list) => list.filter((x) => x.id !== m.id));
+                      setRemovedMaterials((ids) => [...ids, m.id]);
+                    }}
+                  />
+                ))}
+                {newFiles.map((f, i) => (
+                  <AttachmentRow key={`${f.name}-${i}`} name={f.name} onRemove={() => setNewFiles((list) => list.filter((_, j) => j !== i))} />
+                ))}
+                <label className="flex h-[42px] cursor-pointer items-center justify-center gap-[8px] rounded-[8px] border border-dashed border-[#d6d6d6] text-[14px] font-medium text-[#666666] transition-colors hover:border-[#ffa313] hover:text-[#ff9f0f]">
+                  <Paperclip size={15} />
+                  Add files
+                  <input type="file" multiple accept={MATERIAL_ACCEPT} onChange={pickFiles} className="hidden" />
+                </label>
+                <p className="mt-[6px] text-[12px] text-[#888888]">PDF, Word, PowerPoint, Excel, text or images. Up to 10 MB each.</p>
+              </div>
 
               <div className="mt-[38px] grid grid-cols-[1fr_82px] gap-[13px]">
                 <button
@@ -374,7 +555,7 @@ export default function Calendaradmin() {
                   disabled={submitting}
                   className="h-[42px] rounded-[8px] bg-[#ffa313] text-[16px] font-semibold text-white transition-colors hover:bg-[#ef970d] disabled:cursor-not-allowed disabled:opacity-70"
                 >
-                  {submitting ? "Adding..." : "Add Event"}
+                  {submitting ? "Saving..." : editingId ? "Save Changes" : "Add Event"}
                 </button>
                 <button
                   type="button"
@@ -388,9 +569,37 @@ export default function Calendaradmin() {
           </div>
         </div>
       )}
+
+      {deleting && (
+        <div className="fixed inset-0 z-[250] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-[420px] rounded-[8px] bg-white p-[24px] shadow-2xl">
+            <h3 className="text-[18px] font-semibold leading-tight text-[#111111]">Delete this event?</h3>
+            <p className="mt-[12px] break-words text-[14px] leading-[20px] text-[#666666]">
+              &quot;{deleting.title}&quot; on {deleting.date} will be removed from every calendar, along with its attached materials. This can&apos;t be undone.
+            </p>
+            <div className="mt-[20px] grid grid-cols-2 gap-[10px]">
+              <button type="button" disabled={deleteBusy} onClick={() => setDeleting(null)} className="h-[42px] rounded-[8px] border border-[#d6d6d6] bg-white text-[15px] text-[#666666] hover:bg-[#f7f7f7] disabled:opacity-60">
+                Cancel
+              </button>
+              <button type="button" disabled={deleteBusy} onClick={confirmDelete} className="h-[42px] rounded-[8px] bg-[#e0342b] text-[15px] font-medium text-white hover:bg-[#c92b23] disabled:opacity-60">
+                {deleteBusy ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
+const AttachmentRow = ({ name, onRemove }: { name: string; onRemove: () => void }) => (
+  <div className="mb-[8px] flex items-center justify-between gap-3 rounded-[8px] bg-[#f6f6f6] px-[12px] py-[8px] text-[14px] text-[#444444]">
+    <span className="truncate">{name}</span>
+    <button type="button" onClick={onRemove} aria-label={`Remove ${name}`} className="shrink-0 text-[#888888] hover:text-[#e0342b]">
+      <X size={16} />
+    </button>
+  </div>
+);
 
 const Legend = ({ label, color }: { label: string; color: string }) => (
   <div className="flex items-center gap-[9px] text-[15px] font-normal leading-none text-[#666666]">
@@ -406,6 +615,18 @@ const inputClass =
 const formatTime = (value: string) => {
   const [h, m] = value.split(":").map(Number);
   return `${String(h % 12 || 12).padStart(2, "0")}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`;
+};
+
+// "02:30 PM - 03:00 PM" -> { start: "14:30", end: "15:00" } (blank if it isn't in that form).
+const parseTimeLabel = (label: string) => {
+  const toHm = (t: string | undefined) => {
+    const m = /^(\d{1,2}):(\d{2})\s*(AM|PM)$/i.exec((t ?? "").trim());
+    if (!m) return "";
+    const h = (Number(m[1]) % 12) + (m[3].toUpperCase() === "PM" ? 12 : 0);
+    return `${String(h).padStart(2, "0")}:${m[2]}`;
+  };
+  const [start, end] = label.split(" - ");
+  return { start: toHm(start), end: toHm(end) };
 };
 
 const Field = ({ label, children }: { label: string; children: React.ReactElement<{ className?: string }> }) => {

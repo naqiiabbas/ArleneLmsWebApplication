@@ -6,16 +6,21 @@ import { X, ChevronRight, Plus, ChevronDown } from "lucide-react";
 import {
   listSessionsOn,
   listMentorPicks,
+  listClassPicks,
+  createDashboardClass,
+  createDashboardSession,
   updateDashboardSession,
   setDashboardSessionStatus,
 } from "@/lib/data/dashboard";
 import type {
   AdminDashboard as DashboardData,
+  ClassPick,
   DashboardMentor,
   DashboardPerson,
   DashboardSession,
   DashboardSessionInput,
   MentorPick,
+  NewSessionInput,
 } from "@/lib/data/dashboard.types";
 import type { SessionStatus } from "@/lib/data/mentor.types";
 
@@ -66,6 +71,8 @@ export default function AdminDashboard({ data, error }: { data: DashboardData | 
   const [viewing, setViewing] = useState<DashboardSession | null>(null);
   const [editing, setEditing] = useState<DashboardSession | null>(null);
   const [mentors, setMentors] = useState<MentorPick[]>([]);
+  const [classes, setClasses] = useState<ClassPick[]>([]);
+  const [scheduling, setScheduling] = useState(false);
   const [modalError, setModalError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -123,6 +130,39 @@ export default function AdminDashboard({ data, error }: { data: DashboardData | 
       setMentors(await listMentorPicks());
     } catch (e) {
       setModalError(`Could not load mentors: ${(e as Error).message}`);
+    }
+  };
+
+  const openSchedule = async () => {
+    setModalError("");
+    setScheduling(true);
+    try {
+      const [m, c] = await Promise.all([listMentorPicks(), listClassPicks()]);
+      setMentors(m);
+      setClasses(c);
+    } catch (e) {
+      setModalError(`Could not load the form: ${(e as Error).message}`);
+    }
+  };
+
+  const saveNewSession = async (input: NewSessionInput) => {
+    if (busy) return;
+    setBusy(true);
+    setModalError("");
+    try {
+      const res = await createDashboardSession(input);
+      if (res.error) {
+        setModalError(res.error);
+        return;
+      }
+      setScheduling(false);
+      if (input.date !== dateFilter) setDateFilter(input.date); // follow the session; reloads via effect
+      else await loadSessions(dateFilter);
+      router.refresh();
+    } catch (e) {
+      setModalError((e as Error).message);
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -200,11 +240,18 @@ export default function AdminDashboard({ data, error }: { data: DashboardData | 
         <div className="border-b border-[#eeeeee] px-[16px] pb-[16px] pt-[17px]">
           <div className="mb-[17px] flex items-center justify-between gap-3">
             <h3 className="text-[19px] font-semibold leading-none text-[#242424]">{heading}</h3>
-            {dateFilter !== today && today && (
-              <button type="button" onClick={() => setDateFilter(today)} className="text-[12px] font-medium text-[#F9A618] hover:underline">
-                Back to today
-              </button>
-            )}
+            <div className="flex shrink-0 items-center gap-3">
+              {dateFilter !== today && today && (
+                <button type="button" onClick={() => setDateFilter(today)} className="text-[12px] font-medium text-[#F9A618] hover:underline">
+                  Back to today
+                </button>
+              )}
+              {canEdit && (
+                <button type="button" onClick={openSchedule} className="flex h-[34px] items-center justify-center gap-2 rounded-[7px] bg-[#F9A618] px-4 text-[12px] font-medium text-white transition-colors hover:bg-[#f29a0b]">
+                  <Plus size={14} /> Schedule Session
+                </button>
+              )}
+            </div>
           </div>
           <div className="flex flex-wrap gap-3">
             <div className="relative">
@@ -254,7 +301,9 @@ export default function AdminDashboard({ data, error }: { data: DashboardData | 
                 <tr>
                   <td colSpan={6} className="py-10 text-center text-gray-400">
                     {sessions.length === 0
-                      ? "No sessions scheduled for this day. Mentors schedule sessions from their Calendar."
+                      ? canEdit
+                        ? "No sessions scheduled for this day. Use Schedule Session to add one."
+                        : "No sessions scheduled for this day."
                       : "No sessions match this status."}
                   </td>
                 </tr>
@@ -322,6 +371,18 @@ export default function AdminDashboard({ data, error }: { data: DashboardData | 
         onEdit={() => viewing && openEdit(viewing)}
         onComplete={() => viewing && markComplete(viewing)}
       />
+      {scheduling && (
+        <ScheduleSessionModal
+          date={dateFilter}
+          mentors={mentors}
+          classes={classes}
+          busy={busy}
+          error={modalError}
+          onClassCreated={(c) => setClasses((list) => [...list, c].sort((a, b) => a.name.localeCompare(b.name)))}
+          onClose={() => !busy && setScheduling(false)}
+          onSave={saveNewSession}
+        />
+      )}
       {editing && (
         <EditSessionModal
           key={editing.id}
@@ -522,6 +583,132 @@ function EditSessionModal({
         <div className="flex gap-3 border-t border-[#dddddd] px-6 py-4">
           <button type="submit" disabled={busy} className="h-[44px] flex-1 rounded-[8px] bg-[#ffa313] text-[16px] font-medium text-white disabled:opacity-60">
             {busy ? "Saving..." : "Save Changes"}
+          </button>
+          <button type="button" disabled={busy} onClick={onClose} className="h-[44px] w-[120px] rounded-[8px] border border-[#dddddd] text-[16px] font-medium text-[#777777] disabled:opacity-60">
+            Cancel
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function ScheduleSessionModal({
+  date,
+  mentors,
+  classes,
+  busy,
+  error,
+  onClassCreated,
+  onClose,
+  onSave,
+}: {
+  date: string;
+  mentors: MentorPick[];
+  classes: ClassPick[];
+  busy: boolean;
+  error: string;
+  onClassCreated: (c: ClassPick) => void;
+  onClose: () => void;
+  onSave: (input: NewSessionInput) => void;
+}) {
+  const [form, setForm] = useState<NewSessionInput>({
+    classId: "",
+    title: "",
+    mentorId: "",
+    date,
+    startTime: "",
+    endTime: "",
+    location: "",
+  });
+  const [newClass, setNewClass] = useState("");
+  const [addingClass, setAddingClass] = useState(false);
+  const [localError, setLocalError] = useState("");
+
+  const addClass = async () => {
+    if (addingClass) return;
+    setAddingClass(true);
+    setLocalError("");
+    try {
+      const res = await createDashboardClass(newClass);
+      if (res.error || !res.class) {
+        setLocalError(res.error ?? "The class couldn't be created.");
+        return;
+      }
+      onClassCreated(res.class);
+      setForm((f) => ({ ...f, classId: res.class!.id }));
+      setNewClass("");
+    } catch (e) {
+      setLocalError((e as Error).message);
+    } finally {
+      setAddingClass(false);
+    }
+  };
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (busy) return;
+    if (!form.classId) return setLocalError("Please select a class.");
+    if (!form.title.trim()) return setLocalError("Please enter a session title.");
+    if (!form.date) return setLocalError("Please pick a date.");
+    if (!form.startTime || !form.endTime) return setLocalError("Please pick a start and end time.");
+    if (form.endTime <= form.startTime) return setLocalError("End time must be after the start time.");
+    setLocalError("");
+    onSave(form);
+  };
+
+  const shown = localError || error;
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+      <form noValidate onSubmit={submit} className="max-h-[calc(100vh-24px)] w-full max-w-[766px] overflow-y-auto rounded-[8px] bg-white font-[Poppins] [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+        <div className="flex h-[84px] items-center justify-between border-b border-[#dddddd] px-6">
+          <h2 className="text-[21px] font-normal text-[#242424]">Schedule Session</h2>
+          <button type="button" onClick={onClose} className="text-[#777777] hover:text-[#242424]" aria-label="Close">
+            <X size={22} />
+          </button>
+        </div>
+
+        <div className="space-y-[20px] px-6 py-[25px]">
+          {shown && <p className="rounded-[8px] border border-red-200 bg-red-50 px-3 py-2 text-[14px] font-medium text-red-700">{shown}</p>}
+          <ModalSelect label="Class *" value={form.classId} onChange={(v) => setForm({ ...form, classId: v })}>
+            <option value="">Select a class</option>
+            {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </ModalSelect>
+          <div className="flex items-end gap-3">
+            <div className="min-w-0 flex-1">
+              <ModalInput label="Or create a new class" value={newClass} onChange={setNewClass} placeholder="e.g., Saturday Academy" />
+            </div>
+            <button type="button" disabled={addingClass || !newClass.trim()} onClick={addClass} className="h-[42px] shrink-0 rounded-[8px] border border-[#dddddd] bg-white px-4 text-[14px] font-medium text-[#444444] hover:border-[#ffa313] disabled:opacity-50">
+              {addingClass ? "Creating..." : "Create Class"}
+            </button>
+          </div>
+          <ModalInput label="Session Title *" value={form.title} onChange={(v) => setForm({ ...form, title: v })} />
+          <ModalSelect label="Mentor" value={form.mentorId} onChange={(v) => setForm({ ...form, mentorId: v })}>
+            <option value="">Unassigned</option>
+            {mentors.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+          </ModalSelect>
+
+          <h3 className="pt-[1px] text-[15px] font-normal text-[#242424]">Schedule (Pacific Time)</h3>
+          <div className="grid gap-4 md:grid-cols-3">
+            <ModalInput type="date" label="Date *" value={form.date} onChange={(v) => setForm({ ...form, date: v })} />
+            <ModalInput type="time" label="Start *" value={form.startTime} onChange={(v) => setForm({ ...form, startTime: v })} />
+            <ModalInput type="time" label="End *" value={form.endTime} onChange={(v) => setForm({ ...form, endTime: v })} />
+          </div>
+          <ModalInput
+            label="Location or Meeting Link"
+            value={form.location}
+            onChange={(v) => setForm({ ...form, location: v })}
+            placeholder="e.g., Library Room 301 or https://meet.example.com/..."
+          />
+          <p className="text-[12px] text-[#999999]">
+            Students enrolled in the class (Student Management) can check in on the iPad for this session. Check-in opens 60 minutes before the start time.
+          </p>
+        </div>
+
+        <div className="flex gap-3 border-t border-[#dddddd] px-6 py-4">
+          <button type="submit" disabled={busy} className="h-[44px] flex-1 rounded-[8px] bg-[#ffa313] text-[16px] font-medium text-white disabled:opacity-60">
+            {busy ? "Saving..." : "Schedule Session"}
           </button>
           <button type="button" disabled={busy} onClick={onClose} className="h-[44px] w-[120px] rounded-[8px] border border-[#dddddd] text-[16px] font-medium text-[#777777] disabled:opacity-60">
             Cancel

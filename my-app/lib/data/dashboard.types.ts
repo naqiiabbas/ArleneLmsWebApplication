@@ -71,4 +71,15 @@ export type DashboardSessionInput = {
   status: SessionStatus
 }
 
+export type NewSessionInput = {
+  classId: string
+  title: string
+  mentorId: string
+  date: string // yyyy-mm-dd
+  startTime: string // "HH:MM", class-local
+  endTime: string
+  location: string
+}
+
 export type MentorPick = { id: string; name: string }
+export type ClassPick = { id: string; name: string }

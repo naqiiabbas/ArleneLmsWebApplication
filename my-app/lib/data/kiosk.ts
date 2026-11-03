@@ -19,6 +19,8 @@ const DEFAULT_GRACE_MIN = 10
 const DEFAULT_REQUIRE_PHOTO = true
 /** Downscaled JPEG selfies are ~50–150 KB; anything far larger is not a kiosk photo. */
 const MAX_PHOTO_BYTES = 5 * 1024 * 1024
+/** What the kiosk page reports; anything else is stored as "Unknown device". */
+const KIOSK_DEVICES = ["Classroom iPad", "Phone", "Tablet", "Computer"]
 
 type StudentRow = { id: string; profile: { full_name: string | null; status: string } | null }
 type Session = {
@@ -172,6 +174,7 @@ export async function verifyAttendanceCode(
 export async function markKioskAttendance(
   code: string,
   photoDataUrl: string,
+  device?: string,
 ): Promise<{ error?: string; name?: string; status?: KioskStatus; time?: string }> {
   const c = code.trim()
   const admin = createAdminClient()
@@ -217,6 +220,7 @@ export async function markKioskAttendance(
     marked_at: now.toISOString(),
     status,
     method: "selfie" as const,
+    device: device && KIOSK_DEVICES.includes(device) ? device : "Unknown device",
     code_used: c,
     photo_url: photoPath,
   }

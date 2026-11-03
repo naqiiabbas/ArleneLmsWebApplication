@@ -20,10 +20,12 @@ import {
 } from "@/lib/time"
 import type {
   AdminDashboard,
+  ClassPick,
   DashboardAlert,
   DashboardSession,
   DashboardSessionInput,
   MentorPick,
+  NewSessionInput,
 } from "@/lib/data/dashboard.types"
 import type { SessionStatus } from "@/lib/data/mentor.types"
 
@@ -278,6 +280,93 @@ export async function listMentorPicks(): Promise<MentorPick[]> {
     .order("full_name", { ascending: true })
   if (error) throw new Error(error.message)
   return (data ?? []).map((m) => ({ id: m.id, name: m.full_name || "(unnamed mentor)" }))
+}
+
+/** Classes for the "Schedule Session" dropdown. */
+export async function listClassPicks(): Promise<ClassPick[]> {
+  await assertPermission("attendance.manage")
+  const admin = createAdminClient()
+  const { data, error } = await admin.from("classes").select("id, name").order("name", { ascending: true })
+  if (error) throw new Error(error.message)
+  return (data ?? []).map((c) => ({ id: c.id, name: c.name }))
+}
+
+/** Admin: create a class to schedule sessions under (students join it from Student Management). */
+export async function createDashboardClass(rawName: string): Promise<{ error?: string; class?: ClassPick }> {
+  let me
+  try {
+    me = await assertPermission("attendance.manage")
+  } catch (e) {
+    return { error: (e as Error).message }
+  }
+  const name = (rawName ?? "").trim().replace(/\s+/g, " ")
+  if (!name) return { error: "Please enter a class name." }
+  if (name.length > 80) return { error: "Class name is too long (80 characters max)." }
+
+  const admin = createAdminClient()
+  // Names aren't unique in the schema; stop accidental duplicates (case-insensitive).
+  const { data: dupes } = await admin.from("classes").select("id, name").ilike("name", name)
+  const dupe = (dupes ?? []).find((c) => c.name.trim().toLowerCase() === name.toLowerCase())
+  if (dupe) return { error: `A class called "${dupe.name}" already exists. Pick it from the list.` }
+
+  const { data, error } = await admin
+    .from("classes")
+    .insert({ name, timezone: APP_TIMEZONE })
+    .select("id, name")
+    .single()
+  if (error) return { error: error.message }
+  await logActivity({ actorId: me.userId, action: "Created class", targetType: "class", targetId: data.id, description: name }, admin)
+  return { class: { id: data.id, name: data.name } }
+}
+
+/**
+ * Admin: schedule a session. The kiosk only opens for a session scheduled that
+ * day, so this is what makes attendance possible for a class.
+ */
+export async function createDashboardSession(input: NewSessionInput): Promise<{ error?: string; id?: string }> {
+  let me
+  try {
+    me = await assertPermission("attendance.manage")
+  } catch (e) {
+    return { error: (e as Error).message }
+  }
+  const title = (input.title ?? "").trim()
+  if (!input.classId) return { error: "Please select a class." }
+  if (!title) return { error: "Please enter a session title." }
+  if (title.length > 120) return { error: "Session title is too long (120 characters max)." }
+  if (!isValidYmd(input.date)) return { error: "Please pick a valid date." }
+  if (!isValidHm(input.startTime) || !isValidHm(input.endTime)) return { error: "Please pick a start and end time." }
+  if (input.endTime <= input.startTime) return { error: "End time must be after the start time." }
+
+  const admin = createAdminClient()
+  if (input.mentorId) {
+    const notMentor = await checkTargetRole(admin, input.mentorId, "mentor")
+    if (notMentor) return { error: "The selected mentor no longer exists." }
+  }
+  const { data: cls } = await admin.from("classes").select("timezone").eq("id", input.classId).maybeSingle()
+  if (!cls) return { error: "That class no longer exists. Please pick another." }
+  const tz = cls.timezone || APP_TIMEZONE
+
+  const { data, error } = await admin
+    .from("class_sessions")
+    .insert({
+      class_id: input.classId,
+      title,
+      mentor_id: input.mentorId || null,
+      session_date: input.date,
+      start_at: zonedTimeToUtc(input.date, input.startTime, tz).toISOString(),
+      end_at: zonedTimeToUtc(input.date, input.endTime, tz).toISOString(),
+      location: (input.location ?? "").trim() || null,
+      status: "scheduled",
+    })
+    .select("id")
+    .single()
+  if (error) return { error: error.message }
+  await logActivity(
+    { actorId: me.userId, action: "Scheduled session", targetType: "session", targetId: data.id, description: title },
+    admin,
+  )
+  return { id: data.id }
 }
 
 /**
